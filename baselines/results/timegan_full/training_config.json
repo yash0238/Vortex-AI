@@ -1,0 +1,29 @@
+{
+  "status": "prepared",
+  "input_file": "C:\\Users\\ALOK SHUKLA\\Downloads\\Vortex-AI\\baselines\\data\\timegan_windows.npy",
+  "input_shape": [
+    3640,
+    60,
+    50
+  ],
+  "dataset_windows_used": 3640,
+  "sequence_length": 60,
+  "feature_dim": 50,
+  "timegan_parameters": {
+    "module": "gru",
+    "hidden_dim": 24,
+    "num_layer": 3,
+    "batch_size": 32,
+    "iterations": 2000
+  },
+  "output_directory": "C:\\Users\\ALOK SHUKLA\\Downloads\\Vortex-AI\\baselines\\results\\timegan_full",
+  "artifacts": {
+    "generated_samples": "generated_samples.npy",
+    "training_config": "training_config.json",
+    "training_log": "training.log",
+    "statistics": "statistics.json",
+    "checkpoint": null
+  },
+  "checkpoint_note": "The original TimeGAN function does not expose checkpoint saving; no checkpoint is produced.",
+  "external_repository_modified": false
+}

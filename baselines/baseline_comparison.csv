@@ -1,0 +1,4 @@
+model_name,dataset_name,window,epochs,batch_size,learning_rate,train_time_min,generated_samples,mse_mean,acf_lag1_real,acf_lag1_synth,notes
+TimeGAN,NIFTY50_multivariate,60,,,,,,,,,
+QuantGAN,NIFTY50_market_return,60,,,,,,,,,
+CG-NSDE,NIFTY50_multivariate,60,,,,,,,,,
