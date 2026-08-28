@@ -2,7 +2,7 @@
 
 Dynamic graph-based financial risk and regime-switching experiments using NIFTY-50 returns.
 
-## What is this, in plain English?
+## What is Vortex-AI
 
 Imagine you are watching the 50 biggest companies on India's NIFTY-50 stock market. On
 calm days their share prices move independently, but during a crisis they tend to fall
