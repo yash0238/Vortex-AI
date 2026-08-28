@@ -1,5 +1,9 @@
 import yfinance as yf
 import pandas as pd
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+RAW_DATA_DIR = BASE_DIR / "data" / "raw"
 
 NIFTY50 = [
     "RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","HINDUNILVR.NS",
@@ -19,8 +23,9 @@ def download_all():
                         auto_adjust=True)
     close = data["Close"].dropna(how="all")
     volume = data["Volume"].dropna(how="all")
-    close.to_csv(r"C:\Users\DELL\Downloads\Major Project\Vortex-AI\data\raw\nifty50_close.csv")
-    volume.to_csv(r"C:\Users\DELL\Downloads\Major Project\Vortex-AI\data\raw\nifty50_volume.csv")
+    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    close.to_csv(RAW_DATA_DIR / "nifty50_close.csv")
+    volume.to_csv(RAW_DATA_DIR / "nifty50_volume.csv")
     print(f"Downloaded: {close.shape[0]} days x {close.shape[1]} stocks")
     return close, volume
 

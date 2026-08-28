@@ -1,0 +1,29 @@
+{
+  "status": "prepared_not_run",
+  "input_file": "baselines/data/timegan_windows.npy",
+  "input_shape": [3640, 60, 50],
+  "dataset_windows_used": 3640,
+  "sequence_length": 60,
+  "feature_dim": 50,
+  "timegan_parameters": {
+    "module": "gru",
+    "hidden_dim": 24,
+    "num_layer": 3,
+    "batch_size": 32,
+    "iterations": 2000
+  },
+  "output_directory": "baselines/results/timegan_full/",
+  "expected_artifacts": [
+    "generated_samples.npy",
+    "training_config.json",
+    "training.log",
+    "statistics.json"
+  ],
+  "checkpoint": {
+    "supported_by_original_timegan": false,
+    "note": "The original timegan() function returns generated data but does not expose checkpoint saving."
+  },
+  "external_repository_modified": false,
+  "smoke_results_preserved": true,
+  "execution_command": "conda run -n timegan_py37 python baselines/run_timegan_full.py"
+}
