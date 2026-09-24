@@ -1,11 +1,61 @@
-epochs: 50
-batch_size: 32
-learning_rate: 0.001
-hidden_dim: 64
-lstm_layers: 2
-dropout: 0.3
-adjacency_weight: 1.0
-patience: 10
+# VORTEX-AI (CG-NSDE) Training Configuration
+# As specified in masterplan Part D.8
+
+# Data parameters
+n_stocks: 50
+T: 60  # Window length (60 trading days)
+window_length: 60
 test_size: 0.2
 validation_size: 0.15
+
+# Model architecture
+in_feats: 6  # Node features: return, abs_return, volume, sector, circuit_distance
+latent_dim: 64
+proj_dim: 32
+hidden_dim: 64
+gat_heads: 4
+dropout: 0.1
+
+# SDE parameters
+sde_hidden_dim: 128
+
+# Training hyperparameters
+batch_size: 32
+learning_rate: 0.001
+max_epochs: 200
+patience: 20
+gradient_clip_val: 1.0  # Critical for SDE stability
+
+# Loss weights (as specified in masterplan)
+lam_rec: 1.0     # Reconstruction loss weight
+lam_graph: 0.1   # Graph consistency loss weight
+lam_con: 0.1     # Contrastive loss weight
+lam_na: 0.0      # No-arbitrage loss weight (future extension)
+lambda_styl: 0.1 # Stylized facts weight within reconstruction
+
+# Contrastive learning
+tau: 0.07  # Temperature for SupCon loss (standard value from Khosla et al. 2020)
+
+# Regime labeling
+vol_window: 20
+crisis_percentile: 85  # Top 15% as crisis
+
+# Training infrastructure
 seed: 42
+num_workers: 4
+accelerator: "auto"  # "cuda", "cpu", or "auto"
+devices: 1
+
+# Logging
+wandb_project: "vortex-ai-cg-nsde"
+wandb_entity: null  # Set to your wandb username/team
+log_every_n_steps: 10
+save_top_k: 3
+
+# Evaluation
+eval_every_n_epochs: 10
+n_synthetic_scenarios: 100
+
+# Legacy baseline parameters (kept for backward compatibility)
+lstm_layers: 2
+adjacency_weight: 1.0

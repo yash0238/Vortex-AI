@@ -1,24 +1,19 @@
-# Vortex-AI
+# VORTEX-AI (CG-NSDE)
 
-Dynamic graph-based financial risk and regime-switching experiments using NIFTY-50 returns.
+**Contrastive Graph-Neural Stochastic Differential Equations for NSE Stress Testing**
+
+A deep learning framework for generating synthetic NIFTY-50 market scenarios including realistic crashes by coupling dynamic Graph Attention Networks, Neural SDEs, and supervised contrastive regime separation with NSE-specific microstructure constraints.
 
 ## What is this, in plain English?
 
-Imagine you are watching the 50 biggest companies on India's NIFTY-50 stock market. On
-calm days their share prices move independently, but during a crisis they tend to fall
-together — the "contagion" effect, like a cold spreading through an office. Vortex-AI is a
-research project that teaches a computer to:
+VORTEX-AI is a research framework that generates realistic synthetic stock market data for India's NIFTY-50 index, including both calm periods and financial crises. Unlike traditional models that treat stocks independently, VORTEX-AI models how stocks are connected during market stress (the "contagion effect") and enforces NSE-specific trading rules like circuit breakers.
 
-1. Look at the last few months of price movements for all 50 companies at once.
-2. Decide whether the market is currently calm ("normal") or stressed ("crisis").
-3. Draw a "relationship map" showing which companies are moving together most tightly.
+**Key Innovation**: Combines three cutting-edge techniques:
+1. **Dynamic Graph Attention** - Learns which stocks move together during different market conditions
+2. **Neural Stochastic Differential Equations** - Generates realistic price paths with proper randomness
+3. **Supervised Contrastive Learning** - Separates normal vs crisis regimes in latent space
 
-The computer learns this from history using neural networks (a type of AI loosely inspired
-by the brain). The end goal is to better understand and anticipate moments of financial
-stress, which matters for risk management, trading, and regulation.
-
-You do **not** need to know finance or AI to run the project — the commands below handle
-everything, and the results are saved as charts you can simply look at.
+This enables better stress testing, risk management, and trading strategy validation.
 
 ## Overview
 
@@ -210,3 +205,270 @@ Vortex-AI/
 ## License
 
 This project is licensed under the MIT License. See `LICENSE` for details.
+
+
+## Quick Start (VORTEX-AI CG-NSDE)
+
+### 1. Installation
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd Vortex-AI
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Data Preparation
+
+```bash
+# Download NIFTY-50 historical data
+python data/download.py
+
+# Preprocess returns and compute regimes
+python data/preprocess.py
+
+# Build graph adjacency matrices
+python -m src.data_processor
+
+# Verify pipeline
+python check_pipeline.py
+```
+
+### 3. Training
+
+```bash
+# Train VORTEX-AI model (with wandb logging)
+python train_vortex.py --config training/config.yaml
+
+# Train on CPU
+python train_vortex.py --config training/config.yaml --accelerator cpu
+
+# Resume from checkpoint
+python train_vortex.py --resume models/checkpoints/last.ckpt
+
+# Override hyperparameters
+python train_vortex.py --batch_size 16 --max_epochs 100 --lam_con 0.2
+```
+
+### 4. Evaluation
+
+```bash
+# Run comprehensive evaluation
+python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt
+
+# Generate 500 scenarios for testing
+python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt --n_scenarios 500
+
+# Include Granger causality test (slow)
+python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt --test_granger
+```
+
+### 5. Visualization
+
+```bash
+# Generate all visualizations (fan charts, heatmaps, P&L distributions)
+python visualize_results.py --checkpoint models/checkpoints/best_vortex.ckpt
+
+# Custom output directory
+python visualize_results.py --checkpoint models/checkpoints/best_vortex.ckpt --output_dir results/my_figures
+```
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  VORTEX-AI (CG-NSDE) Architecture                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Input: 60-day window of returns (B, T=60, N=50)            │
+│         + 6-dim node features per stock                      │
+│                                                               │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │  Block 1: Dynamic GAT Encoder                   │        │
+│  │  • 2-layer GAT (4 heads → 1 head)              │        │
+│  │  • Learns dynamic adjacency A_t                 │        │
+│  │  • Output: node_embs (B, N, 64)                │        │
+│  └─────────────────────────────────────────────────┘        │
+│                      ↓                                        │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │  Block 2: Latent Encoder (GRU)                 │        │
+│  │  • Encodes window → z_0 (B, 64)                │        │
+│  └─────────────────────────────────────────────────┘        │
+│                      ↓                                        │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │  Block 3: Graph-Conditioned Neural SDE         │        │
+│  │  • dX_t = μ(X_t,G_t,t)dt + σ(X_t,G_t,t)dW_t  │        │
+│  │  • Euler-Maruyama integration                   │        │
+│  │  • Output: latent paths (B, T, 64)             │        │
+│  └─────────────────────────────────────────────────┘        │
+│                      ↓                                        │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │  Block 4: Contrastive Regime Head              │        │
+│  │  • Temporal pooling + projection                │        │
+│  │  • SupCon loss (τ=0.07)                        │        │
+│  │  • Forces crisis/normal separation              │        │
+│  └─────────────────────────────────────────────────┘        │
+│                      ↓                                        │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │  Block 5: Decoder + Circuit Filter             │        │
+│  │  • Linear decode → returns (B, T, N)           │        │
+│  │  • NSE bands: ±5%, ±10%, ±20%                 │        │
+│  └─────────────────────────────────────────────────┘        │
+│                                                               │
+│  Loss: λ_rec·L_rec + λ_graph·L_graph + λ_con·L_con         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Evaluation Metrics
+
+VORTEX-AI is evaluated against the following targets (from masterplan):
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| **Kurtosis** | > 3.0 | Fat tails (excess kurtosis) |
+| **ACF(r²)** | > 0.05 | Volatility clustering |
+| **Correlation Error** | < 2.5 | Frobenius norm vs empirical |
+| **Discriminative Score** | < 0.60 | GBC classifier accuracy (lower = better) |
+| **Crisis Correlation Boost** | > 50% | Increase during crisis vs normal |
+| **CVaR Ratio** | > 3x | Crisis CVaR / Normal CVaR |
+
+## Configuration
+
+Key hyperparameters in `training/config.yaml`:
+
+```yaml
+# Model architecture
+latent_dim: 64
+proj_dim: 32
+gat_heads: 4
+hidden_dim: 64
+
+# Training
+batch_size: 32
+learning_rate: 0.001
+max_epochs: 200
+gradient_clip_val: 1.0
+
+# Loss weights
+lam_rec: 1.0      # Reconstruction
+lam_graph: 0.1    # Graph consistency
+lam_con: 0.1      # Contrastive
+tau: 0.07         # SupCon temperature
+
+# Regime labeling
+crisis_percentile: 85  # Top 15% as crisis
+```
+
+## Project Structure (VORTEX-AI)
+
+```
+Vortex-AI/
+├── data/
+│   ├── download.py              # Fetch NIFTY-50 data via yfinance
+│   ├── preprocess.py            # Compute returns & regimes
+│   ├── graph_builder.py         # Build adjacency matrices
+│   └── raw/                     # Generated .npy arrays
+│
+├── models/
+│   ├── gat_encoder.py           # DynamicGATEncoder (2-layer GAT)
+│   ├── neural_sde.py            # GraphConditionedSDE + LatentSDEModel
+│   ├── contrastive.py           # SupConLoss + ProjectionHead
+│   ├── decoder.py               # Graph decoder (legacy)
+│   └── checkpoints/             # Saved model weights
+│
+├── training/
+│   ├── vortex_model.py          # PyTorch Lightning VORTEXModel
+│   ├── losses.py                # All loss components
+│   ├── trainer.py               # Legacy baseline trainer
+│   ├── gat_trainer.py           # Legacy GAT trainer
+│   └── config.yaml              # Hyperparameters
+│
+├── eval/
+│   ├── statistical.py           # Kurtosis, ACF, correlation tests
+│   ├── discriminative.py        # GBC classifier score
+│   └── contagion.py             # Crisis correlation, CVaR tests
+│
+├── sandbox/
+│   ├── circuit_filter.py        # NSE circuit breaker enforcement
+│   ├── generate.py              # Scenario generation utilities
+│   ├── strategy.py              # Trading strategy backtests
+│   └── metrics.py               # Additional metrics
+│
+├── notebooks/
+│   ├── demo.ipynb               # Interactive demo
+│   └── vortexai.ipynb           # Analysis notebook
+│
+├── train_vortex.py              # Main training script
+├── evaluate_vortex.py           # Comprehensive evaluation
+├── visualize_results.py         # Generate figures
+├── check_pipeline.py            # Data validation
+├── requirements.txt             # Dependencies
+└── README.md                    # This file
+```
+
+## Key Features
+
+### 1. Dynamic Graph Attention Network
+- 2-layer GAT with multi-head attention (4 heads → 1 head)
+- Learns time-varying adjacency matrices representing stock correlations
+- Captures sector contagion (e.g., Banking → IT during crises)
+
+### 2. Graph-Conditioned Neural SDE
+- Drift and diffusion networks conditioned on graph embeddings
+- Euler-Maruyama integration with dt=1/60
+- Generates continuous-time stochastic paths
+
+### 3. Supervised Contrastive Loss
+- Forces crisis and normal regimes to separate in latent space
+- Temperature τ=0.07 (Khosla et al. 2020 standard)
+- Prevents mode collapse
+
+### 4. NSE Circuit Breakers
+- Band A: ±5% (high liquidity stocks like SBI, Tata Motors)
+- Band B: ±10% (most NIFTY-50 stocks)
+- Band C: ±20% (less liquid stocks)
+- Both hard clipping (post-generation) and soft penalty (training)
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@software{vortex_ai_2026,
+  title={VORTEX-AI: Contrastive Graph-Neural Stochastic Differential Equations for Financial Stress Testing},
+  author={Your Name},
+  year={2026},
+  url={https://github.com/yourusername/Vortex-AI}
+}
+```
+
+## References
+
+Key papers and resources:
+
+1. **TimeGAN** (Yoon et al., NeurIPS 2019) - Baseline generative model
+2. **torchsde** (Li et al., NeurIPS 2021) - Neural SDE solver
+3. **Supervised Contrastive Learning** (Khosla et al., 2020) - SupCon loss formulation
+4. **Graph Attention Networks** (Veličković et al., ICLR 2018) - GAT architecture
+5. **NSE Circuit Breaker Rules** - Official NSE documentation
+
+## Legacy Baselines
+
+The repository also includes legacy baseline implementations:
+
+```bash
+# Train spatio-temporal LSTM baseline
+python -m training.trainer --epochs 50 --device cuda
+
+# Train legacy GAT baseline
+python -m training.gat_trainer --epochs 50 --device cuda
+
+# Evaluate legacy models
+python evaluate.py --device cuda
+```
