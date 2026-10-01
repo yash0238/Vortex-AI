@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-BAND_A_STOCKS = ["SBIN.NS", "TATAMOTORS.NS", "TATASTEEL.NS"]
+BAND_A_STOCKS = ["SBIN.NS", "TMPV.NS", "TATASTEEL.NS"]
 BAND_A_LIMIT = 0.05
 BAND_B_LIMIT = 0.10
 BAND_C_LIMIT = 0.20

@@ -186,7 +186,7 @@ def parse_args() -> argparse.Namespace:
         help="Training device; auto selects CUDA when available.",
     )
     # CG-NSDE specific arguments
-    parser.add_argument("--n-stocks", type=int, default=50)
+    parser.add_argument("--n-stocks", type=int, default=47)
     parser.add_argument("--window-size", type=int, default=60)
     parser.add_argument("--proj-dim", type=int, default=32)
     parser.add_argument("--in-feats", type=int, default=6)
@@ -247,7 +247,7 @@ if __name__ == "__main__":
 class CGNSDEConfig:
     """Configuration for the CG-NSDE Lightning model."""
 
-    n_stocks: int = 50
+    n_stocks: int = 47
     T: int = 60
     latent_dim: int = 64
     proj_dim: int = 32

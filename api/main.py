@@ -28,18 +28,18 @@ NIFTY50_TICKERS = [
     "SBIN.NS", "LT.NS", "BAJFINANCE.NS", "HCLTECH.NS", "ASIANPAINT.NS",
     "MARUTI.NS", "SUNPHARMA.NS", "TITAN.NS", "ULTRACEMCO.NS", "NESTLEIND.NS",
     "WIPRO.NS", "POWERGRID.NS", "NTPC.NS", "M&M.NS", "TECHM.NS",
-    "TATAMOTORS.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "BAJAJ-AUTO.NS", "CIPLA.NS",
+    "TMPV.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "BAJAJ-AUTO.NS", "CIPLA.NS",
     "DRREDDY.NS", "DIVISLAB.NS", "HEROMOTOCO.NS", "ONGC.NS", "COALINDIA.NS",
     "BPCL.NS", "GRASIM.NS", "ADANIPORTS.NS", "EICHERMOT.NS", "APOLLOHOSP.NS",
     "HINDALCO.NS", "TATACONSUM.NS", "BRITANNIA.NS", "SHREECEM.NS", "UPL.NS",
-    "BAJAJFINSV.NS", "SBILIFE.NS", "HDFCLIFE.NS", "INDUSINDBK.NS", "LTI.NS",
+    "BAJAJFINSV.NS", "INDUSINDBK.NS",
 ]
 
 MODEL_STATE: dict[str, Any] = {}
 
 
 class ModelConfig(BaseModel):
-    n_stocks: int = 50
+    n_stocks: int = 47
     T: int = 60
     latent_dim: int = 64
     proj_dim: int = 32
@@ -181,7 +181,7 @@ async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
     regimes = data["window_regimes"]
 
     non_zero = int((adj > 0).sum())
-    density = float(non_zero / (50 * 50))
+    density = float(non_zero / (adj.shape[0] * adj.shape[1]))
 
     # NetworkX graph for centrality
     G = nx.from_numpy_array(adj, create_using=nx.Graph())
