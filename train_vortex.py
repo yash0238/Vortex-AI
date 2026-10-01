@@ -397,6 +397,7 @@ def train(args: argparse.Namespace):
         lam_na=config.get("lam_na", 0.05),
         beta_max=config.get("beta_max", 0.01),
         prior_warmup=config.get("prior_warmup", 10),
+        lam_var=config.get("lam_var", 0.0),
         lambda_styl=config.get("lambda_styl", 0.1),
         warmup_epochs=config.get("warmup_epochs", 20),
         use_gat=use_gat,
@@ -495,6 +496,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lam_na", type=float, help="Circuit-filter loss weight")
     parser.add_argument("--beta_max", type=float, help="KL weight ceiling (7.1)")
     parser.add_argument("--prior_warmup", type=int, help="KL ramp epochs (7.1)")
+    parser.add_argument("--lam_var", type=float, help="Variance loss weight (7.2)")
     parser.add_argument("--run_tag", type=str, help="Run dir suffix under runs/")
     parser.add_argument("--num_workers", type=int, help="Dataloader workers (0 = safest on Windows)")
     parser.add_argument("--patience", type=int, help="Early-stopping patience in epochs")

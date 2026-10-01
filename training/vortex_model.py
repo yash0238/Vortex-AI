@@ -59,6 +59,7 @@ class VORTEXModel(pl.LightningModule):
         lam_na: float = 0.05,
         beta_max: float = 0.01,  # 7.1: KL weight ceiling, ramped over prior_warmup
         prior_warmup: int = 10,
+        lam_var: float = 0.0,  # 7.2: variance-matching loss weight
         use_gat: bool = True,  # 4.1: False = No-GAT ablation (MLP fallback)
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
@@ -103,6 +104,7 @@ class VORTEXModel(pl.LightningModule):
         self.prior_logvar = nn.Parameter(torch.zeros(2, latent_dim))
         self.beta_max = beta_max
         self.prior_warmup = max(1, prior_warmup)
+        self.lam_var = lam_var
         
         # Loss weights
         self.lam_rec = lam_rec
@@ -127,6 +129,13 @@ class VORTEXModel(pl.LightningModule):
         """KL weight ramp 0 -> beta_max over prior_warmup epochs."""
         progress = (self.current_epoch + 1) / self.prior_warmup
         return self.beta_max * min(1.0, progress)
+
+    @staticmethod
+    def variance_loss(r_hat: torch.Tensor, r_real: torch.Tensor) -> torch.Tensor:
+        """7.2: mean over stocks of (log std_gen - log std_real)^2, z-space pooled over batch x time."""
+        sg = r_hat.std(dim=(0, 1)) + 1e-8
+        sr = r_real.std(dim=(0, 1)) + 1e-8
+        return ((torch.log(sg) - torch.log(sr)).pow(2)).mean()
 
     @staticmethod
     def gaussian_kl(mu_q, logvar_q, mu_p, logvar_p) -> torch.Tensor:
@@ -217,6 +226,10 @@ class VORTEXModel(pl.LightningModule):
         kl = self._kl_to_prior(regimes)
         loss = loss + beta * kl
         components["kl"] = kl.detach()
+        # 7.2: variance matching (z-space pooled std per stock)
+        lvar = self.variance_loss(r_hat, x)
+        loss = loss + self.lam_var * lvar
+        components["var"] = lvar.detach()
         components["total"] = loss.detach()
 
         # Log all components
@@ -261,6 +274,10 @@ class VORTEXModel(pl.LightningModule):
             r = regimes.long().clamp(0, 1)
             kl_val = self.gaussian_kl(mu_q, logvar_q, self.prior_mu[r], self.prior_logvar[r])
         self.log("val/kl", kl_val, on_step=False, on_epoch=True, prog_bar=True)
+        lvar = self.variance_loss(r_hat, x)
+        self.log("val/var", lvar, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/total_incl", loss + self.lam_var * lvar + self._eff_beta() * kl_val,
+                 on_step=False, on_epoch=True, prog_bar=False)
 
         return loss
 

@@ -53,10 +53,11 @@ class GraphConditionedSDE(torchsde.SDEIto):
             nn.Linear(input_dim, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, latent_dim),
-            nn.Softplus(),
+            nn.Sigmoid(),  # 7.2: (0, 1), scaled by sigma_max in g()
         )
 
         self.graph_context: torch.Tensor | None = None
+        self.sigma_max: float = 3.0  # 7.2: diffusion bound in z-space
 
     def set_graph_context(self, graph_emb: torch.Tensor) -> None:
         """Inject graph embedding from GAT mean pooling.
@@ -85,14 +86,14 @@ class GraphConditionedSDE(torchsde.SDEIto):
         return torch.cat([y, self.graph_context, t_vec], dim=-1)
 
     def f(self, t: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """Drift: mu_theta(X_t, G_t, t)."""
+        """Drift: tanh-bounded mu_theta(X_t, G_t, t) (7.2)."""
         inp = self._get_input(t, y)
-        return self.drift_net(inp)
+        return torch.tanh(self.drift_net(inp))
 
     def g(self, t: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """Diffusion: sigma_theta(X_t, G_t, t)."""
+        """Diffusion: sigma_max * sigmoid output (7.2, z-space bound)."""
         inp = self._get_input(t, y)
-        return self.diffusion_net(inp)
+        return self.sigma_max * torch.sigmoid(self.diffusion_net(inp))
 
 
 class LatentSDEModel(nn.Module):
