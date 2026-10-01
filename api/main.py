@@ -1,0 +1,657 @@
+"""FastAPI backend for VORTEX-AI CG-NSDE interactive dashboard.
+
+Serves data artifacts, model inference, scenario generation, and evaluation
+metrics via REST API endpoints.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import torch
+import torchsde
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+RAW_DIR = BASE_DIR / "data" / "raw"
+
+NIFTY50_TICKERS = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+    "ICICIBANK.NS", "KOTAKBANK.NS", "BHARTIARTL.NS", "ITC.NS", "AXISBANK.NS",
+    "SBIN.NS", "LT.NS", "BAJFINANCE.NS", "HCLTECH.NS", "ASIANPAINT.NS",
+    "MARUTI.NS", "SUNPHARMA.NS", "TITAN.NS", "ULTRACEMCO.NS", "NESTLEIND.NS",
+    "WIPRO.NS", "POWERGRID.NS", "NTPC.NS", "M&M.NS", "TECHM.NS",
+    "TATAMOTORS.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "BAJAJ-AUTO.NS", "CIPLA.NS",
+    "DRREDDY.NS", "DIVISLAB.NS", "HEROMOTOCO.NS", "ONGC.NS", "COALINDIA.NS",
+    "BPCL.NS", "GRASIM.NS", "ADANIPORTS.NS", "EICHERMOT.NS", "APOLLOHOSP.NS",
+    "HINDALCO.NS", "TATACONSUM.NS", "BRITANNIA.NS", "SHREECEM.NS", "UPL.NS",
+    "BAJAJFINSV.NS", "SBILIFE.NS", "HDFCLIFE.NS", "INDUSINDBK.NS", "LTI.NS",
+]
+
+MODEL_STATE: dict[str, Any] = {}
+
+
+class ModelConfig(BaseModel):
+    n_stocks: int = 50
+    T: int = 60
+    latent_dim: int = 64
+    proj_dim: int = 32
+    in_feats: int = 6
+    gat_heads: int = 4
+    gat_dropout: float = 0.1
+    tau: float = 0.07
+    lr: float = 0.001
+    sde_hidden_dim: int = 128
+    batch_size: int = 8
+
+
+def load_data() -> dict[str, np.ndarray]:
+    """Load all data artifacts, handling length mismatches."""
+    windows = np.load(RAW_DIR / "windows.npy", allow_pickle=True)
+    regimes = np.load(RAW_DIR / "window_regimes_v2.npy", allow_pickle=True)
+    adj = np.load(RAW_DIR / "adj_matrices.npy", allow_pickle=True)
+    node_feats = np.load(RAW_DIR / "window_node_features.npy", allow_pickle=True)
+    returns = np.load(RAW_DIR / "returns.npy", allow_pickle=True)
+    regimes_daily = np.load(RAW_DIR / "regimes.npy", allow_pickle=True)
+
+    n = min(len(windows), len(regimes), len(adj), len(node_feats))
+    return {
+        "windows": windows[:n],
+        "window_regimes": regimes[:n],
+        "adj_matrices": adj[:n],
+        "node_features": node_feats[:n],
+        "returns": returns,
+        "daily_regimes": regimes_daily,
+    }
+
+
+def nan_to_float(arr: np.ndarray) -> list:
+    """Convert numpy array to JSON-safe list, replacing NaN/Inf."""
+    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    return arr.tolist()
+
+
+def chunk_array(arr: np.ndarray, chunk_size: int = 50) -> list:
+    """Break large array into chunks for JSON serialization."""
+    flat = arr.flatten()
+    chunks = []
+    for i in range(0, len(flat), chunk_size):
+        chunks.append(float(flat[i]))
+    return chunks
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load data and build model on startup."""
+    global MODEL_STATE
+    st.info("Loading data artifacts...")
+    MODEL_STATE["data"] = load_data()
+    MODEL_STATE["device"] = torch.device("cpu")
+    st.success("Data loaded successfully!")
+    yield
+
+
+app = FastAPI(
+    title="VORTEX-AI CG-NSDE API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "model_loaded": "model" in MODEL_STATE}
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """Get overall data and model statistics."""
+    data = MODEL_STATE["data"]
+    return {
+        "n_windows": int(len(data["windows"])),
+        "n_stocks": int(data["windows"].shape[2]),
+        "window_length": int(data["windows"].shape[1]),
+        "crisis_ratio": float(data["window_regimes"].mean()),
+        "n_crisis": int(data["window_regimes"].sum()),
+        "n_normal": int(len(data["window_regimes"]) - data["window_regimes"].sum()),
+        "returns_shape": list(data["returns"].shape),
+        "daily_crisis_days": int(data["daily_regimes"].sum()),
+        "daily_total_days": int(len(data["daily_regimes"])),
+    }
+
+
+@app.get("/api/returns")
+async def get_returns(
+    stock_idx: int = Query(0, ge=0, le=49),
+    window_idx: int = Query(0, ge=0, le=3639),
+):
+    """Get returns data for a specific stock and window."""
+    data = MODEL_STATE["data"]
+    returns = data["returns"]
+    if stock_idx >= returns.shape[1]:
+        raise HTTPException(status_code=400, detail="Invalid stock index")
+
+    cum_returns = np.cumsum(returns[:, stock_idx])
+    regimes_daily = data["daily_regimes"]
+
+    return {
+        "ticker": NIFTY50_TICKERS[stock_idx],
+        "cumulative_returns": nan_to_float(cum_returns),
+        "daily_returns": nan_to_float(returns[:, stock_idx]),
+        "regimes": regimes_daily.tolist(),
+        "dates": list(range(len(returns))),
+    }
+
+
+@app.get("/api/window")
+async def get_window(window_idx: int = Query(0, ge=0, le=3639)):
+    """Get a single window's data for detailed inspection."""
+    data = MODEL_STATE["data"]
+    return {
+        "window_idx": window_idx,
+        "regime": int(data["window_regimes"][window_idx]),
+        "returns": nan_to_float(data["windows"][window_idx]),
+        "adjacency": nan_to_float(data["adj_matrices"][window_idx]),
+        "regime_label": "Crisis" if data["window_regimes"][window_idx] else "Normal",
+    }
+
+
+@app.get("/api/adjacency")
+async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
+    """Get adjacency matrix for heatmap visualization."""
+    data = MODEL_STATE["data"]
+    adj = data["adj_matrices"][window_idx]
+    regimes = data["window_regimes"]
+
+    non_zero = int((adj > 0).sum())
+    density = float(non_zero / (50 * 50))
+
+    # NetworkX graph for centrality
+    G = nx.from_numpy_array(adj, create_using=nx.Graph())
+    try:
+        centrality = nx.degree_centrality(G)
+        top_nodes = sorted(centrality.items(), key=lambda x: -x[1])[:10]
+        top_tickers = [NIFTY50_TICKERS[i] for i, _ in top_nodes]
+    except Exception:
+        top_tickers = NIFTY50_TICKERS[:10]
+
+    return {
+        "z": nan_to_float(adj),
+        "x": NIFTY50_TICKERS,
+        "y": NIFTY50_TICKERS,
+        "regime": "Crisis" if regimes[window_idx] else "Normal",
+        "regime_idx": int(regimes[window_idx]),
+        "edge_density": density,
+        "non_zero_edges": non_zero,
+        "top_connected": top_tickers,
+    }
+
+
+@app.get("/api/node-features")
+async def get_node_features(window_idx: int = Query(0, ge=0, le=3639)):
+    """Get node features for a specific window."""
+    data = MODEL_STATE["data"]
+    feats = data["node_features"][window_idx, -1, :, :]
+    feat_names = ["Return", "Abs Return", "Volume", "Sector ID", "Band Limit", "Dist to Band"]
+
+    return {
+        "tickers": NIFTY50_TICKERS,
+        "feature_names": feat_names,
+        "data": nan_to_float(feats),
+    }
+
+
+@app.get("/api/regime-distribution")
+async def get_regime_distribution():
+    """Get regime distribution statistics."""
+    data = MODEL_STATE["data"]
+    regimes = data["window_regimes"]
+    crisis_windows = np.where(regimes == 1)[0]
+
+    return {
+        "total_windows": len(regimes),
+        "crisis_count": int(regimes.sum()),
+        "normal_count": int(len(regimes) - regimes.sum()),
+        "crisis_ratio": float(regimes.mean()),
+        "crisis_indices": crisis_windows.tolist()[:100],
+    }
+
+
+@app.post("/api/model/gat-forward")
+async def gat_forward(config: ModelConfig = None):
+    """Run GAT encoder forward pass on a batch of data."""
+    if config is None:
+        config = ModelConfig()
+    data = MODEL_STATE["data"]
+    device = MODEL_STATE["device"]
+
+    from models.gat_encoder import DynamicGATEncoder, pool_graph_embedding
+
+    gat = DynamicGATEncoder(
+        in_feats=config.in_feats,
+        hidden=config.latent_dim,
+        out_feats=config.latent_dim,
+        heads=config.gat_heads,
+        dropout=config.gat_dropout,
+    ).to(device)
+    gat.eval()
+
+    n = min(config.batch_size, len(data["windows"]))
+    windows = torch.from_numpy(data["windows"][:n]).float().to(device)
+    adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
+                           nan=0.0, posinf=1.0, neginf=0.0).to(device)
+    node_feats = torch.nan_to_num(
+        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        nan=0.0, posinf=0.0, neginf=0.0
+    ).to(device)
+
+    with torch.no_grad():
+        node_embs, learned_adj = gat(node_feats, adj)
+        graph_emb = pool_graph_embedding(node_embs)
+
+    return {
+        "node_embs_shape": list(node_embs.shape),
+        "learned_adj_shape": list(learned_adj.shape),
+        "graph_emb_shape": list(graph_emb.shape),
+        "learned_adj_sample": nan_to_float(learned_adj[0].cpu().numpy()),
+        "node_embs_pca": nan_to_float(
+            PCA(n_components=2).fit_transform(node_embs[0].cpu().numpy())
+        ),
+        "attention_stats": {
+            "mean": float(learned_adj[0].mean().item()),
+            "std": float(learned_adj[0].std().item()),
+            "min": float(learned_adj[0].min().item()),
+            "max": float(learned_adj[0].max().item()),
+        },
+    }
+
+
+@app.post("/api/model/sde-forward")
+async def sde_forward(config: ModelConfig = None):
+    """Run Neural SDE forward pass on a batch of data."""
+    if config is None:
+        config = ModelConfig()
+    data = MODEL_STATE["data"]
+    device = MODEL_STATE["device"]
+
+    from models.gat_encoder import DynamicGATEncoder, pool_graph_embedding
+    from models.neural_sde import LatentSDEModel
+
+    gat = DynamicGATEncoder(
+        in_feats=config.in_feats,
+        hidden=config.latent_dim,
+        out_feats=config.latent_dim,
+        heads=config.gat_heads,
+        dropout=config.gat_dropout,
+    ).to(device)
+    sde_model = LatentSDEModel(
+        n_stocks=config.n_stocks,
+        latent_dim=config.latent_dim,
+        T=config.T,
+        sde_hidden_dim=config.sde_hidden_dim,
+    ).to(device)
+    gat.eval()
+    sde_model.eval()
+
+    n = min(config.batch_size, len(data["windows"]))
+    x = torch.from_numpy(data["windows"][:n]).float().to(device)
+    adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
+                           nan=0.0, posinf=1.0, neginf=0.0).to(device)
+    node_feats = torch.nan_to_num(
+        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        nan=0.0, posinf=0.0, neginf=0.0
+    ).to(device)
+
+    with torch.no_grad():
+        node_embs, learned_adj = gat(node_feats, adj)
+        graph_emb = pool_graph_embedding(node_embs)
+        r_hat, zs = sde_model(x, graph_emb)
+
+    ts = list(range(config.T))
+
+    return {
+        "z_path_sample": nan_to_float(zs[0, :, :4].cpu().numpy()),
+        "r_hat_sample": nan_to_float(r_hat[0, :, :5].cpu().numpy()),
+        "x_sample": nan_to_float(x[0, :, :5].cpu().numpy()),
+        "ts": ts,
+        "latent_stats": {
+            "mean": float(zs.mean().item()),
+            "std": float(zs.std().item()),
+            "max": float(zs.abs().max().item()),
+        },
+        "returns_stats": {
+            "mean": float(r_hat.mean().item()),
+            "std": float(r_hat.std().item()),
+        },
+    }
+
+
+@app.post("/api/scenario/generate")
+async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0, n_scenarios: int = 5, stock_idx: int = 0):
+    """Generate synthetic scenarios from the CG-NSDE model."""
+    if config is None:
+        config = ModelConfig()
+    data = MODEL_STATE["data"]
+    device = MODEL_STATE["device"]
+
+    from models.gat_encoder import DynamicGATEncoder, pool_graph_embedding
+    from models.neural_sde import LatentSDEModel
+
+    gat = DynamicGATEncoder(
+        in_feats=config.in_feats,
+        hidden=config.latent_dim,
+        out_feats=config.latent_dim,
+        heads=config.gat_heads,
+        dropout=config.gat_dropout,
+    ).to(device)
+    sde = LatentSDEModel(
+        n_stocks=config.n_stocks,
+        latent_dim=config.latent_dim,
+        T=config.T,
+        sde_hidden_dim=config.sde_hidden_dim,
+    ).to(device)
+    gat.eval()
+    sde.eval()
+
+    n = min(n_scenarios, len(data["windows"]))
+    x = torch.from_numpy(data["windows"][:n]).float().to(device)
+    adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
+                           nan=0.0, posinf=1.0, neginf=0.0).to(device)
+    node_feats = torch.nan_to_num(
+        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        nan=0.0, posinf=0.0, neginf=0.0
+    ).to(device)
+
+    with torch.no_grad():
+        node_embs, _ = gat(node_feats, adj)
+        graph_emb = pool_graph_embedding(node_embs)
+
+        original_g = sde.sde.g
+
+        def scaled_g(t, y):
+            return original_g(t, y) * noise_scale
+
+        sde.sde.g = scaled_g
+        r_hat, zs = sde(x, graph_emb)
+        sde.sde.g = original_g
+
+    real_returns = x[:, :, stock_idx].cpu().numpy()
+    synth_returns = r_hat[:, :, stock_idx].cpu().numpy()
+
+    real_flat = real_returns.flatten()
+    synth_flat = synth_returns.flatten()
+
+    from scipy.stats import kurtosis as scipy_kurtosis
+    real_kurt = float(scipy_kurtosis(real_flat, fisher=True))
+    synth_kurt = float(scipy_kurtosis(synth_flat, fisher=True))
+
+    def mean_acf_sq(arr):
+        sq = arr ** 2
+        acf_vals = []
+        for i in range(min(5, arr.shape[-1])):
+            col = sq[0, :, i] if arr.ndim == 3 else sq[0, :, i]
+            if len(col) > 1:
+                c = np.corrcoef(col[1:], col[:-1])
+                if c.size > 1 and not np.isnan(c[0, 1]):
+                    acf_vals.append(c[0, 1])
+        return float(np.mean(acf_vals)) if acf_vals else 0.0
+
+    real_acf = mean_acf_sq(real_returns)
+    synth_acf = mean_acf_sq(synth_returns)
+
+    return {
+        "scenarios": nan_to_float(synth_returns),
+        "real_avg": nan_to_float(real_returns.mean(axis=0)),
+        "tickers": [NIFTY50_TICKERS[stock_idx]],
+        "stock_idx": stock_idx,
+        "stats": {
+            "real_kurtosis": real_kurt,
+            "synth_kurtosis": synth_kurt,
+            "kurtosis_pass": synth_kurt > 3.0,
+            "real_acf_sq": real_acf,
+            "synth_acf_sq": synth_acf,
+            "real_mean": float(real_flat.mean()),
+            "synth_mean": float(synth_flat.mean()),
+            "real_std": float(real_flat.std()),
+            "synth_std": float(synth_flat.std()),
+        },
+    }
+
+
+@app.get("/api/evaluation/metrics")
+async def get_evaluation_metrics(batch_size: int = 8):
+    """Run full evaluation metrics on model output."""
+    data = MODEL_STATE["data"]
+    device = MODEL_STATE["device"]
+    cfg = ModelConfig()
+
+    from models.gat_encoder import DynamicGATEncoder, pool_graph_embedding
+    from models.neural_sde import LatentSDEModel
+    from models.contrastive import SupConLoss, ProjectionHead
+    from training.losses import total_loss
+
+    gat = DynamicGATEncoder(
+        in_feats=cfg.in_feats, hidden=cfg.latent_dim,
+        out_feats=cfg.latent_dim, heads=cfg.gat_heads,
+        dropout=cfg.gat_dropout,
+    ).to(device)
+    sde = LatentSDEModel(
+        n_stocks=cfg.n_stocks, latent_dim=cfg.latent_dim,
+        T=cfg.T, sde_hidden_dim=cfg.sde_hidden_dim,
+    ).to(device)
+    proj = ProjectionHead(cfg.latent_dim, cfg.proj_dim).to(device)
+    supcon = SupConLoss(temperature=cfg.tau).to(device)
+
+    n = min(batch_size, len(data["windows"]))
+    x = torch.from_numpy(data["windows"][:n]).float().to(device)
+    adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
+                           nan=0.0, posinf=1.0, neginf=0.0).to(device)
+    node_feats = torch.nan_to_num(
+        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        nan=0.0, posinf=0.0, neginf=0.0
+    ).to(device)
+    regimes = torch.from_numpy(data["window_regimes"][:n]).float().to(device)
+
+    with torch.no_grad():
+        node_embs, learned_adj = gat(node_feats, adj)
+        graph_emb = pool_graph_embedding(node_embs)
+        r_hat, zs = sde(x, graph_emb)
+        z_proj = proj(zs)
+
+    from scipy.stats import kurtosis as scipy_kurtosis
+
+    real_flat = x.detach().cpu().numpy().flatten()
+    synth_flat = r_hat.detach().cpu().numpy().flatten()
+
+    real_kurt = float(scipy_kurtosis(real_flat, fisher=True))
+    synth_kurt = float(scipy_kurtosis(synth_flat, fisher=True))
+
+    def mean_acf_sq_batch(arr):
+        sq = arr ** 2
+        acf_vals = []
+        for i in range(min(5, arr.shape[-1])):
+            col = sq[0, :, i] if arr.ndim == 3 else sq[:, i]
+            if len(col) > 1:
+                c = np.corrcoef(col[1:], col[:-1])
+                if c.size > 1 and not np.isnan(c[0, 1]):
+                    acf_vals.append(c[0, 1])
+        return float(np.mean(acf_vals)) if acf_vals else 0.0
+
+    real_acf = mean_acf_sq_batch(real_flat)
+    synth_acf = mean_acf_sq_batch(synth_flat)
+
+    corr_real = np.corrcoef(real_flat[:50] if len(real_flat) >= 50 else real_flat)
+    corr_synth = np.corrcoef(synth_flat[:50] if len(synth_flat) >= 50 else synth_flat)
+    corr_error = float(np.linalg.norm(corr_real - corr_synth, "fro")) if corr_real.shape == corr_synth.shape else float("NaN")
+
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.model_selection import cross_val_score
+
+    n_samples = min(50, len(x))
+    X_disc = np.concatenate([
+        x[:n_samples].reshape(n_samples, -1),
+        r_hat[:n_samples].detach().cpu().numpy().reshape(n_samples, -1),
+    ])
+    y_disc = np.array([1] * n_samples + [0] * n_samples)
+
+    clf = GradientBoostingClassifier(n_estimators=50, max_depth=3, random_state=42)
+    disc_scores = cross_val_score(clf, X_disc, y_disc, cv=3, scoring="accuracy")
+    disc_score = float(disc_scores.mean())
+
+    normal_idx = np.where(data["window_regimes"][:n] == 0)[0]
+    crisis_idx = np.where(data["window_regimes"][:n] == 1)[0]
+
+    if len(normal_idx) > 1 and len(crisis_idx) > 1:
+        corr_n = np.corrcoef(r_hat[normal_idx].mean(0).T.cpu().numpy())
+        corr_c = np.corrcoef(r_hat[crisis_idx].mean(0).T.cpu().numpy())
+        def avg_abs_offdiag(c):
+            nn = c.shape[0]
+            mask = ~np.eye(nn, dtype=bool)
+            return float(np.abs(c[mask]).mean())
+        avg_n = avg_abs_offdiag(corr_n)
+        avg_c = avg_abs_offdiag(corr_c)
+        boost = float((avg_c - avg_n) / (avg_n + 1e-8))
+    else:
+        avg_n = 0.0
+        avg_c = 0.0
+        boost = 0.0
+
+    loss_components = {}
+    with torch.no_grad():
+        l_rec = float(reconstruction_loss(x, r_hat, lambda_styl=0.1).item())
+        l_graph = float(graph_consistency_loss(learned_adj, adj).item())
+        l_con = float(supcon(z_proj, regimes).item())
+
+    return {
+        "statistical": {
+            "kurtosis_real": real_kurt,
+            "kurtosis_synth": synth_kurt,
+            "kurtosis_pass": synth_kurt > 3.0,
+            "acf_sq_real": real_acf,
+            "acf_sq_synth": synth_acf,
+            "corr_error": corr_error,
+            "real_mean": float(real_flat.mean()),
+            "synth_mean": float(synth_flat.mean()),
+            "real_std": float(real_flat.std()),
+            "synth_std": float(synth_flat.std()),
+        },
+        "discriminative": {
+            "score": disc_score,
+            "pass": disc_score < 0.60,
+        },
+        "contagion": {
+            "normal_avg_corr": avg_n,
+            "crisis_avg_corr": avg_c,
+            "boost": boost,
+            "pass": boost > 0.5,
+        },
+        "loss_components": {
+            "L_reconstruction": l_rec,
+            "L_graph": l_graph,
+            "L_contrastive": l_con,
+            "L_circuit_filter": 0.0,
+        },
+    }
+
+
+@app.get("/api/training/simulate")
+async def training_simulation(epochs: int = 10, batch_size: int = 8, lr: float = 0.001):
+    """Run a quick training simulation and return loss curve."""
+    data = MODEL_STATE["data"]
+    device = MODEL_STATE["device"]
+    cfg = ModelConfig(batch_size=batch_size)
+
+    from models.gat_encoder import DynamicGATEncoder, pool_graph_embedding
+    from models.neural_sde import LatentSDEModel
+    from models.contrastive import SupConLoss, ProjectionHead
+    from training.losses import total_loss
+
+    torch.manual_seed(42)
+
+    gat = DynamicGATEncoder(
+        in_feats=cfg.in_feats, hidden=cfg.latent_dim,
+        out_feats=cfg.latent_dim, heads=cfg.gat_heads,
+        dropout=cfg.gat_dropout,
+    ).to(device)
+    sde = LatentSDEModel(
+        n_stocks=cfg.n_stocks, latent_dim=cfg.latent_dim,
+        T=cfg.T, sde_hidden_dim=cfg.sde_hidden_dim,
+    ).to(device)
+    proj = ProjectionHead(cfg.latent_dim, cfg.proj_dim).to(device)
+    supcon = SupConLoss(temperature=cfg.tau).to(device)
+
+    optimizer = torch.optim.Adam(
+        list(gat.parameters()) + list(sde.parameters()) + list(proj.parameters()),
+        lr=lr,
+    )
+
+    losses = []
+    n = min(batch_size, len(data["windows"]))
+
+    for epoch in range(epochs):
+        idx = torch.randperm(len(data["windows"]))[:n]
+        x = torch.from_numpy(data["windows"][idx]).float().to(device)
+        adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][idx]).float(),
+                               nan=0.0, posinf=1.0, neginf=0.0).to(device)
+        node_feats = torch.nan_to_num(
+            torch.from_numpy(data["node_features"][idx, -1, :, :]).float(),
+            nan=0.0, posinf=0.0, neginf=0.0
+        ).to(device)
+        reg = torch.from_numpy(data["window_regimes"][idx]).float().to(device)
+
+        optimizer.zero_grad()
+        node_embs, learned_adj = gat(node_feats, adj)
+        graph_emb = pool_graph_embedding(node_embs)
+        r_hat, zs = sde(x, graph_emb)
+        z_proj = proj(zs)
+
+        loss, _ = total_loss(
+            r_real=x, r_hat=r_hat,
+            a_learned=learned_adj, a_empirical=adj,
+            z_proj=z_proj, regime_labels=reg,
+            supcon_loss_fn=supcon,
+            lam_rec=1.0, lam_graph=0.1, lam_con=0.1, lam_na=0.0,
+            lambda_styl=0.1,
+        )
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(gat.parameters()) + list(sde.parameters()) + list(proj.parameters()),
+            1.0,
+        )
+        optimizer.step()
+        losses.append(float(loss.item()))
+
+    del optimizer
+
+    return {
+        "epochs": epochs,
+        "losses": losses,
+        "final_loss": float(losses[-1]),
+        "initial_loss": float(losses[0]),
+        "trend": "decreasing" if losses[-1] < losses[0] else "flat",
+    }
+
+
+import networkx as nx
+from sklearn.decomposition import PCA
+from scipy.stats import kurtosis as scipy_kurtosis
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import cross_val_score
+from training.losses import reconstruction_loss

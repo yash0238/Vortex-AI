@@ -223,4 +223,9 @@ __marimo__/
 data/raw/*.npy
 data/raw/*.csv
 
+# Stage 1 freeze: old checkpoints, logs, per-run outputs (never commit)
+archive/
+runs/
+
 Vortex-AI/PRESENTATION.md
+Vortex-AI/IMPLEMENTATION_PLAN.md

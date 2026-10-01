@@ -1,3 +1,4 @@
+# Baseline LSTM training configuration
 epochs: 50
 batch_size: 32
 learning_rate: 0.001
@@ -9,3 +10,30 @@ patience: 10
 test_size: 0.2
 validation_size: 0.15
 seed: 42
+
+# CG-NSDE Lightning model configuration (masterplan Part D.8)
+cgnsde:
+  n_stocks: 50
+  T: 60
+  latent_dim: 64
+  proj_dim: 32
+  in_feats: 6
+  gat_heads: 4
+  gat_dropout: 0.1
+  tau: 0.07
+  lr: 0.001
+  sde_hidden_dim: 128
+  max_epochs: 200
+  batch_size: 32
+  test_size: 0.2
+  validation_size: 0.15
+  seed: 42
+  gradient_clip: 1.0
+  crisis_percentile: 85
+  loss_weights:
+    lam_rec: 1.0
+    lam_graph: 0.3
+    lam_con: 0.2
+    lam_na: 0.05
+  lambda_styl: 0.5
+  warmup_epochs: 20
