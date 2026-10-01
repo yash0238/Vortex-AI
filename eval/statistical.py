@@ -72,7 +72,8 @@ def evaluate_stylized_facts(real_returns: np.ndarray, gen_returns: np.ndarray) -
 	acf_real = _acf_lag1(np.square(real))
 	acf_gen = _acf_lag1(np.square(gen))
 	corr_error = float(np.linalg.norm(_mean_corr(real) - _mean_corr(gen), ord="fro"))
-	kurt_pass = bool(np.isfinite(kurt_gen) and kurt_gen > 3.0)
+	kurt_pass = bool(np.isfinite(kurt_gen) and kurt_gen > 3.0
+		and abs(kurt_gen - kurt_real) / (abs(kurt_real) + 1e-8) < 0.30)
 	acf_pass = bool(np.isfinite(acf_gen) and acf_gen > 0.05)
 	corr_pass = bool(np.isfinite(corr_error) and corr_error < 2.5)
 	return {

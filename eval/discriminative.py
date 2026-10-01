@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import cross_val_score
 from typing import Dict
 
 
@@ -17,62 +16,70 @@ def discriminative_score(
     real_returns: np.ndarray,
     gen_returns: np.ndarray,
     n_samples: int = 500,
-    cv_folds: int = 5,
+    cv_folds: int = 3,
     random_state: int = 42,
+    purge: int = 60,
 ) -> Dict[str, float]:
     """
     Compute discriminative score using Gradient Boosting Classifier.
-    
-    As specified in masterplan Part F.2.
-    
-    The discriminative score measures how well a classifier can distinguish
-    real from synthetic data. Lower is better:
+
+    Uses block-contiguous folds with purge gaps: overlapping 60-day windows
+    mean window-level shuffling leaks near-duplicates across folds, flattering
+    the score. Each class is split into contiguous blocks in the passed-in
+    order (callers pass chronological windows); train drops windows within
+    `purge` positions of the test block. Lower is better:
     - 0.5: Perfect (indistinguishable)
     - <0.6: Good (target threshold)
     - >0.7: Poor (easily distinguishable)
-    
+
     Args:
-        real_returns: (N_real, T, n_stocks) real returns
+        real_returns: (N_real, T, n_stocks) real returns, chronological order
         gen_returns: (N_gen, T, n_stocks) generated returns
         n_samples: number of samples to use from each class
-        cv_folds: number of cross-validation folds
+        cv_folds: number of contiguous block folds
         random_state: random seed
-    
+        purge: windows dropped from train around each test block
+
     Returns:
         results: dict with discriminative scores
     """
-    # Limit to n_samples from each class
+    # Limit to n_samples from each class, preserving order (no shuffle)
     n = min(n_samples, len(real_returns), len(gen_returns))
-    
-    # Flatten windows to feature vectors
     X_real = real_returns[:n].reshape(n, -1)  # (n, T*n_stocks)
     X_gen = gen_returns[:n].reshape(n, -1)
-    
-    # Stack and create labels (1=real, 0=synthetic)
-    X = np.concatenate([X_real, X_gen], axis=0)
-    y = np.array([1] * n + [0] * n)
-    
-    # Train Gradient Boosting Classifier with cross-validation
-    clf = GradientBoostingClassifier(
-        n_estimators=100,
-        max_depth=5,
-        learning_rate=0.1,
-        random_state=random_state,
-    )
-    
-    # Cross-validation scores
-    scores = cross_val_score(clf, X, y, cv=cv_folds, scoring="accuracy")
-    
-    mean_score = float(scores.mean())
-    std_score = float(scores.std())
-    
+
+    rng = np.random.default_rng(random_state)
+    accs = []
+    edges = np.linspace(0, n, cv_folds + 1).astype(int)
+    for k in range(cv_folds):
+        a, b = int(edges[k]), int(edges[k + 1])
+        X_te = np.concatenate([X_real[a:b], X_gen[a:b]], axis=0)
+        y_te = np.array([1] * (b - a) + [0] * (b - a))
+        keep = np.ones(n, dtype=bool)
+        keep[max(0, a - purge):min(n, b + purge)] = False
+        X_tr = np.concatenate([X_real[keep], X_gen[keep]], axis=0)
+        y_tr = np.array([1] * int(keep.sum()) + [0] * int(keep.sum()))
+        if len(X_te) == 0 or int(keep.sum()) < 10:
+            continue
+        clf = GradientBoostingClassifier(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=random_state,
+        )
+        clf.fit(X_tr, y_tr)
+        accs.append(float(clf.score(X_te, y_te)))
+
+    mean_score = float(np.mean(accs)) if accs else float("nan")
+    std_score = float(np.std(accs)) if accs else float("nan")
+
     results = {
         "discriminative_score": mean_score,
         "discriminative_std": std_score,
         "discriminative_pass": bool(mean_score < 0.60),  # Target: <0.6
         "indistinguishability": 1.0 - abs(mean_score - 0.5) * 2,  # 1.0 = perfect
     }
-    
+
     return results
 
 
