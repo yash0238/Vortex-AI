@@ -35,7 +35,23 @@ class VortexDataset(Dataset):
     
     def __init__(self, data_dir: Path = Path("data/raw")):
         """Load all preprocessed arrays."""
-        self.windows = np.load(data_dir / "windows.npy")  # (N, T, stocks)
+        self.data_dir = Path(data_dir)
+        raw_windows = np.load(self.data_dir / "windows.npy")  # (N, T, stocks) raw log returns
+        # Stage 3d: train in z-space. Standardize with train-fit scaler; keep raw for inverse.
+        sc_path = self.data_dir / "scaler.npz"
+        if sc_path.exists():
+            sc = np.load(sc_path)
+            self.scaler_mean = sc["mean"].astype(np.float32)
+            self.scaler_std = sc["std"].astype(np.float32)
+            self.windows_raw = raw_windows.astype(np.float32)
+            self.windows = ((raw_windows - self.scaler_mean) / self.scaler_std).astype(np.float32)
+            print(f"Standardized windows with {sc_path.name} (z-space train)")
+        else:
+            self.scaler_mean = None
+            self.scaler_std = None
+            self.windows_raw = None
+            self.windows = raw_windows.astype(np.float32)
+            print("Warning: scaler.npz missing, using raw returns")
         # 2.3: canonical corrected labels (v2, last-day labeling ~15% crisis),
         # fallback to v1 if v2 missing.
         regimes_path = data_dir / "window_regimes_v2.npy"
@@ -181,6 +197,14 @@ class VortexDataset(Dataset):
 
         return features
 
+    def inverse_transform(self, z: torch.Tensor) -> torch.Tensor:
+        """Map z-space returns back to raw log returns for eval/plots (Stage 3d)."""
+        if self.scaler_mean is None:
+            return z
+        mean = torch.from_numpy(self.scaler_mean).to(z.device, dtype=z.dtype)
+        std = torch.from_numpy(self.scaler_std).to(z.device, dtype=z.dtype)
+        return z * std + mean
+
 
 def create_dataloaders(
     dataset: VortexDataset,
@@ -191,23 +215,31 @@ def create_dataloaders(
     seed: int = 42,
     min_per_class: int = 4,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-    """Split dataset and create dataloaders (stratified by regime, cf. trainer.py)."""
+    """Split dataset and create dataloaders (Stage 3c: chronological split.npz, train sampler only)."""
     from sklearn.model_selection import train_test_split
     from torch.utils.data import Subset
     n_total = len(dataset)
     regimes = np.asarray(dataset.regimes)
-    indices = np.arange(n_total)
-
-    test_frac = test_size
-    val_frac_of_rest = val_size / (1 - test_size)
-    train_idx, temp_idx = train_test_split(
-        indices, test_size=(test_size + val_size),
-        stratify=regimes, random_state=seed,
-    )
-    val_idx, test_idx = train_test_split(
-        temp_idx, test_size=test_size / (test_size + val_size),
-        stratify=regimes[temp_idx], random_state=seed,
-    )
+    split_path = Path("data/raw/split.npz")
+    if split_path.exists():
+        sp = np.load(split_path, allow_pickle=True)
+        train_idx = np.asarray(sp["train_idx"])
+        val_idx = np.asarray(sp["val_idx"])
+        test_idx = np.asarray(sp["test_idx"])
+        print(f"Chronological split from {split_path.name}: {sp['scheme'][0]}")
+    else:
+        indices = np.arange(n_total)
+        test_frac = test_size
+        val_frac_of_rest = val_size / (1 - test_size)
+        train_idx, temp_idx = train_test_split(
+            indices, test_size=(test_size + val_size),
+            stratify=regimes, random_state=seed,
+        )
+        val_idx, test_idx = train_test_split(
+            temp_idx, test_size=test_size / (test_size + val_size),
+            stratify=regimes[temp_idx], random_state=seed,
+        )
+        print("Warning: split.npz missing, using stratified random split (has leakage)")
     train_dataset, val_dataset, test_dataset = (
         Subset(dataset, train_idx), Subset(dataset, val_idx), Subset(dataset, test_idx),
     )

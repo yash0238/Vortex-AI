@@ -170,7 +170,7 @@ def regenerate_window_regimes() -> np.ndarray:
     window_size = 60
 
     window_labels = []
-    for i in range(window_size, T):
+    for i in range(window_size, T + 1):
         window_labels.append(regimes[i - 1])
 
     return np.array(window_labels, dtype=np.int64)
