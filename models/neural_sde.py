@@ -119,11 +119,14 @@ class LatentSDEModel(nn.Module):
 
     def __init__(self, n_stocks: int = 50, latent_dim: int = 64,
                  T: int = 60, sde_hidden_dim: int = 128,
-                 graph_emb_dim: int | None = None) -> None:
+                 graph_emb_dim: int | None = None, sigma_max: float = 3.0,
+                 emission: str = "point", rank_K: int = 0) -> None:
         super().__init__()
         self.T = T
         self.latent_dim = latent_dim
         self.n_stocks = n_stocks
+        self.emission = emission
+        self.rank_K = rank_K
         if graph_emb_dim is None:  # 2.9: was hardcoded to latent_dim
             graph_emb_dim = latent_dim
         self.graph_emb_dim = graph_emb_dim
@@ -137,8 +140,14 @@ class LatentSDEModel(nn.Module):
             graph_emb_dim=graph_emb_dim,
             hidden_dim=sde_hidden_dim,
         )
+        self.sde.sigma_max = sigma_max
 
         self.decoder = nn.Linear(latent_dim, n_stocks)
+        if emission == "hetero":
+            self.emi_m = nn.Linear(latent_dim, n_stocks)
+            self.emi_d = nn.Linear(latent_dim, n_stocks)
+            nn.init.constant_(self.emi_d.bias, 0.54)  # softplus(0.54) ~= 1.0
+            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K) if rank_K > 0 else None
 
     def encode_stats(
         self, x: torch.Tensor
@@ -170,6 +179,31 @@ class LatentSDEModel(nn.Module):
         )
         zs = zs.permute(1, 0, 2)
         return self.decoder(zs), zs
+
+    def emission_dist(self, zs: torch.Tensor):
+        """7.3: per-step heteroscedastic emission. zs (B, T, latent) -> dist over (B, T, N)."""
+        from torch.distributions import Independent, LowRankMultivariateNormal, Normal
+        m = 0.5 * torch.tanh(self.emi_m(zs))
+        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
+        if self.rank_K > 0 and self.emi_B is not None:
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            return LowRankMultivariateNormal(m, Bf, d)
+        return Independent(Normal(m, torch.sqrt(d)), 1)
+
+    def emission_nll(self, zs: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Mean -log_prob over batch, time (and stocks via the joint event)."""
+        return -self.emission_dist(zs).log_prob(x).mean()
+
+    def emission_sample(self, zs: torch.Tensor) -> torch.Tensor:
+        return self.emission_dist(zs).rsample()
+
+    def emission_sigma(self, zs: torch.Tensor) -> torch.Tensor:
+        """Per-step marginal std (B, T, N) for probes."""
+        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
+        if self.rank_K > 0 and self.emi_B is not None:
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            return torch.sqrt(d + (Bf.pow(2)).sum(-1))
+        return torch.sqrt(d)
 
     def forward(
         self,

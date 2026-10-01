@@ -60,6 +60,9 @@ class VORTEXModel(pl.LightningModule):
         beta_max: float = 0.01,  # 7.1: KL weight ceiling, ramped over prior_warmup
         prior_warmup: int = 10,
         lam_var: float = 0.0,  # 7.2: variance-matching loss weight
+        emission: str = "point",  # 7.3: "point" (MSE) or "hetero" (NLL emission)
+        rank_K: int = 0,  # 7.3: factor rank for emission covariance
+        sde_sigma_max: float = 3.0,  # 7.3: slow-state bound (0.5-1 for hetero)
         use_gat: bool = True,  # 4.1: False = No-GAT ablation (MLP fallback)
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
@@ -89,7 +92,10 @@ class VORTEXModel(pl.LightningModule):
         self.sde_model = LatentSDEModel(
             n_stocks=n_stocks,
             latent_dim=latent_dim,
-            T=T
+            T=T,
+            sigma_max=sde_sigma_max,
+            emission=emission,
+            rank_K=rank_K,
         )
         
         self.proj_head = ProjectionHead(
@@ -105,6 +111,9 @@ class VORTEXModel(pl.LightningModule):
         self.beta_max = beta_max
         self.prior_warmup = max(1, prior_warmup)
         self.lam_var = lam_var
+        self.emission = emission
+        self.rank_K = rank_K
+        self.sde_sigma_max = sde_sigma_max
         
         # Loss weights
         self.lam_rec = lam_rec
@@ -179,6 +188,7 @@ class VORTEXModel(pl.LightningModule):
         
         # 3. Latent SDE: sample z0 from posterior in training, deterministic h0 in eval
         r_hat, zs = self.sde_model(x, graph_emb, sample=self.training)
+        self._last_zs = zs
 
         # 4. Project to contrastive space
         z_proj = self.proj_head(zs)  # (B, proj_dim)
@@ -204,7 +214,20 @@ class VORTEXModel(pl.LightningModule):
         
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
-        
+
+        if self.emission == "hetero":
+            # 7.3: NLL replaces MSE recon and L_var; MSE kept as diagnostic only
+            zs_tail = self._last_zs
+            nll = self.sde_model.emission_nll(zs_tail, x)
+            mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
+            kl = self._kl_to_prior(regimes)
+            loss = nll + self._eff_beta() * kl
+            self.log("train/nll", nll, on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/mse_diag", mse_diag, on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/kl", kl, on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/total", loss, on_step=True, on_epoch=True, prog_bar=True)
+            return loss
+
         # Compute total loss
         loss, components = total_loss(
             r_real=x,
@@ -248,7 +271,15 @@ class VORTEXModel(pl.LightningModule):
         
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
-        
+
+        if self.emission == "hetero":
+            nll = self.sde_model.emission_nll(self._last_zs, x)
+            mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
+            self.log("val/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
+            self.log("val/mse_diag", mse_diag, on_step=False, on_epoch=True, prog_bar=False)
+            self.log("val/total", nll, on_step=False, on_epoch=True, prog_bar=True)
+            return nll
+
         # Compute total loss
         loss, components = total_loss(
             r_real=x,
@@ -264,7 +295,7 @@ class VORTEXModel(pl.LightningModule):
             lam_na=self.lam_na,
             lambda_styl=self.lambda_styl,
         )
-        
+
         # Log all components
         for key, value in components.items():
             key_val = key.replace("loss/", "")
@@ -356,8 +387,11 @@ class VORTEXModel(pl.LightningModule):
             # discarded batch elements 1..B).
             batch_size = x.shape[0]
             for i in range(n_scenarios):
-                r_hat, _ = self.sde_model(x, graph_emb)
-                scenarios.append(r_hat[i % batch_size])  # (T, N)
+                r_mean, zs_i = self.sde_model(x, graph_emb)
+                if self.emission == "hetero":
+                    scenarios.append(self.sde_model.emission_sample(zs_i)[i % batch_size])
+                else:
+                    scenarios.append(r_mean[i % batch_size])  # (T, N)
 
         return torch.stack(scenarios)
 
@@ -382,5 +416,8 @@ class VORTEXModel(pl.LightningModule):
         r = regimes.long().clamp(0, 1)
         eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
         z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
-        r_hat, _ = self.sde_model.decode_from_z0(graph_emb, z0)
-        return r_hat
+        r_mean, zs = self.sde_model.decode_from_z0(graph_emb, z0)
+        if self.emission == "hetero":
+            # 7.3: generation SAMPLES the emission, never the mean
+            return self.sde_model.emission_sample(zs)
+        return r_mean
