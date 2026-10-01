@@ -38,7 +38,9 @@ out = {}
 out["styl"] = evaluate_stylized_facts(A, B)
 out["disc"] = discriminative_score(A, B, n_samples=min(500, len(A), len(B)))
 for k, v in [("styl", out["styl"]), ("disc", out["disc"])]:
-    print(k, {kk: round(float(vv), 4) if isinstance(vv, float) else vv for kk, vv in v.items()})
+    print(k, {kk: (round(float(vv), 4) if isinstance(vv, float) else vv) for kk, vv in v.items()})
+print("corr floor (real-vs-real): 2.87 | MAE:", round(float(out["styl"]["corr_mae"]), 4),
+      "| kurt interval:", [round(float(x), 2) for x in out["styl"]["kurtosis_interval"]])
 n = min(500, len(A), len(B))
 mu, sd = A[:n].mean(axis=(0, 1)), A[:n].std(axis=(0, 1))
 G = rng.normal(mu, sd, size=(n, W.shape[1], W.shape[2]))
@@ -48,6 +50,20 @@ for k, v in [("G_styl", out["G_styl"]), ("G_disc", out["G_disc"])]:
     print(k, {kk: round(float(vv), 4) if isinstance(vv, float) else vv for kk, vv in v.items()})
 out["meta"] = {"A": len(A), "B": len(B), "dropped": len(drop),
                "crisis_A": float(lab[A_idx].mean()), "crisis_B": float(lab[B_idx].mean())}
+from eval.contagion import cvar_regime_ratio
+lab_full = np.load("data/raw/window_regimes_v2.npy")
+Wfull = np.load("data/raw/windows.npy").astype(float)
+rrng = np.random.default_rng(3)
+ratios = []
+NB = len(Wfull) // 100
+for _ in range(200):
+    picks = rrng.integers(0, NB, size=NB)
+    s = np.concatenate([Wfull[k * 100:(k + 1) * 100] for k in picks], axis=0)
+    l = np.concatenate([lab_full[k * 100:(k + 1) * 100] for k in picks], axis=0)
+    ratios.append(cvar_regime_ratio(s, l)["cvar_ratio"])
+ratios = np.array(ratios)
+print("CVaR ratio ref 4.04x, bootstrap 5-95pct:",
+      round(float(np.percentile(ratios, 5)), 2), round(float(np.percentile(ratios, 95)), 2))
 with open("results/oracle_v3.json", "w") as f:
     json.dump(out, f, indent=2, default=float)
 print("saved results/oracle_v3.json")

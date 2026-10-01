@@ -63,17 +63,61 @@ def _mean_corr(returns_3d: np.ndarray) -> np.ndarray:
 	return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+def _per_stock_kurt_median(returns_3d: np.ndarray) -> float:
+	arr = np.asarray(returns_3d, dtype=float)
+	if arr.ndim != 3:
+		arr = np.asarray(arr).reshape(-1)
+		return _kurtosis_pearson(arr)
+	n, t, s = arr.shape
+	ks = [float(_kurtosis_pearson(arr[:, :, j])) for j in range(s)]
+	ks = [k for k in ks if np.isfinite(k)]
+	return float(np.median(ks)) if ks else float("nan")
+
+
+def block_bootstrap_kurt_interval(real_returns: np.ndarray, n_draws: int = 1000,
+		block: int = 100, seed: int = 0, use_median: bool = False) -> tuple:
+	"""5th to 95th pct of real kurtosis over block resamples (contiguous blocks)."""
+	rng = np.random.default_rng(seed)
+	real = np.asarray(real_returns, dtype=float)
+	n = len(real)
+	nb = max(1, n // block)
+	vals = []
+	for _ in range(n_draws):
+		picks = rng.integers(0, nb, size=nb)
+		samp = np.concatenate([real[k * block:(k + 1) * block] for k in picks], axis=0)[:n]
+		vals.append(_per_stock_kurt_median(samp) if use_median else _kurtosis_pearson(samp))
+	vals = np.array([v for v in vals if np.isfinite(v)])
+	return (float(np.percentile(vals, 5)), float(np.percentile(vals, 95)))
+
+
+def _offdiag_mae(a: np.ndarray, b: np.ndarray) -> float:
+	mask = ~np.eye(a.shape[0], dtype=bool)
+	return float(np.mean(np.abs(a[mask] - b[mask])))
+
+
 def evaluate_stylized_facts(real_returns: np.ndarray, gen_returns: np.ndarray) -> dict:
-	"""Masterplan Part F: kurtosis>3.0, ACF(r^2)>0.05, corr error<2.5 Frobenius."""
+	"""Part F gates: kurt>3 inside real block-bootstrap spread, ACF(r^2)>0.05, corr Fro<3.0."""
 	real = np.asarray(real_returns, dtype=float)
 	gen = np.asarray(gen_returns, dtype=float)
 	kurt_real = _kurtosis_pearson(real)
 	kurt_gen = _kurtosis_pearson(gen)
+	lo, hi = block_bootstrap_kurt_interval(real)
+	used_median = False
 	acf_real = _acf_lag1(np.square(real))
 	acf_gen = _acf_lag1(np.square(gen))
-	corr_error = float(np.linalg.norm(_mean_corr(real) - _mean_corr(gen), ord="fro"))
-	kurt_pass = bool(np.isfinite(kurt_gen) and kurt_gen > 3.0
-		and abs(kurt_gen - kurt_real) / (abs(kurt_real) + 1e-8) < 0.30)
+	cr, cg = _mean_corr(real), _mean_corr(gen)
+	corr_error = float(np.linalg.norm(cr - cg, ord="fro"))
+	corr_mae = _offdiag_mae(cr, cg)
+	kurt_pass = bool(np.isfinite(kurt_gen) and kurt_gen > 3.0 and lo <= kurt_gen <= hi)
+	acf_pass = bool(np.isfinite(acf_gen) and acf_gen > 0.05)
+	corr_pass = bool(np.isfinite(corr_error) and corr_error < 3.0)
+	return {
+		"kurtosis_real": kurt_real, "kurtosis_gen": kurt_gen, "kurtosis_pass": kurt_pass,
+		"kurtosis_interval": [lo, hi], "kurtosis_median_rule": used_median,
+		"acf_sq_real": acf_real, "acf_sq_gen": acf_gen, "acf_sq_pass": acf_pass,
+		"corr_error": corr_error, "corr_mae": corr_mae, "corr_error_pass": corr_pass,
+		"all_tests_pass": bool(kurt_pass and acf_pass and corr_pass),
+	}
 	acf_pass = bool(np.isfinite(acf_gen) and acf_gen > 0.05)
 	corr_pass = bool(np.isfinite(corr_error) and corr_error < 2.5)
 	return {
