@@ -402,6 +402,7 @@ def train(args: argparse.Namespace):
     )
     
     # Setup wandb logger
+    run_id = None
     if config.get("wandb_project"):
         wandb_logger = WandbLogger(
             project=config["wandb_project"],
@@ -412,6 +413,11 @@ def train(args: argparse.Namespace):
     else:
         wandb_logger = None
         print("Warning: wandb logging disabled. Set 'wandb_project' in config to enable.")
+        from datetime import datetime
+        from pytorch_lightning.loggers import CSVLogger
+        run_id = datetime.now().strftime("%Y%m%d-%H%M") + "-stage6-recon"
+        wandb_logger = CSVLogger(save_dir="runs", name=run_id)
+        print(f"Run dir: runs/{run_id}")
     
     # Setup callbacks
     ckpt_tag = "vortex" if ablation == "none" else f"vortex-abl-{ablation}"
@@ -432,12 +438,12 @@ def train(args: argparse.Namespace):
     )
     print(f"EarlyStopping patience: {config.get('patience', 20)} (best_val monitor val/total)")
     
-    # Setup trainer
+    # Setup trainer (logger=False when wandb off: env tensorboard/protobuf is broken)
     trainer = pl.Trainer(
         max_epochs=config.get("max_epochs", 200),
         accelerator=config.get("accelerator", "auto"),
         devices=config.get("devices", 1),
-        logger=wandb_logger,
+        logger=wandb_logger if wandb_logger else False,
         callbacks=[checkpoint_callback, early_stopping],
         gradient_clip_val=config.get("gradient_clip_val", 1.0),
         log_every_n_steps=config.get("log_every_n_steps", 10),
