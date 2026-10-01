@@ -278,6 +278,12 @@ class VORTEXModel(pl.LightningModule):
             self.log("val/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
             self.log("val/mse_diag", mse_diag, on_step=False, on_epoch=True, prog_bar=False)
             self.log("val/total", nll, on_step=False, on_epoch=True, prog_bar=True)
+            with torch.no_grad():
+                mu_q, logvar_q, _ = self.sde_model.encode_stats(x)
+                rv = regimes.long().clamp(0, 1)
+                self.log("val/kl", self.gaussian_kl(mu_q, logvar_q, self.prior_mu[rv],
+                                                    self.prior_logvar[rv]),
+                         on_step=False, on_epoch=True, prog_bar=True)
             return nll
 
         # Compute total loss
