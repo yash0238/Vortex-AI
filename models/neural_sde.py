@@ -128,6 +128,8 @@ class LatentSDEModel(nn.Module):
         self.graph_emb_dim = graph_emb_dim
 
         self.encoder = nn.GRU(n_stocks, latent_dim, batch_first=True)
+        self.to_mu = nn.Linear(latent_dim, latent_dim)
+        self.to_logvar = nn.Linear(latent_dim, latent_dim)
 
         self.sde = GraphConditionedSDE(
             latent_dim=latent_dim,
@@ -137,30 +139,56 @@ class LatentSDEModel(nn.Module):
 
         self.decoder = nn.Linear(latent_dim, n_stocks)
 
+    def encode_stats(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """GRU hidden state plus variational parameters. Returns (mu, logvar, h0)."""
+        _, h_n = self.encoder(x)
+        h0 = h_n.squeeze(0)
+        return self.to_mu(h0), self.to_logvar(h0), h0
+
+    @staticmethod
+    def sample_z0(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+        return mu + torch.randn_like(mu) * torch.exp(0.5 * logvar)
+
+    def decode_from_z0(
+        self,
+        graph_emb: torch.Tensor,
+        z0: torch.Tensor,
+        ts: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Run SDE + decoder from a provided initial state (prior sampling)."""
+        if ts is None:
+            ts = torch.linspace(0, 1, self.T, device=z0.device)
+        self.sde.set_graph_context(graph_emb)
+        zs = torchsde.sdeint(
+            self.sde, z0, ts,
+            method="euler",
+            dt=1.0 / self.T,
+            names={"drift": "f", "diffusion": "g"},
+        )
+        zs = zs.permute(1, 0, 2)
+        return self.decoder(zs), zs
+
     def forward(
         self,
         x: torch.Tensor,
         graph_emb: torch.Tensor,
         ts: torch.Tensor | None = None,
+        sample: bool = False,
+        z0: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        B, T, N = x.shape
-        if ts is None:
-            ts = torch.linspace(0, 1, T, device=x.device)
-
-        _, h_n = self.encoder(x)
-        z0 = h_n.squeeze(0)
-
-        self.sde.set_graph_context(graph_emb)
-
-        zs = torchsde.sdeint(
-            self.sde, z0, ts,
-            method="euler",
-            dt=1.0 / T,
-            names={"drift": "f", "diffusion": "g"},
-        )
-        zs = zs.permute(1, 0, 2)
-        r_hat = self.decoder(zs)
-        return r_hat, zs
+        if z0 is None:
+            mu, logvar, h0 = self.encode_stats(x)
+            if sample:
+                z0 = self.sample_z0(mu, logvar)
+                self._last_stats = (mu, logvar)
+            else:
+                z0 = h0
+                self._last_stats = None
+        if ts is not None and ts.device != z0.device:
+            ts = ts.to(z0.device)
+        return self.decode_from_z0(graph_emb, z0, ts)
 
 
 __all__ = ["GraphConditionedSDE", "LatentSDEModel"]

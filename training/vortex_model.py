@@ -57,6 +57,8 @@ class VORTEXModel(pl.LightningModule):
         lam_graph: float = 0.1,
         lam_con: float = 0.1,
         lam_na: float = 0.05,
+        beta_max: float = 0.01,  # 7.1: KL weight ceiling, ramped over prior_warmup
+        prior_warmup: int = 10,
         use_gat: bool = True,  # 4.1: False = No-GAT ablation (MLP fallback)
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
@@ -95,6 +97,12 @@ class VORTEXModel(pl.LightningModule):
         )
         
         self.supcon = SupConLoss(temperature=tau)
+
+        # 7.1: regime-conditional prior p(z0 | regime), one Gaussian per regime
+        self.prior_mu = nn.Parameter(torch.zeros(2, latent_dim))
+        self.prior_logvar = nn.Parameter(torch.zeros(2, latent_dim))
+        self.beta_max = beta_max
+        self.prior_warmup = max(1, prior_warmup)
         
         # Loss weights
         self.lam_rec = lam_rec
@@ -114,6 +122,18 @@ class VORTEXModel(pl.LightningModule):
         """
         progress = (self.current_epoch + 1) / self.warmup_epochs
         return self.lam_con * min(1.0, progress)
+
+    def _eff_beta(self) -> float:
+        """KL weight ramp 0 -> beta_max over prior_warmup epochs."""
+        progress = (self.current_epoch + 1) / self.prior_warmup
+        return self.beta_max * min(1.0, progress)
+
+    @staticmethod
+    def gaussian_kl(mu_q, logvar_q, mu_p, logvar_p) -> torch.Tensor:
+        """Mean KL(N(mu_q, var_q) || N(mu_p, var_p)) over batch and dim."""
+        return 0.5 * (logvar_p - logvar_q
+                      + (torch.exp(logvar_q) + (mu_q - mu_p).pow(2)) / torch.exp(logvar_p)
+                      - 1.0).mean()
 
     def forward(
         self, 
@@ -148,13 +168,22 @@ class VORTEXModel(pl.LightningModule):
         # 2. Pool node embeddings to graph-level representation
         graph_emb = node_embs.mean(dim=1)  # (B, H)
         
-        # 3. Latent SDE: generate synthetic paths
-        r_hat, zs = self.sde_model(x, graph_emb)  # (B, T, N), (B, T, latent_dim)
-        
+        # 3. Latent SDE: sample z0 from posterior in training, deterministic h0 in eval
+        r_hat, zs = self.sde_model(x, graph_emb, sample=self.training)
+
         # 4. Project to contrastive space
         z_proj = self.proj_head(zs)  # (B, proj_dim)
-        
+
         return r_hat, A_learned, z_proj
+
+    def _kl_to_prior(self, regimes: torch.Tensor) -> torch.Tensor:
+        """KL(q(z0|x) || p(z0|regime)) using stats stashed by the SDE forward."""
+        stats = getattr(self.sde_model, "_last_stats", None)
+        if stats is None:
+            return torch.tensor(0.0, device=regimes.device)
+        mu_q, logvar_q = stats
+        r = regimes.long().clamp(0, 1)
+        return self.gaussian_kl(mu_q, logvar_q, self.prior_mu[r], self.prior_logvar[r])
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step with complete loss assembly."""
@@ -182,11 +211,18 @@ class VORTEXModel(pl.LightningModule):
             lam_na=self.lam_na,
             lambda_styl=self.lambda_styl,
         )
-        
+
+        # 7.1: KL to regime-conditional prior (beta ramped)
+        beta = self._eff_beta()
+        kl = self._kl_to_prior(regimes)
+        loss = loss + beta * kl
+        components["kl"] = kl.detach()
+        components["total"] = loss.detach()
+
         # Log all components
         for key, value in components.items():
             self.log(f"train/{key}", value, on_step=True, on_epoch=True, prog_bar=True)
-        
+
         return loss
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
@@ -220,7 +256,12 @@ class VORTEXModel(pl.LightningModule):
         for key, value in components.items():
             key_val = key.replace("loss/", "")
             self.log(f"val/{key_val}", value, on_step=False, on_epoch=True, prog_bar=True)
-        
+        with torch.no_grad():
+            mu_q, logvar_q, _ = self.sde_model.encode_stats(x)
+            r = regimes.long().clamp(0, 1)
+            kl_val = self.gaussian_kl(mu_q, logvar_q, self.prior_mu[r], self.prior_logvar[r])
+        self.log("val/kl", kl_val, on_step=False, on_epoch=True, prog_bar=True)
+
         return loss
 
     def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
@@ -302,3 +343,27 @@ class VORTEXModel(pl.LightningModule):
                 scenarios.append(r_hat[i % batch_size])  # (T, N)
 
         return torch.stack(scenarios)
+
+    @torch.no_grad()
+    def sample_prior_scenarios(
+        self,
+        adj: torch.Tensor,
+        node_feats: torch.Tensor,
+        regimes: torch.Tensor,
+    ) -> torch.Tensor:
+        """Generate one scenario per input row with z0 from the regime prior.
+
+        Graph context comes from the real row (same-period conditioning);
+        the initial state comes from p(z0 | regime). Returns (B, T, N).
+        """
+        self.eval()
+        if self.use_gat:
+            node_embs, _ = self.gat(node_feats, adj)
+        else:
+            node_embs = self.gat_fallback(node_feats)
+        graph_emb = node_embs.mean(dim=1)
+        r = regimes.long().clamp(0, 1)
+        eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
+        z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
+        r_hat, _ = self.sde_model.decode_from_z0(graph_emb, z0)
+        return r_hat

@@ -395,6 +395,8 @@ def train(args: argparse.Namespace):
         lam_graph=config.get("lam_graph", 0.1),
         lam_con=config.get("lam_con", 0.1),
         lam_na=config.get("lam_na", 0.05),
+        beta_max=config.get("beta_max", 0.01),
+        prior_warmup=config.get("prior_warmup", 10),
         lambda_styl=config.get("lambda_styl", 0.1),
         warmup_epochs=config.get("warmup_epochs", 20),
         use_gat=use_gat,
@@ -415,7 +417,7 @@ def train(args: argparse.Namespace):
         print("Warning: wandb logging disabled. Set 'wandb_project' in config to enable.")
         from datetime import datetime
         from pytorch_lightning.loggers import CSVLogger
-        run_id = datetime.now().strftime("%Y%m%d-%H%M") + "-stage6-recon"
+        run_id = datetime.now().strftime("%Y%m%d-%H%M") + "-" + (config.get("run_tag") or "run")
         wandb_logger = CSVLogger(save_dir="runs", name=run_id)
         print(f"Run dir: runs/{run_id}")
     
@@ -491,6 +493,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lam_con", type=float, help="Contrastive loss weight")
     parser.add_argument("--lam_graph", type=float, help="Graph loss weight")
     parser.add_argument("--lam_na", type=float, help="Circuit-filter loss weight")
+    parser.add_argument("--beta_max", type=float, help="KL weight ceiling (7.1)")
+    parser.add_argument("--prior_warmup", type=int, help="KL ramp epochs (7.1)")
+    parser.add_argument("--run_tag", type=str, help="Run dir suffix under runs/")
     parser.add_argument("--num_workers", type=int, help="Dataloader workers (0 = safest on Windows)")
     parser.add_argument("--patience", type=int, help="Early-stopping patience in epochs")
     parser.add_argument("--lambda_styl", type=float, help="Stylized-facts loss weight")
