@@ -5,3 +5,5 @@
 20261001-2336-stage73a-nll,7.3a hetero K0 sigmax0.75 NLL fresh 20ep bs32 cuda,62.30,62.66bestep5,NA,ratio 1.00 lag1 0.008 kurtmed 3.41 sigCxN 1.01
 20261002-0928-stage73a-t2,7.3a-t StudentT nu7.6 K0 fresh 20ep bs32 cuda,61.05,61.11bestep8,NA,ratio 0.96 lag1 0.008 kurtmed 5.37 sigCxN 1.01 KL64dims
 20261002-2200-stage73b-mt2,7.3b sharedmix-t K8 nu8.3 fresh 20ep bs32 cuda,57.22,57.50bestep7,NA,corr4.13 mae0.070 disc0.78 boost0.10 cvar1.53
+20261003-stage1-recon,point recon bs8 drop0.6 L2 dro0.5 20ep cuda,1.331,0.8402best18,0.6761,genstd 5.05x raw (0.10x z) FAIL
+20261003-corrfresh,verdict-A replica bs32 (lam_graph stayed 0.3; 0.1 not applied),0.0,57.2212best10,0.8515,ratio 0.92 boost 63.3pct cvar 2.25x corr 4.41
