@@ -147,10 +147,10 @@ graph TB
 
 Recorded CUDA runs on the prepared dataset produced:
 
-| Model | Best validation loss | Adjacency MSE | ROC-AUC | F1 |
-| --- | ---: | ---: | ---: | ---: |
-| Spatio-temporal baseline with binary adjacency loss | 0.8463 | 0.0694 | 0.5621 | 0.8465 |
-| GAT | 0.6121 | 0.0829 | 0.8326 | 0.8465 |
+| Model                                               | Best validation loss | Adjacency MSE | ROC-AUC |     F1 |
+| --------------------------------------------------- | -------------------: | ------------: | ------: | -----: |
+| Spatio-temporal baseline with binary adjacency loss |               0.8463 |        0.0694 |  0.5621 | 0.8465 |
+| GAT                                                 |               0.6121 |        0.0829 |  0.8326 | 0.8465 |
 
 The GAT improved regime ROC-AUC substantially in this run. The held-out adjacency MSE was
 measured with `evaluate.py` against `models/checkpoints/best_gat_model.pt`.
