@@ -500,7 +500,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--beta_max", type=float, help="KL weight ceiling (7.1)")
     parser.add_argument("--prior_warmup", type=int, help="KL ramp epochs (7.1)")
     parser.add_argument("--lam_var", type=float, help="Variance loss weight (7.2)")
-    parser.add_argument("--emission", type=str, choices=["point", "hetero", "t"], help="Emission head (7.3)")
+    parser.add_argument("--emission", type=str, choices=["point", "hetero", "t", "mt"], help="Emission head (7.3)")
     parser.add_argument("--rank_K", type=int, help="Emission factor rank (7.3b)")
     parser.add_argument("--sde_sigma_max", type=float, help="SDE diffusion bound (7.3)")
     parser.add_argument("--run_tag", type=str, help="Run dir suffix under runs/")

@@ -96,6 +96,53 @@ class GraphConditionedSDE(torchsde.SDEIto):
         return self.sigma_max * torch.sigmoid(self.diffusion_net(inp))
 
 
+class _SharedMixMultivariateT:
+    """7.3b: multivariate-t with ONE shared mixing variable per (batch, time).
+
+    r = m + sqrt((nu-2)/nu) * x / sqrt(w/nu), x ~ N(0, Sigma), w ~ chi2(nu).
+    Cov(r) = Sigma with Sigma = B B^T + diag(d). log_prob via Woodbury.
+    """
+
+    def __init__(self, loc: torch.Tensor, B: torch.Tensor, d: torch.Tensor, df: torch.Tensor):
+        self.loc = loc
+        self._B = B
+        self._d = d
+        self.df = df
+        self._n = loc.shape[-1]
+
+    def _woodbury(self):
+        d, B = self._d, self._B
+        Bt = B.transpose(-1, -2)
+        M = torch.eye(B.shape[-1], device=d.device, dtype=d.dtype) + Bt @ (B / d.unsqueeze(-1))
+        logdet = torch.log(d).sum(-1) + torch.logdet(M)
+        return M, logdet
+
+    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        v = x - self.loc
+        M, logdet = self._woodbury()
+        Bt_dinv_v = (self._B.transpose(-1, -2) @ (v / self._d).unsqueeze(-1)).squeeze(-1)
+        y = torch.linalg.solve(M, Bt_dinv_v.unsqueeze(-1)).squeeze(-1)
+        quad = (v * (v / self._d)).sum(-1) - (Bt_dinv_v * y).sum(-1)
+        nu, n = self.df, self._n
+        return (torch.lgamma((nu + n) / 2) - torch.lgamma(nu / 2)
+                - (n / 2) * torch.log(nu * torch.pi) - 0.5 * logdet
+                - ((nu + n) / 2) * torch.log1p(quad.clamp(min=0.0) / nu))
+
+    def rsample(self) -> torch.Tensor:
+        shape = self.loc.shape[:-1]
+        w = torch.distributions.Chi2(self.df.expand(shape)).rsample()
+        nu = self.df
+        Bf, d = self._B, self._d
+        cov = torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d)
+        L = torch.linalg.cholesky(cov)
+        z = torch.randn_like(self.loc)
+        return self.loc + torch.sqrt((nu - 2.0) / nu) * (L @ z.unsqueeze(-1)).squeeze(-1) / torch.sqrt(w / nu).unsqueeze(-1)
+
+    @property
+    def mean(self):
+        return self.loc
+
+
 class LatentSDEModel(nn.Module):
     """Encoder + SDE + Decoder for graph-conditioned latent path generation.
 
@@ -154,6 +201,14 @@ class LatentSDEModel(nn.Module):
             nn.init.constant_(self.emi_d.bias, 0.54)
             self.emi_B = None
             self.raw_nu = nn.Parameter(torch.tensor(3.47))  # nu = 4.5 + softplus(.) init ~8
+        elif emission == "mt":
+            self.emi_m = nn.Linear(latent_dim, n_stocks)
+            self.emi_d = nn.Linear(latent_dim, n_stocks)
+            nn.init.constant_(self.emi_d.bias, 0.54)
+            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K)
+            nn.init.normal_(self.emi_B.weight, std=0.05)
+            nn.init.zeros_(self.emi_B.bias)
+            self.raw_nu = nn.Parameter(torch.tensor(3.47))
         else:
             self.emi_m = self.emi_d = self.emi_B = None
 
@@ -200,6 +255,9 @@ class LatentSDEModel(nn.Module):
             nu = self._nu(zs)
             scale = d * torch.sqrt((nu - 2.0) / nu)  # Var = d^2 preserved
             return Independent(StudentT(df=nu, loc=m, scale=scale), 1)
+        if self.emission == "mt":
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
         if self.rank_K > 0 and self.emi_B is not None:
             Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
             return LowRankMultivariateNormal(m, Bf, d)

@@ -112,6 +112,7 @@ class VORTEXModel(pl.LightningModule):
         self.prior_warmup = max(1, prior_warmup)
         self.lam_var = lam_var
         self.emission = emission
+        self._use_nll = emission in ("hetero", "t", "mt")
         self.rank_K = rank_K
         self.sde_sigma_max = sde_sigma_max
         
@@ -215,7 +216,7 @@ class VORTEXModel(pl.LightningModule):
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
 
-        if self.emission in ("hetero", "t"):
+        if self._use_nll:
             # 7.3: NLL replaces MSE recon and L_var; MSE kept as diagnostic only
             zs_tail = self._last_zs
             nll = self.sde_model.emission_nll(zs_tail, x)
@@ -272,7 +273,7 @@ class VORTEXModel(pl.LightningModule):
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
 
-        if self.emission in ("hetero", "t"):
+        if self._use_nll:
             nll = self.sde_model.emission_nll(self._last_zs, x)
             mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
             self.log("val/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
@@ -394,7 +395,7 @@ class VORTEXModel(pl.LightningModule):
             batch_size = x.shape[0]
             for i in range(n_scenarios):
                 r_mean, zs_i = self.sde_model(x, graph_emb)
-                if self.emission in ("hetero", "t"):
+                if self._use_nll:
                     scenarios.append(self.sde_model.emission_sample(zs_i)[i % batch_size])
                 else:
                     scenarios.append(r_mean[i % batch_size])  # (T, N)
@@ -423,7 +424,7 @@ class VORTEXModel(pl.LightningModule):
         eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
         z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
         r_mean, zs = self.sde_model.decode_from_z0(graph_emb, z0)
-        if self.emission in ("hetero", "t"):
+        if self._use_nll:
             # 7.3: generation SAMPLES the emission, never the mean
             return self.sde_model.emission_sample(zs)
         return r_mean
