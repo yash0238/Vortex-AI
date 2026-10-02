@@ -86,7 +86,7 @@ with torch.no_grad():
     rp = model.sample_prior_scenarios(to_dev(A[va]), to_dev(NF[va].mean(axis=1)),
                                       torch.from_numpy(lab[va]).to(DEV)).cpu().numpy()
     Gp = rp * sc["std"] + sc["mean"]
-print(f"d. ACF(r2): posterior={acf2(Gr):.4f} prior-sampled={acf2(Gp):.4f} real=0.1371")
+print(f"d. ACF(r2): sampled={acf2(Gs):.4f} prior-sampled={acf2(Gp):.4f} real=0.1371")
 xtr = (W[tr].astype(np.float64) - sc["mean"]) / sc["std"]
 xv = (W[va].astype(np.float64) - sc["mean"]) / sc["std"]
 flat_tr = xtr.reshape(-1, xtr.shape[-1])
