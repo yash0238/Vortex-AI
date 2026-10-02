@@ -125,28 +125,35 @@ class DynamicGATEncoder(nn.Module):
         else:
             B, N, F = node_feats.shape
 
-        all_embs = []
-        all_attn = []
+        # 3.1: batched block-diagonal graphs (one GATConv call for all G graphs
+        # instead of G separate calls). Math is identical per node: LayerNorm/ELU
+        # are per-node, attention softmax is per-target-node over the same
+        # neighborhoods. NOTE: +eye self-loops kept for parity with prior
+        # behavior (GATConv skips adding existing self-loops, so no duplicates).
+        from torch_geometric.data import Batch, Data
+        G = node_feats.shape[0]
+        eye = torch.eye(N, device=node_feats.device, dtype=adj_matrix.dtype)
+        data_list = []
+        for g in range(G):
+            edge_index, _ = dense_to_sparse(adj_matrix[g] + eye)
+            data_list.append(Data(x=node_feats[g], edge_index=edge_index, num_nodes=N))
+        batch = Batch.from_data_list(data_list).to(node_feats.device)
 
-        for b in range(node_feats.shape[0]):
-            x = node_feats[b]
-            edge_index, _ = dense_to_sparse(adj_matrix[b])
+        x1 = self.gat1(batch.x, batch.edge_index)
+        x1 = self.act(self.norm1(x1))
 
-            x1, attn1 = self.gat1(x, edge_index, return_attention_weights=True)
-            x1 = self.act(self.norm1(x1))
+        x2, (batch_edges, batch_aw) = self.gat2(
+            x1, batch.edge_index, return_attention_weights=True
+        )
+        x2 = self.act(self.norm2(x2))
 
-            x2, attn2 = self.gat2(x1, edge_index, return_attention_weights=True)
-            x2 = self.act(self.norm2(x2))
-
-            attn_matrix = torch.zeros(N, N, device=x.device, dtype=x.dtype)
-            ei, aw = attn2
-            attn_matrix[ei[0], ei[1]] = aw.squeeze(-1)
-
-            all_embs.append(x2)
-            all_attn.append(attn_matrix)
-
-        node_embs_out = torch.stack(all_embs)
-        learned_adj_out = torch.stack(all_attn)
+        node_embs_out = x2.view(G, N, -1)
+        learned_adj_out = torch.zeros(G, N, N, device=x2.device, dtype=x2.dtype)
+        owner = batch.batch[batch_edges[0]]  # graph id per edge (block-diag)
+        for g in range(G):
+            m = owner == g
+            e = batch_edges[:, m] - batch.ptr[g]  # global -> local indices
+            learned_adj_out[g, e[0], e[1]] = batch_aw[m].squeeze(-1)
 
         if orig_ndim == 4 and T is not None:
             node_embs_out = node_embs_out.reshape(B, T, N, -1)

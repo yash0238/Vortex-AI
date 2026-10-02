@@ -119,6 +119,7 @@ def train(args: argparse.Namespace) -> None:
 				regime_logits, batch.y_regime.view(-1)
 			)
 			loss.backward()
+			torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # 3.3
 			optimizer.step()
 		model.eval()
 		validation = 0.0

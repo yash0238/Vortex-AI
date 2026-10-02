@@ -1,0 +1,37 @@
+{
+  "styl": {
+    "kurtosis_real": 11.61596315452362,
+    "kurtosis_gen": 3.6337005473600406,
+    "kurtosis_pass": true,
+    "kurtosis_interval": [
+      7.773256556783517,
+      15.929768833759534
+    ],
+    "kurtosis_median_rule": false,
+    "acf_sq_real": 0.13705379683590724,
+    "acf_sq_gen": 0.31806292619340365,
+    "acf_sq_pass": true,
+    "corr_error": 17.2371895350787,
+    "corr_mae": 0.31946631150803745,
+    "corr_error_pass": false,
+    "all_tests_pass": false
+  },
+  "disc": {
+    "discriminative_score": 0.9437669376693766,
+    "discriminative_std": 0.019798969100545336,
+    "discriminative_pass": false,
+    "indistinguishability": 0.11246612466124684
+  },
+  "contagion": {
+    "corr_normal": 0.7233989160332597,
+    "corr_crisis": 0.6570677873620191,
+    "crisis_corr_boost": -0.09169370758110298,
+    "contagion_pass": false
+  },
+  "cvar": {
+    "cvar_normal": 0.006553731902629678,
+    "cvar_crisis": 0.013539664925659589,
+    "cvar_ratio": 2.065947329982603,
+    "cvar_pass": false
+  }
+}

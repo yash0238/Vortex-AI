@@ -25,18 +25,17 @@ NIFTY50_SECTORS: dict[str, int] = {
     "HCLTECH.NS": 1, "ASIANPAINT.NS": 7, "MARUTI.NS": 8, "SUNPHARMA.NS": 9,
     "TITAN.NS": 7, "ULTRACEMCO.NS": 10, "NESTLEIND.NS": 3, "WIPRO.NS": 1,
     "POWERGRID.NS": 11, "NTPC.NS": 11, "M&M.NS": 8, "TECHM.NS": 1,
-    "TATAMOTORS.NS": 8, "TATASTEEL.NS": 12, "JSWSTEEL.NS": 12, "BAJAJ-AUTO.NS": 8,
+    "TMPV.NS": 8, "TATASTEEL.NS": 12, "JSWSTEEL.NS": 12, "BAJAJ-AUTO.NS": 8,
     "CIPLA.NS": 9, "DRREDDY.NS": 9, "DIVISLAB.NS": 9, "HEROMOTOCO.NS": 8,
     "ONGC.NS": 13, "COALINDIA.NS": 14, "BPCL.NS": 13, "GRASIM.NS": 10,
     "ADANIPORTS.NS": 5, "EICHERMOT.NS": 8, "APOLLOHOSP.NS": 15, "HINDALCO.NS": 16,
     "TATACONSUM.NS": 3, "BRITANNIA.NS": 3, "SHREECEM.NS": 10, "UPL.NS": 17,
-    "BAJAJFINSV.NS": 6, "SBILIFE.NS": 6, "HDFCLIFE.NS": 6, "INDUSINDBK.NS": 2,
-    "LTI.NS": 1,
+    "BAJAJFINSV.NS": 6, "INDUSINDBK.NS": 2,
 }
 
 NUM_SECTORS = 18
 
-BAND_A_STOCKS = {"SBIN.NS", "TATAMOTORS.NS", "TATASTEEL.NS"}
+BAND_A_STOCKS = {"SBIN.NS", "TMPV.NS", "TATASTEEL.NS"}
 DEFAULT_BAND = 0.10
 
 
@@ -171,7 +170,7 @@ def regenerate_window_regimes() -> np.ndarray:
     window_size = 60
 
     window_labels = []
-    for i in range(window_size, T):
+    for i in range(window_size, T + 1):
         window_labels.append(regimes[i - 1])
 
     return np.array(window_labels, dtype=np.int64)
@@ -184,6 +183,9 @@ if __name__ == "__main__":
     if volume_path.exists():
         vol_df = pd.read_csv(volume_path, index_col=0, parse_dates=True)
         volume = vol_df.values.astype(np.float32)
+        if volume.shape[0] != returns.shape[0]:
+            volume = volume[-returns.shape[0]:]
+            print(f"Aligned volume to returns: {volume.shape}")
 
     tickers = load_ticker_list()
     print(f"Tickers loaded: {len(tickers)}")

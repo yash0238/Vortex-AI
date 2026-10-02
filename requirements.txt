@@ -13,6 +13,16 @@ torch>=2.0.0
 torch-geometric>=2.3.0
 torchsde>=0.2.5
 lightning>=2.0.0
+pytorch-lightning>=2.0.0
+
+# Config
+pyyaml>=6.0.0
+
+# API / serving (api/main.py)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+pydantic>=2.0.0
+networkx>=3.0.0
 
 # Experiment tracking
 wandb>=0.15.0

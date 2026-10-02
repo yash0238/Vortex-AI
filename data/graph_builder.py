@@ -114,10 +114,14 @@ def build_adjacency_matrices(
     alpha: float = 0.5,
     stride: int = 1,
     n_workers: int = 4,
+    subset: int | None = None,
 ):
     """Generates combined target empirical adjacency matrices A_t^emp across sliding windows.
 
     Uses parallel processing for Granger causality computation.
+    3.2: alpha is configurable (was effectively hardcoded via __main__);
+    subset=N builds only the first N windows for fast smoke/dev runs.
+    Numerics are unchanged for any (T, alpha, stride) triple.
     """
     returns_path = RAW_DATA_DIR / "returns.npy"
     if not returns_path.exists():
@@ -126,13 +130,15 @@ def build_adjacency_matrices(
     returns = np.load(returns_path)
     N_days, N_stocks = returns.shape
     N_windows = (N_days - T) // stride + 1
+    if subset is not None:
+        N_windows = min(N_windows, subset)
 
-    print(f"Building target adjacency matrices for {N_windows} windows (T={T}, Stocks={N_stocks})...")
+    print(f"Building target adjacency matrices for {N_windows} windows (T={T}, Stocks={N_stocks}, alpha={alpha})...")
     print(f"Using {n_workers} parallel workers...")
 
     window_args = [
         (returns[start:start + T].copy(), T, alpha)
-        for start in range(0, N_days - T + 1, stride)
+        for start in range(0, N_days - T + 1, stride)[:N_windows]
     ]
 
     adj_matrices = [None] * N_windows
@@ -152,11 +158,28 @@ def build_adjacency_matrices(
 
     adj_matrices_arr = np.array(adj_matrices, dtype=np.float32)
 
-    output_path = RAW_DATA_DIR / "adj_matrices.npy"
+    # Never let a subset/dev run overwrite the full artifact.
+    output_path = RAW_DATA_DIR / (
+        "adj_matrices.npy" if subset is None else f"adj_matrices_subset{subset}.npy"
+    )
     np.save(output_path, adj_matrices_arr)
 
     print(f"Empirical adjacency matrices saved to {output_path} with shape {adj_matrices_arr.shape}")
 
 
 if __name__ == "__main__":
-    build_adjacency_matrices(T=60, alpha=0.5, stride=1, n_workers=4)
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(description="Build empirical adjacency targets")
+    parser.add_argument("--T", type=int, default=60)
+    parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument("--stride", type=int, default=1)
+    parser.add_argument("--n-workers", type=int, default=4)
+    parser.add_argument("--subset", type=int, default=None,
+                        help="Build only first N windows (dev smoke; saved separately)")
+    args = parser.parse_args()
+    t0 = time.time()
+    build_adjacency_matrices(T=args.T, alpha=args.alpha, stride=args.stride,
+                             n_workers=args.n_workers, subset=args.subset)
+    print(f"Elapsed: {time.time() - t0:.1f}s")
