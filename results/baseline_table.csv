@@ -1,0 +1,6 @@
+model,corr_fro,corr_mae,disc,boost_pct,cvar_x,notes
+final-CG-NSDE-mean,4.82,0.085,0.766,65.0,2.16,V3 prior headline val+test 3 seeds
+iid-Gaussian,14.36,0.257,0.646,-0.2,1.00,oracle B matched noise
+static-t-PPCA,4.32,0.073,0.870,-0.2,0.94,no regime structure
+TimeGAN,BLOCKED,BLOCKED,BLOCKED,BLOCKED,BLOCKED,no py3.13 wheel empty submodules
+QuantGAN,BLOCKED,BLOCKED,BLOCKED,BLOCKED,BLOCKED,empty submodule no runner
