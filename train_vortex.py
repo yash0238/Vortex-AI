@@ -512,6 +512,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rank_K", type=int, help="Emission factor rank (7.3b)")
     parser.add_argument("--sde_sigma_max", type=float, help="SDE diffusion bound (7.3)")
     parser.add_argument("--run_tag", type=str, help="Run dir suffix under runs/")
+    parser.add_argument("--seed", type=int, help="Random seed")
     parser.add_argument("--num_workers", type=int, help="Dataloader workers (0 = safest on Windows)")
     parser.add_argument("--patience", type=int, help="Early-stopping patience in epochs")
     parser.add_argument("--lambda_styl", type=float, help="Stylized-facts loss weight")
