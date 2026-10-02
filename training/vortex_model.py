@@ -71,6 +71,8 @@ class VORTEXModel(pl.LightningModule):
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
         lambda_styl: float = 0.1,  # stylized-facts weight inside reconstruction loss
+        gat_dropout: float = 0.1,  # Stage 1: 0.6 per GAT paper
+        weight_decay: float = 0.0,  # Stage 1: 0.0005 L2 per GAT paper
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -81,8 +83,10 @@ class VORTEXModel(pl.LightningModule):
             hidden=hidden_dim,
             out_feats=latent_dim,
             heads=gat_heads,
-            dropout=0.1
+            dropout=gat_dropout
         )
+        self.gat_dropout = gat_dropout
+        self.weight_decay = weight_decay
         # No-GAT ablation: per-node MLP replacing attention message passing.
         self.gat_fallback = nn.Sequential(
             nn.Linear(in_feats, hidden_dim),
@@ -411,7 +415,7 @@ class VORTEXModel(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure Adam optimizer with cosine annealing schedule."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
         
         return {
