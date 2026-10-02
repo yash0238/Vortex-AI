@@ -1,4 +1,4 @@
 model_name,dataset_name,window,epochs,batch_size,learning_rate,train_time_min,generated_samples,mse_mean,acf_lag1_real,acf_lag1_synth,notes
-TimeGAN,NIFTY50_multivariate,60,,,,,,,,,
-QuantGAN,NIFTY50_market_return,60,,,,,,,,,
-CG-NSDE,NIFTY50_multivariate,60,,,,,,,,,
+TimeGAN,NIFTY50_multivariate,60,,,,,,,,,BLOCKED: baselines/external/TimeGAN is an empty uninitialized submodule (ModuleNotFoundError: No module named 'timegan'); run git submodule update --init or vendor ydata-synthetic/timegan
+QuantGAN,NIFTY50_market_return,60,,,,,,,,,BLOCKED: baselines/external/QuantGANs-replication is empty and no runner script exists (only run_timegan_*.py present)
+CG-NSDE,NIFTY50_multivariate,60,1,8,0.001,,8,, -0.0003,0.0833,1-epoch CPU smoke (ckpt last.ckpt): kurt_gen 7.91/kurt_real 1565.7 corr_err 21.51 disc 1.0 crisis_boost -100pct cvar_ratio 0.0 NOTE kurt_real 1565 indicates outlier windows dominate stylized loss scale
