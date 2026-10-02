@@ -13,11 +13,16 @@ from eval.discriminative import discriminative_score
 from eval.contagion import evaluate_contagion, cvar_regime_ratio
 
 DEV = "cuda"
-CKPT = "models/checkpoints/vortex-epoch=07-val/total=57.4987.ckpt"
+import argparse as _ap
+_p = _ap.ArgumentParser()
+_p.add_argument("--ckpt", type=str, default="models/checkpoints/vortex-epoch=07-val/total=57.4987.ckpt")
+CKPT = _p.parse_known_args()[0].ckpt
 torch.manual_seed(7)
 np.random.seed(7)
 model = VORTEXModel.load_from_checkpoint(CKPT, strict=False).to(DEV).eval()
-print("ckpt:", CKPT, "| nu:", round(float(model.sde_model._nu(torch.zeros(1).to(DEV))), 2))
+print("ckpt:", CKPT, "| nu:", round(float(model.sde_model._nu(torch.zeros(1).to(DEV))), 2),
+      "| rho:", round(float(torch.sigmoid(model.sde_model.rho_raw).cpu()), 4),
+      "| kappa:", round(float(torch.sigmoid(model.sde_model.kappa_raw).cpu()), 4))
 W = np.load("data/raw/windows.npy").astype(np.float64)
 lab = np.load("data/raw/window_regimes_v2.npy")
 A = np.load("data/raw/adj_matrices.npy").astype(np.float32)
@@ -84,6 +89,9 @@ for tag, rows, zfn in [("headline-vt", vt, v3_z0), ("train", tr, v3_z0)]:
         lr = np.array([np.corrcoef(R[:, :-1, j].ravel(), R[:, 1:, j].ravel())[0, 1] for j in range(47)])
         st = evaluate_stylized_facts(R, G)
         dc = discriminative_score(R, G, n_samples=1000)
+        sq = G ** 2
+        vv = sq - sq.mean(axis=1, keepdims=True)
+        acf = float(((vv[:, :-1] * vv[:, 1:]).mean()) / (sq.var() + 1e-12))
         lb = np.array([1] * 500 + [0] * 500)
         ct = evaluate_contagion(G, lb)
         cv = cvar_regime_ratio(G, lb)
@@ -95,7 +103,8 @@ for tag, rows, zfn in [("headline-vt", vt, v3_z0), ("train", tr, v3_z0)]:
         print(f"{tag}-{prior}: ratio={ratio:.3f} lag1={np.nanmean(lg):.4f}/{np.nanmean(lr):.4f} "
               f"kurtmed={_per_stock_kurt_median(G):.2f}/{_per_stock_kurt_median(R):.2f} "
               f"corr={st['corr_error']:.2f} mae={st['corr_mae']:.4f} disc={dc['discriminative_score']:.4f} "
-              f"boost={ct['crisis_corr_boost']:.4f} cvar={cv['cvar_ratio']:.3f}")
+              f"acfr2={acf:.4f} boost={ct['crisis_corr_boost']:.4f} cvar={cv['cvar_ratio']:.3f}")
+        rep[f"{tag}-{prior}"]["acfr2"] = acf
 json.dump(rep, open("results/stage73b_eval.json", "w"), indent=2, default=float)
 # position profile + plot on headline V3
 G = gen(grows_for(vt, 500, 13), v3_z0(500, 11))

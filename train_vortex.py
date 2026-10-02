@@ -398,6 +398,8 @@ def train(args: argparse.Namespace):
         beta_max=config.get("beta_max", 0.01),
         prior_warmup=config.get("prior_warmup", 10),
         lam_var=config.get("lam_var", 0.0),
+        lam_corr=config.get("lam_corr", 0.0),
+        vol_dyn=config.get("vol_dyn", False),
         emission=config.get("emission", "point"),
         rank_K=config.get("rank_K", 0),
         sde_sigma_max=config.get("sde_sigma_max", 3.0),
@@ -500,6 +502,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--beta_max", type=float, help="KL weight ceiling (7.1)")
     parser.add_argument("--prior_warmup", type=int, help="KL ramp epochs (7.1)")
     parser.add_argument("--lam_var", type=float, help="Variance loss weight (7.2)")
+    parser.add_argument("--lam_corr", type=float, help="Correlation loss target (Lane 1A)")
+    parser.add_argument("--vol_dyn", action="store_true", help="Market vol state (Lane 1B)")
     parser.add_argument("--emission", type=str, choices=["point", "hetero", "t", "mt"], help="Emission head (7.3)")
     parser.add_argument("--rank_K", type=int, help="Emission factor rank (7.3b)")
     parser.add_argument("--sde_sigma_max", type=float, help="SDE diffusion bound (7.3)")
