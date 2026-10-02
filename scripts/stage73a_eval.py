@@ -12,7 +12,11 @@ from eval.discriminative import discriminative_score
 from eval.contagion import evaluate_contagion, cvar_regime_ratio
 
 DEV = "cuda"
-CKPT = "models/checkpoints/vortex-epoch=05-val/total=62.6602.ckpt"
+import argparse as _ap
+_p = _ap.ArgumentParser()
+_p.add_argument("--ckpt", type=str, default="models/checkpoints/vortex-epoch=05-val/total=62.6602.ckpt")
+CKPT, _ = _p.parse_known_args()
+CKPT = CKPT.ckpt
 torch.manual_seed(7)
 np.random.seed(7)
 model = VORTEXModel.load_from_checkpoint(CKPT, strict=False).to(DEV).eval()

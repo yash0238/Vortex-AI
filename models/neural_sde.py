@@ -148,6 +148,14 @@ class LatentSDEModel(nn.Module):
             self.emi_d = nn.Linear(latent_dim, n_stocks)
             nn.init.constant_(self.emi_d.bias, 0.54)  # softplus(0.54) ~= 1.0
             self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K) if rank_K > 0 else None
+        elif emission == "t":
+            self.emi_m = nn.Linear(latent_dim, n_stocks)
+            self.emi_d = nn.Linear(latent_dim, n_stocks)
+            nn.init.constant_(self.emi_d.bias, 0.54)
+            self.emi_B = None
+            self.raw_nu = nn.Parameter(torch.tensor(3.47))  # nu = 4.5 + softplus(.) init ~8
+        else:
+            self.emi_m = self.emi_d = self.emi_B = None
 
     def encode_stats(
         self, x: torch.Tensor
@@ -180,11 +188,18 @@ class LatentSDEModel(nn.Module):
         zs = zs.permute(1, 0, 2)
         return self.decoder(zs), zs
 
+    def _nu(self, like: torch.Tensor) -> torch.Tensor:
+        return 4.5 + torch.nn.functional.softplus(self.raw_nu.to(like.device))
+
     def emission_dist(self, zs: torch.Tensor):
         """7.3: per-step heteroscedastic emission. zs (B, T, latent) -> dist over (B, T, N)."""
-        from torch.distributions import Independent, LowRankMultivariateNormal, Normal
+        from torch.distributions import Independent, LowRankMultivariateNormal, Normal, StudentT
         m = 0.5 * torch.tanh(self.emi_m(zs))
         d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
+        if self.emission == "t":
+            nu = self._nu(zs)
+            scale = d * torch.sqrt((nu - 2.0) / nu)  # Var = d^2 preserved
+            return Independent(StudentT(df=nu, loc=m, scale=scale), 1)
         if self.rank_K > 0 and self.emi_B is not None:
             Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
             return LowRankMultivariateNormal(m, Bf, d)
