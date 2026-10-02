@@ -1,4 +1,4 @@
 model_name,dataset_name,window,epochs,batch_size,learning_rate,train_time_min,generated_samples,mse_mean,acf_lag1_real,acf_lag1_synth,notes
 TimeGAN,NIFTY50_multivariate,60,2000,32,,19.39,3640,0.0004439045,0.000835,-0.600114,"Full run completed; paper comparison in results/timegan_full/paper_vs_nifty50_comparison.csv; discriminative/predictive values are local surrogates."
 QuantGAN,NIFTY50_market_return,60,5,16,0.0003,0.34,728,0.0013170704,-0.024008,-0.000030,"Smoke run completed; generator lr shown; discriminator lr=0.0001; Gaussianized input; not a full 2000-step research result."
-CG-NSDE,NIFTY50_multivariate,60,1,8,0.001,0.0833,8,,,-0.0003,"Smoke run completed; kurtosis gap indicates outlier windows dominate stylized loss scale (kurt_gen 7.91 vs kurt_real 1565.7); disc=1.0; crisis_boost=-100pct; cvar_ratio=0.0."
+CG-NSDE,NIFTY50_multivariate,60,1,8,0.001,0.0833,,8,,-0.0003,"Smoke run completed; kurtosis gap indicates outlier windows dominate stylized loss scale (kurt_gen 7.91 vs kurt_real 1565.7); disc=1.0; crisis_boost=-100pct; cvar_ratio=0.0."
