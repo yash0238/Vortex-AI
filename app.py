@@ -80,13 +80,17 @@ def load_data():
 
 
 @st.cache_resource(show_time=False)
-def get_model_config():
+def get_model_config(data):
+    """Derive model config from actual data dimensions."""
+    n_stocks = data["windows"].shape[2]  # actual number of stocks (47)
+    T = data["windows"].shape[1]         # window length (60)
+    in_feats = data["node_features"].shape[-1]  # feature dim (6)
     return {
-        "n_stocks": 50,
-        "T": 60,
+        "n_stocks": n_stocks,
+        "T": T,
         "latent_dim": 64,
         "proj_dim": 32,
-        "in_feats": 6,
+        "in_feats": in_feats,
         "gat_heads": 4,
         "gat_dropout": 0.1,
         "tau": 0.07,
@@ -125,6 +129,9 @@ def build_model(cfg, device_str="cpu"):
 # Sidebar navigation
 # ============================================================================
 
+# Load data first (needed for dynamic model config)
+data = load_data()
+
 st.sidebar.title("🌀 VORTEX-AI")
 st.sidebar.caption("CG-NSDE: Contrastive Graph-Neural SDE for NSE Stress Testing")
 
@@ -146,8 +153,9 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ Model Config")
-cfg = get_model_config()
+cfg = get_model_config(data)
 cfg["lr"] = 0.001
+st.sidebar.caption(f"Stocks: {cfg['n_stocks']} | Window: {cfg['T']} | Feats: {cfg['in_feats']}")
 cfg["latent_dim"] = st.sidebar.slider("Latent dim", 16, 256, cfg["latent_dim"], step=16)
 cfg["gat_heads"] = st.sidebar.slider("GAT heads", 1, 8, cfg["gat_heads"])
 cfg["sde_hidden_dim"] = st.sidebar.slider("SDE hidden dim", 32, 256, cfg["sde_hidden_dim"], step=32)
@@ -938,9 +946,10 @@ def page_training(data, cfg):
 # ============================================================================
 
 def main():
+    # data, cfg, batch_size are loaded at module level for sidebar
     try:
-        data = load_data()
-    except FileNotFoundError as e:
+        _ = data["windows"].shape  # verify data loaded
+    except Exception as e:
         st.error(f"Data not found: {e}")
         st.caption("Run the data pipeline first: `python data/download.py && python data/preprocess.py`")
         st.stop()
