@@ -9,6 +9,7 @@ import {
   Tooltip,
   Legend,
   Filler,
+  LogarithmicScale,
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
 import type { ChartData, ChartOptions } from "chart.js";
@@ -23,6 +24,7 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
+  LogarithmicScale,
 );
 
 interface ChartProps {

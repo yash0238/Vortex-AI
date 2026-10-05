@@ -263,6 +263,13 @@ def create_dataloaders(
 
     from torch.utils.data import Sampler
 
+    effective_min_per_class = max(1, min(min_per_class, batch_size // 2))
+    if effective_min_per_class != min_per_class:
+        print(
+            f"Reducing min_per_class from {min_per_class} to "
+            f"{effective_min_per_class} for batch_size={batch_size}."
+        )
+
     class StratifiedBatchSampler(Sampler[list[int]]):
         """Yield batches with >= min_per_class samples of each regime.
 
@@ -321,7 +328,9 @@ def create_dataloaders(
     # with a global-index pool; val/test use sequential subsets)
     train_loader = DataLoader(
         dataset,
-        batch_sampler=StratifiedBatchSampler(regimes, train_idx, batch_size, min_per_class, seed),
+        batch_sampler=StratifiedBatchSampler(
+            regimes, train_idx, batch_size, effective_min_per_class, seed
+        ),
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True if num_workers > 0 else False,

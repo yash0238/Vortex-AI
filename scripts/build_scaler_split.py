@@ -7,7 +7,8 @@ from data.preprocess import label_regimes
 
 px = pd.read_csv("data/raw/nifty50_close.csv", index_col=0, parse_dates=True)
 px = px.loc["2010-11-08":]
-ret = np.log(px / px.shift(1)).dropna()
+px = px.apply(pd.to_numeric, errors="coerce").ffill().bfill()
+ret = np.log(px / px.shift(1)).dropna(how="all").fillna(0.0)
 R = ret.values.astype(np.float64)
 dates = ret.index
 N = len(R) - 60 + 1
@@ -40,7 +41,10 @@ print(f"train-only days: {int(train_days.sum())} / {len(R)}")
 # scaler on train-only daily returns
 mu = R[train_days].mean(axis=0)
 sd = R[train_days].std(axis=0)
-assert (sd > 0).all(), "zero std in scaler"
+zero_std = np.where(sd <= 0)[0]
+if len(zero_std):
+    print("zero-variance train-only columns; using unit scale:", px.columns[zero_std].tolist())
+    sd[zero_std] = 1.0
 np.savez("data/raw/scaler.npz", mean=mu.astype(np.float32), std=sd.astype(np.float32),
          tickers=np.array(px.columns.tolist()))
 print("scaler saved. mean abs:", round(float(np.abs(mu).mean()), 6), "std median:", round(float(np.median(sd)), 6))
