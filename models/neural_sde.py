@@ -96,6 +96,53 @@ class GraphConditionedSDE(torchsde.SDEIto):
         return self.sigma_max * torch.sigmoid(self.diffusion_net(inp))
 
 
+class _SharedMixMultivariateT:
+    """7.3b: multivariate-t with ONE shared mixing variable per (batch, time).
+
+    r = m + sqrt((nu-2)/nu) * x / sqrt(w/nu), x ~ N(0, Sigma), w ~ chi2(nu).
+    Cov(r) = Sigma with Sigma = B B^T + diag(d). log_prob via Woodbury.
+    """
+
+    def __init__(self, loc: torch.Tensor, B: torch.Tensor, d: torch.Tensor, df: torch.Tensor):
+        self.loc = loc
+        self._B = B
+        self._d = d
+        self.df = df
+        self._n = loc.shape[-1]
+
+    def _woodbury(self):
+        d, B = self._d, self._B
+        Bt = B.transpose(-1, -2)
+        M = torch.eye(B.shape[-1], device=d.device, dtype=d.dtype) + Bt @ (B / d.unsqueeze(-1))
+        logdet = torch.log(d).sum(-1) + torch.logdet(M)
+        return M, logdet
+
+    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        v = x - self.loc
+        M, logdet = self._woodbury()
+        Bt_dinv_v = (self._B.transpose(-1, -2) @ (v / self._d).unsqueeze(-1)).squeeze(-1)
+        y = torch.linalg.solve(M, Bt_dinv_v.unsqueeze(-1)).squeeze(-1)
+        quad = (v * (v / self._d)).sum(-1) - (Bt_dinv_v * y).sum(-1)
+        nu, n = self.df, self._n
+        return (torch.lgamma((nu + n) / 2) - torch.lgamma(nu / 2)
+                - (n / 2) * torch.log(nu * torch.pi) - 0.5 * logdet
+                - ((nu + n) / 2) * torch.log1p(quad.clamp(min=0.0) / nu))
+
+    def rsample(self) -> torch.Tensor:
+        shape = self.loc.shape[:-1]
+        w = torch.distributions.Chi2(self.df.expand(shape)).rsample()
+        nu = self.df
+        Bf, d = self._B, self._d
+        cov = torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d)
+        L = torch.linalg.cholesky(cov)
+        z = torch.randn_like(self.loc)
+        return self.loc + torch.sqrt((nu - 2.0) / nu) * (L @ z.unsqueeze(-1)).squeeze(-1) / torch.sqrt(w / nu).unsqueeze(-1)
+
+    @property
+    def mean(self):
+        return self.loc
+
+
 class LatentSDEModel(nn.Module):
     """Encoder + SDE + Decoder for graph-conditioned latent path generation.
 
@@ -143,6 +190,9 @@ class LatentSDEModel(nn.Module):
         self.sde.sigma_max = sigma_max
 
         self.decoder = nn.Linear(latent_dim, n_stocks)
+        # Lane 1B vol dynamics (default OFF): market-level vol state scales emission variance
+        self.rho_raw = nn.Parameter(torch.tensor(2.197))  # sigmoid -> 0.9
+        self.kappa_raw = nn.Parameter(torch.tensor(-2.197))  # sigmoid -> 0.1 in [0,1]
         if emission == "hetero":
             self.emi_m = nn.Linear(latent_dim, n_stocks)
             self.emi_d = nn.Linear(latent_dim, n_stocks)
@@ -154,6 +204,14 @@ class LatentSDEModel(nn.Module):
             nn.init.constant_(self.emi_d.bias, 0.54)
             self.emi_B = None
             self.raw_nu = nn.Parameter(torch.tensor(3.47))  # nu = 4.5 + softplus(.) init ~8
+        elif emission == "mt":
+            self.emi_m = nn.Linear(latent_dim, n_stocks)
+            self.emi_d = nn.Linear(latent_dim, n_stocks)
+            nn.init.constant_(self.emi_d.bias, 0.54)
+            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K)
+            nn.init.normal_(self.emi_B.weight, std=0.05)
+            nn.init.zeros_(self.emi_B.bias)
+            self.raw_nu = nn.Parameter(torch.tensor(3.47))
         else:
             self.emi_m = self.emi_d = self.emi_B = None
 
@@ -191,6 +249,72 @@ class LatentSDEModel(nn.Module):
     def _nu(self, like: torch.Tensor) -> torch.Tensor:
         return 4.5 + torch.nn.functional.softplus(self.raw_nu.to(like.device))
 
+    def _rho_kappa(self, like: torch.Tensor):
+        rho = torch.sigmoid(self.rho_raw.to(like.device))
+        kappa = torch.sigmoid(self.kappa_raw.to(like.device))
+        return rho, kappa
+
+    def _base_mdB(self, zs: torch.Tensor):
+        """Base heads: m, d (variance), B or None."""
+        m = 0.5 * torch.tanh(self.emi_m(zs))
+        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
+        Bf = None
+        if self.emi_B is not None and self.rank_K > 0:
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+        return m, d, Bf
+
+    def emission_dist_vol(self, zs: torch.Tensor, x_real: torch.Tensor):
+        """Teacher-forced vol scaling. Returns (dist, v_last, rho, kappa).
+
+        e_t = (r_t - m_t)/sqrt(d_t) from BASE heads; v_1 = 0;
+        v_t = rho*v_{t-1} + (1-rho)*(mean_i e_{t-1,i}^2 - 1), clamped [-1, 2];
+        Sigma scaled by exp(2*kappa*v_t) (B by exp(kappa*v_t)) so corr structure is kept.
+        """
+        from torch.distributions import Independent, StudentT
+        m, d, Bf = self._base_mdB(zs)
+        rho, kappa = self._rho_kappa(zs)
+        e = (x_real - m) / torch.sqrt(d)
+        shock = e.pow(2).mean(dim=-1) - 1.0  # (B, T)
+        Bsz, T = shock.shape
+        v = torch.zeros(Bsz, device=zs.device, dtype=zs.dtype)
+        mult = torch.ones_like(shock)
+        for t in range(1, T):
+            v = (rho * v + (1 - rho) * shock[:, t - 1]).clamp(-1.0, 2.0)
+            mult[:, t] = torch.exp(2 * kappa * v)
+        if self.emission == "mt":
+            return _SharedMixMultivariateT(m, Bf * torch.sqrt(mult).view(-1, mult.shape[1], 1, 1),
+                                           d * mult.unsqueeze(-1), self._nu(zs)), v, rho, kappa
+        nu = self._nu(zs)
+        scale = (d * mult) * torch.sqrt((nu - 2.0) / nu)
+        return Independent(StudentT(df=nu, loc=m, scale=scale), 1), v, rho, kappa
+
+    def emission_sample_seq(self, zs: torch.Tensor) -> torch.Tensor:
+        """Sequential generation with vol feedback (uses sampled r_{t-1})."""
+        from torch.distributions import Independent, StudentT
+        m, d, Bf = self._base_mdB(zs)
+        rho, kappa = self._rho_kappa(zs)
+        Bsz, T, N = m.shape
+        v = torch.zeros(Bsz, device=zs.device, dtype=zs.dtype)
+        outs = []
+        for t in range(T):
+            mult = torch.exp(2 * kappa * v)
+            if self.emission == "mt":
+                dist = _SharedMixMultivariateT(m[:, t], Bf[:, t] * torch.sqrt(mult).view(-1, 1, 1),
+                                               d[:, t] * mult.unsqueeze(-1), self._nu(zs))
+            else:
+                nu = self._nu(zs)
+                dist = Independent(StudentT(df=nu, loc=m[:, t],
+                                            scale=(d[:, t] * mult) * torch.sqrt((nu - 2.0) / nu)), 1)
+            r = dist.rsample()
+            outs.append(r)
+            e = (r - m[:, t]) / torch.sqrt(d[:, t])
+            v = (rho * v + (1 - rho) * (e.pow(2).mean(dim=-1) - 1.0)).clamp(-1.0, 2.0)
+        return torch.stack(outs, dim=1)
+
+    def emission_nll_vol(self, zs: torch.Tensor, x: torch.Tensor):
+        dist, _, _, _ = self.emission_dist_vol(zs, x)
+        return -dist.log_prob(x).mean()
+
     def emission_dist(self, zs: torch.Tensor):
         """7.3: per-step heteroscedastic emission. zs (B, T, latent) -> dist over (B, T, N)."""
         from torch.distributions import Independent, LowRankMultivariateNormal, Normal, StudentT
@@ -200,6 +324,9 @@ class LatentSDEModel(nn.Module):
             nu = self._nu(zs)
             scale = d * torch.sqrt((nu - 2.0) / nu)  # Var = d^2 preserved
             return Independent(StudentT(df=nu, loc=m, scale=scale), 1)
+        if self.emission == "mt":
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
         if self.rank_K > 0 and self.emi_B is not None:
             Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
             return LowRankMultivariateNormal(m, Bf, d)
@@ -211,6 +338,17 @@ class LatentSDEModel(nn.Module):
 
     def emission_sample(self, zs: torch.Tensor) -> torch.Tensor:
         return self.emission_dist(zs).rsample()
+
+    def emission_sample_corr(self, zs: torch.Tensor) -> torch.Tensor:
+        """Lane 1A: rsampled scenarios with nu detached (correlation loss only)."""
+        if self.emission == "mt":
+            m, d, Bf = self._base_mdB(zs)
+            nu = self._nu(zs).detach()
+            w = torch.distributions.Chi2(nu.expand(zs.shape[0], zs.shape[1])).rsample()
+            L = torch.linalg.cholesky(torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d))
+            z = torch.randn_like(m)
+            return m + torch.sqrt((nu - 2.0) / nu).unsqueeze(-1) * (L @ z.unsqueeze(-1)).squeeze(-1) / torch.sqrt(w / nu).unsqueeze(-1)
+        return self.emission_sample(zs)
 
     def emission_sigma(self, zs: torch.Tensor) -> torch.Tensor:
         """Per-step marginal std (B, T, N) for probes."""

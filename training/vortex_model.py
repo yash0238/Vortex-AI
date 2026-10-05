@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+import numpy as np
 import pytorch_lightning as pl
 from typing import Any
 
@@ -60,6 +61,9 @@ class VORTEXModel(pl.LightningModule):
         beta_max: float = 0.01,  # 7.1: KL weight ceiling, ramped over prior_warmup
         prior_warmup: int = 10,
         lam_var: float = 0.0,  # 7.2: variance-matching loss weight
+        lam_corr: float = 0.0,  # Lane 1A: correlation loss weight (OFF default)
+        corr_ramp: int = 5,  # Lane 1A: ramp epochs for lam_corr
+        vol_dyn: bool = False,  # Lane 1B: market vol state (OFF default)
         emission: str = "point",  # 7.3: "point" (MSE), "hetero"/"t" (NLL emission)
         rank_K: int = 0,  # 7.3: factor rank for emission covariance
         sde_sigma_max: float = 3.0,  # 7.3: slow-state bound (0.5-1 for hetero)
@@ -67,6 +71,8 @@ class VORTEXModel(pl.LightningModule):
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
         lambda_styl: float = 0.1,  # stylized-facts weight inside reconstruction loss
+        gat_dropout: float = 0.1,  # Stage 1: 0.6 per GAT paper
+        weight_decay: float = 0.0,  # Stage 1: 0.0005 L2 per GAT paper
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -77,8 +83,10 @@ class VORTEXModel(pl.LightningModule):
             hidden=hidden_dim,
             out_feats=latent_dim,
             heads=gat_heads,
-            dropout=0.1
+            dropout=gat_dropout
         )
+        self.gat_dropout = gat_dropout
+        self.weight_decay = weight_decay
         # No-GAT ablation: per-node MLP replacing attention message passing.
         self.gat_fallback = nn.Sequential(
             nn.Linear(in_feats, hidden_dim),
@@ -111,7 +119,12 @@ class VORTEXModel(pl.LightningModule):
         self.beta_max = beta_max
         self.prior_warmup = max(1, prior_warmup)
         self.lam_var = lam_var
+        self.lam_corr = lam_corr
+        self.corr_ramp = max(1, corr_ramp)
+        self.vol_dyn = vol_dyn
+        self._regime_corr = None  # lazy cache of data/raw/regime_corr.npz
         self.emission = emission
+        self._use_nll = emission in ("hetero", "t", "mt")
         self.rank_K = rank_K
         self.sde_sigma_max = sde_sigma_max
         
@@ -125,6 +138,44 @@ class VORTEXModel(pl.LightningModule):
         self.lr = lr
 
     def _eff_lam_con(self) -> float:
+        """Linear contrastive warmup: reconstruction first, regimes later."""
+        progress = (self.current_epoch + 1) / self.warmup_epochs
+        return self.lam_con * min(1.0, progress)
+
+    def _eff_lam_corr(self) -> float:
+        progress = (self.current_epoch + 1) / self.corr_ramp
+        return self.lam_corr * min(1.0, progress)
+
+    def _load_regime_corr(self, device) -> dict:
+        if self._regime_corr is None:
+            z = np.load("data/raw/regime_corr.npz")
+            self._regime_corr = {k: torch.from_numpy(z[k]).float().to(device) for k in ("crisis", "normal")}
+        return {k: v.to(device) for k, v in self._regime_corr.items()}
+
+    @staticmethod
+    def _pooled_corr(x: torch.Tensor) -> torch.Tensor:
+        f = x.reshape(-1, x.shape[-1])
+        f = f - f.mean(dim=0, keepdim=True)
+        cov = (f.T @ f) / max(1, f.shape[0] - 1)
+        sd = torch.sqrt(torch.diag(cov)).clamp(min=1e-8)
+        return cov / sd.unsqueeze(1) / sd.unsqueeze(0)
+
+    def correlation_loss(self, r_gen: torch.Tensor, regimes: torch.Tensor) -> torch.Tensor:
+        """Lane 1A: per-regime pooled-corr Fro^2 vs train targets, regimes with >=4 windows."""
+        tg = self._load_regime_corr(r_gen.device)
+        n = r_gen.shape[-1]
+        mask = ~torch.eye(n, device=r_gen.device, dtype=torch.bool)
+        tot, cnt = 0.0, 0
+        for rg, nm in ((1, "crisis"), (0, "normal")):
+            sel = (regimes.long() == rg).nonzero(as_tuple=True)[0]
+            if len(sel) < 4:
+                continue
+            cg = self._pooled_corr(r_gen[sel])
+            tot = tot + ((cg[mask] - tg[nm][mask]).pow(2).sum() / (n * (n - 1)))
+            cnt += 1
+        if cnt == 0:
+            return torch.tensor(0.0, device=r_gen.device)
+        return tot / cnt
         """Linear contrastive warmup: reconstruction first, regimes later.
 
         Early epochs have random projections and unscaled SDE outputs, so a
@@ -215,16 +266,30 @@ class VORTEXModel(pl.LightningModule):
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
 
-        if self.emission in ("hetero", "t"):
+        if self._use_nll:
             # 7.3: NLL replaces MSE recon and L_var; MSE kept as diagnostic only
             zs_tail = self._last_zs
-            nll = self.sde_model.emission_nll(zs_tail, x)
+            if self.vol_dyn:
+                nll = self.sde_model.emission_nll_vol(zs_tail, x)
+                rho, kappa = self.sde_model._rho_kappa(x)
+                self.log("train/rho", rho.detach(), on_step=False, on_epoch=True, prog_bar=False)
+                self.log("train/kappa", kappa.detach(), on_step=False, on_epoch=True, prog_bar=False)
+            else:
+                nll = self.sde_model.emission_nll(zs_tail, x)
             mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
             kl = self._kl_to_prior(regimes)
             loss = nll + self._eff_beta() * kl
             self.log("train/nll", nll, on_step=True, on_epoch=True, prog_bar=True)
             self.log("train/mse_diag", mse_diag, on_step=True, on_epoch=True, prog_bar=False)
             self.log("train/kl", kl, on_step=True, on_epoch=True, prog_bar=True)
+            if self.lam_corr > 0:
+                # Lane 1A: correlation loss on rsampled scenarios (nu detached inside)
+                r_samp = self.sde_model.emission_sample_corr(self._last_zs)
+                lcorr = self.correlation_loss(r_samp, regimes)
+                wcorr = self._eff_lam_corr() * lcorr
+                loss = loss + wcorr
+                self.log("train/corr_raw", lcorr.detach(), on_step=True, on_epoch=True, prog_bar=True)
+                self.log("train/corr_w", wcorr.detach(), on_step=True, on_epoch=True, prog_bar=True)
             self.log("train/total", loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
 
@@ -272,8 +337,11 @@ class VORTEXModel(pl.LightningModule):
         # Forward pass
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
 
-        if self.emission in ("hetero", "t"):
-            nll = self.sde_model.emission_nll(self._last_zs, x)
+        if self._use_nll:
+            if self.vol_dyn:
+                nll = self.sde_model.emission_nll_vol(self._last_zs, x)
+            else:
+                nll = self.sde_model.emission_nll(self._last_zs, x)
             mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
             self.log("val/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
             self.log("val/mse_diag", mse_diag, on_step=False, on_epoch=True, prog_bar=False)
@@ -347,7 +415,7 @@ class VORTEXModel(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure Adam optimizer with cosine annealing schedule."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
         
         return {
@@ -394,8 +462,11 @@ class VORTEXModel(pl.LightningModule):
             batch_size = x.shape[0]
             for i in range(n_scenarios):
                 r_mean, zs_i = self.sde_model(x, graph_emb)
-                if self.emission in ("hetero", "t"):
-                    scenarios.append(self.sde_model.emission_sample(zs_i)[i % batch_size])
+                if self._use_nll:
+                    if self.vol_dyn:
+                        scenarios.append(self.sde_model.emission_sample_seq(zs_i)[i % batch_size])
+                    else:
+                        scenarios.append(self.sde_model.emission_sample(zs_i)[i % batch_size])
                 else:
                     scenarios.append(r_mean[i % batch_size])  # (T, N)
 
@@ -423,7 +494,9 @@ class VORTEXModel(pl.LightningModule):
         eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
         z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
         r_mean, zs = self.sde_model.decode_from_z0(graph_emb, z0)
-        if self.emission in ("hetero", "t"):
+        if self._use_nll:
             # 7.3: generation SAMPLES the emission, never the mean
+            if self.vol_dyn:
+                return self.sde_model.emission_sample_seq(zs)
             return self.sde_model.emission_sample(zs)
         return r_mean
