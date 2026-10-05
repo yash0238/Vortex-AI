@@ -1,0 +1,28 @@
+{
+  "status": "completed",
+  "start_time_utc": "2026-08-28T14:31:33.274005+00:00",
+  "end_time_utc": "2026-08-28T14:50:56.684533+00:00",
+  "training_duration_seconds": 1163.410528,
+  "iterations": 2000,
+  "batch_size": 32,
+  "model_parameters": {
+    "module": "gru",
+    "hidden_dim": 24,
+    "num_layer": 3,
+    "batch_size": 32,
+    "iterations": 2000
+  },
+  "generated_sample_count": 3640,
+  "generated_shape": [
+    3640,
+    60,
+    50
+  ],
+  "generated_mean": 0.0005306406528688967,
+  "generated_std": 0.017311232164502144,
+  "generated_min": -0.05413253605365753,
+  "generated_max": 0.07417839765548706,
+  "loss_values_checked": 14,
+  "losses_finite": true,
+  "checkpoint": null
+}

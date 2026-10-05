@@ -1,0 +1,50 @@
+{
+  "status": "completed",
+  "start_time_utc": "2026-10-02T18:20:21.985884+00:00",
+  "end_time_utc": "2026-10-02T18:20:42.409592+00:00",
+  "duration_seconds": 20.423708,
+  "train_shape": [
+    2912,
+    60
+  ],
+  "test_shape": [
+    728,
+    60
+  ],
+  "generated_shape": [
+    728,
+    60
+  ],
+  "config": {
+    "input_file": "baselines/data/quantgan_market_windows.npy",
+    "output_directory": "baselines/results/quantgan_smoke",
+    "window": 60,
+    "train_fraction": 0.8,
+    "gaussianize": true,
+    "inverse_clip": 0.02,
+    "batch_size": 16,
+    "steps": 5,
+    "additional_discriminator_steps": 1,
+    "fixed_filters": 8,
+    "moving_filters": 0,
+    "dilations": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "block_size": 2,
+    "noise_features": 3,
+    "learning_rate_discriminator": 0.0001,
+    "learning_rate_generator": 0.0003,
+    "seed": 42
+  },
+  "generated_mean": 0.03588496893644333,
+  "generated_std": 7.194817590061575e-05,
+  "generated_min": 0.02138916775584221,
+  "generated_max": 0.03588540479540825,
+  "checkpoint": [
+    "generator.weights.h5",
+    "discriminator.weights.h5"
+  ]
+}

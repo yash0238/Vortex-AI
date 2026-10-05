@@ -2,7 +2,7 @@
 
 Dynamic graph-based financial risk and regime-switching experiments using NIFTY-50 returns.
 
-## What is this, in plain English?
+## What is Vortex-AI
 
 Imagine you are watching the 50 biggest companies on India's NIFTY-50 stock market. On
 calm days their share prices move independently, but during a crisis they tend to fall
@@ -147,10 +147,10 @@ graph TB
 
 Recorded CUDA runs on the prepared dataset produced:
 
-| Model | Best validation loss | Adjacency MSE | ROC-AUC | F1 |
-| --- | ---: | ---: | ---: | ---: |
-| Spatio-temporal baseline with binary adjacency loss | 0.8463 | 0.0694 | 0.5621 | 0.8465 |
-| GAT | 0.6121 | 0.0829 | 0.8326 | 0.8465 |
+| Model                                               | Best validation loss | Adjacency MSE | ROC-AUC |     F1 |
+| --------------------------------------------------- | -------------------: | ------------: | ------: | -----: |
+| Spatio-temporal baseline with binary adjacency loss |               0.8463 |        0.0694 |  0.5621 | 0.8465 |
+| GAT                                                 |               0.6121 |        0.0829 |  0.8326 | 0.8465 |
 
 The GAT improved regime ROC-AUC substantially in this run. The held-out adjacency MSE was
 measured with `evaluate.py` against `models/checkpoints/best_gat_model.pt`.

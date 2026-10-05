@@ -1,0 +1,17 @@
+T: 60
+gat_heads: 4
+hidden_dim: 64
+in_feats: 6
+lam_con: 0.0
+lam_graph: 0.0
+lam_na: 0.0
+lam_rec: 1.0
+lambda_styl: 0.0
+latent_dim: 64
+lr: 0.001
+n_stocks: 47
+proj_dim: 32
+static_graph: false
+tau: 0.07
+use_gat: true
+warmup_epochs: 20

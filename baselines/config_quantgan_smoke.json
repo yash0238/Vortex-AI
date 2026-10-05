@@ -1,0 +1,19 @@
+{
+  "input_file": "baselines/data/quantgan_market_windows.npy",
+  "output_directory": "baselines/results/quantgan_smoke",
+  "window": 60,
+  "train_fraction": 0.8,
+  "gaussianize": true,
+  "inverse_clip": 0.02,
+  "batch_size": 16,
+  "steps": 5,
+  "additional_discriminator_steps": 1,
+  "fixed_filters": 8,
+  "moving_filters": 0,
+  "dilations": [1, 2, 4, 8],
+  "block_size": 2,
+  "noise_features": 3,
+  "learning_rate_discriminator": 0.0001,
+  "learning_rate_generator": 0.0003,
+  "seed": 42
+}

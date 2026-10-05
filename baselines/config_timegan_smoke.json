@@ -1,0 +1,36 @@
+{
+  "smoke_test_config": {
+    "description": "Minimal TimeGAN configuration for end-to-end verification",
+    "input_file": "baselines/data/timegan_windows.npy",
+    "input_shape": [3640, 60, 50],
+    "expected_seq_len": 60,
+    "expected_features": 50,
+    "subset_size": 256,
+    "timegan_parameters": {
+      "module": "gru",
+      "hidden_dim": 24,
+      "num_layer": 3,
+      "iterations": 5,
+      "batch_size": 32
+    },
+    "output_directory": "baselines/results/timegan_smoke",
+    "outputs": {
+      "generated_samples": "generated_samples.npy",
+      "statistics": "stats.json"
+    },
+    "verification_checklist": [
+      "Load timegan_windows.npy successfully (shape 3640 x 60 x 50)",
+      "Take subset of 256 samples",
+      "Start Embedding Network Training (5 iterations)",
+      "Start Training with Supervised Loss Only (5 iterations)",
+      "Start Joint Training (5 iterations)",
+      "Generate synthetic data with non-zero length",
+      "Verify generated samples have sequence structure (60, 50)",
+      "Verify all losses remain finite (no NaN/Inf)",
+      "Save generated_samples.npy with pickle=True",
+      "Save stats.json with metadata and statistics"
+    ],
+    "expected_runtime": "~2-5 minutes on CPU",
+    "gpu_note": "Not required for smoke test; CPU is sufficient"
+  }
+}
