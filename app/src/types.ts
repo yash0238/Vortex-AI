@@ -207,3 +207,36 @@ export interface MarketHistory {
   freshness_note: string;
   bars: MarketBar[];
 }
+
+export interface ForecastStockSignal {
+  symbol: string;
+  return_20d: number;
+  volatility_annualized: number;
+  direction_score: number;
+  signal: string;
+}
+
+export interface ForecastOutlook {
+  horizon_days: number;
+  crisis_probability: number;
+  risk_regime: string;
+  confidence: number;
+  target_definition: string;
+  as_of: string;
+  features: Record<string, number>;
+  drivers: Array<{ name: string; value: number }>;
+  validation: {
+    holdout_start_index: number;
+    holdout_samples: number;
+    holdout_positive_rate: number;
+    accuracy: number;
+    brier_score: number;
+    roc_auc: number | null;
+    split: string;
+  };
+  directional_screen: {
+    strongest_positive: ForecastStockSignal[];
+    strongest_negative: ForecastStockSignal[];
+  };
+  method: string;
+}

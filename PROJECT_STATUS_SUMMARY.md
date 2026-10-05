@@ -10,6 +10,8 @@ The local `main` now contains the history from local `main`, fetched `origin/mai
 
 The React dashboard builds and runs, FastAPI starts against the checked-in data, and the dashboard now has a Market Explorer, searchable mutual-fund catalogue, five requested preloaded fund comparisons, a browser-local paper portfolio, session-only price alerts, and a Research & Evidence view. The backend now derives missing final-day window labels and the small node-feature slice it actually needs, without creating a multi-hundred-megabyte cache. Training data alignment was corrected to use all 50 stocks and the intended approximately 15% crisis rate.
 
+The Forward Outlook page now answers the mentor's forward-looking question with a causal baseline: probability of at least one crisis-labelled day in a configurable 3/5/10/20-session horizon, market-condition drivers, chronological holdout validation, and a technical positive/negative stock screen. It is intentionally labeled as a research forecast, not an exact price prediction or investment recommendation.
+
 Important limit: there is **no trained CG-NSDE generator checkpoint** in this workspace. The two checked-in `.pt` files are older classifier checkpoints, not compatible latent-SDE generator weights. The UI and API now report/gate model inference rather than presenting random initialization as valid scenario or evaluation results. Stored research results are available, but a full generator training run was not performed here.
 
 ## Branch Integration
@@ -59,6 +61,15 @@ Market Explorer workflows:
 - 1W/1M/6M/1Y/5Y chart ranges. The 1W option uses 15-minute bars when the public provider makes them available; longer ranges use daily or weekly bars.
 - Browser-local watchlist, paper holdings with weighted average cost and unrealized P&L, and local price alerts checked while the page is open.
 - Explicit disclaimer: this is not a licensed exchange stream or broker and cannot place orders.
+
+Forward Outlook baseline result on the current data snapshot:
+
+- Five-session crisis probability: 5.7% (`lower risk` classification).
+- Chronological 70/30 holdout ROC-AUC: 0.800.
+- Holdout Brier score: 0.146; accuracy: 77.4% over 1,091 observations.
+- Features: 5-day and 20-day market return, 20-day and 60-day cross-sectional volatility, negative breadth, and 60-day drawdown.
+- Positive/negative stock screens rank recent 20-day return divided by annualized volatility. They are momentum/risk screens, not guaranteed future winners or crash predictions.
+- Mutual-fund forward prediction remains deliberately unsupported: fund attribution requires current holdings, portfolio weights, flows, cash/derivatives, costs, and a separate validated model.
 
 The Mutual Fund Watchlist retrieves NAV histories from the public MFAPI service at page load and refresh; it needs an internet connection but no API key. It supports 1Y/3Y/5Y/MAX chart ranges and scheme visibility toggles. The chart rebases each available series to 100. Table calculations are:
 
@@ -141,6 +152,7 @@ Open `http://127.0.0.1:5173`. API health is at `http://127.0.0.1:8000/api/health
 - Training simulation endpoint: one epoch, batch size 2, finite loss `0.6264`; this is an in-memory simulation and saves no checkpoint.
 - Browser: desktop and mobile layout, five live NAV rows, MAX range toggle, backend status, and no browser page errors verified.
 - Browser: NSE/BSE search, RELIANCE quote/history selection, full MFAPI search/add flow, local alert creation, and Research & Evidence view verified.
+- Browser: Forward Outlook probability, drivers, holdout metrics, stock screens, horizon control, and fund-model caveat verified.
 
 ## Remaining Work
 

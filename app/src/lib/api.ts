@@ -9,6 +9,7 @@ import type {
   MarketInterval,
   MarketPeriod,
   MarketQuote,
+  ForecastOutlook,
   ModelConfig,
   NodeFeaturesData,
   RegimeDistribution,
@@ -78,5 +79,9 @@ export const apiClient = {
   getMarketHistory: async (symbol: string, period: MarketPeriod, interval: MarketInterval) =>
     (await client.get<MarketHistory>("/api/market/history", {
       params: { symbol, period, interval },
+    })).data,
+  getForecastOutlook: async (horizonDays = 5) =>
+    (await client.get<ForecastOutlook>("/api/forecast/outlook", {
+      params: { horizon_days: horizonDays },
     })).data,
 };

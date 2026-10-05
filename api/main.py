@@ -21,6 +21,9 @@ import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
+from sklearn.preprocessing import StandardScaler
 
 from data.node_features import compute_node_features_compact
 
@@ -114,6 +117,91 @@ def load_data() -> dict[str, np.ndarray]:
     }
 
 
+def build_forecast_features(returns: np.ndarray) -> tuple[np.ndarray, list[str]]:
+    """Build only information available through each day for a causal risk baseline."""
+    market = np.nan_to_num(returns, nan=0.0).mean(axis=1)
+    cross_sectional_vol = np.nan_to_num(returns, nan=0.0).std(axis=1)
+    features: list[list[float]] = []
+    names = ["market_return_5d", "market_return_20d", "volatility_20d", "volatility_60d", "negative_breadth_5d", "drawdown_60d"]
+    for index in range(60, len(market)):
+        window_5 = market[index - 5:index]
+        window_20 = market[index - 20:index]
+        window_60 = market[index - 60:index]
+        equity_curve = np.exp(np.cumsum(window_60))
+        drawdown = float(np.min(equity_curve / np.maximum.accumulate(equity_curve) - 1.0))
+        features.append([
+            float(window_5.sum()),
+            float(window_20.sum()),
+            float(cross_sectional_vol[index - 20:index].mean()),
+            float(cross_sectional_vol[index - 60:index].mean()),
+            float((returns[index - 5:index] < 0).mean()),
+            drawdown,
+        ])
+    return np.asarray(features, dtype=np.float64), names
+
+
+def build_forecast_state(data: dict[str, np.ndarray], horizon: int = 5) -> dict[str, Any]:
+    """Fit a chronological logistic baseline for next-horizon crisis probability."""
+    returns = np.asarray(data["returns"], dtype=np.float64)
+    daily_regimes = np.asarray(data["daily_regimes"], dtype=np.int64)
+    features, feature_names = build_forecast_features(returns)
+    start = 60
+    targets = np.asarray([
+        int(daily_regimes[index + 1:index + horizon + 1].max())
+        for index in range(start, len(daily_regimes) - horizon)
+    ], dtype=np.int64)
+    usable_features = features[:len(targets)]
+    split = max(int(len(targets) * 0.7), 1)
+    scaler = StandardScaler().fit(usable_features[:split])
+    classifier = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
+    classifier.fit(scaler.transform(usable_features[:split]), targets[:split])
+    holdout_probability = classifier.predict_proba(scaler.transform(usable_features[split:]))[:, 1]
+    holdout_prediction = (holdout_probability >= 0.5).astype(int)
+    metrics = {
+        "holdout_start_index": int(start + split),
+        "holdout_samples": int(len(targets) - split),
+        "holdout_positive_rate": float(targets[split:].mean()),
+        "accuracy": float(accuracy_score(targets[split:], holdout_prediction)),
+        "brier_score": float(brier_score_loss(targets[split:], holdout_probability)),
+        "roc_auc": float(roc_auc_score(targets[split:], holdout_probability)) if len(np.unique(targets[split:])) > 1 else None,
+        "split": "chronological 70/30 holdout",
+    }
+    full_scaler = StandardScaler().fit(usable_features)
+    full_classifier = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
+    full_classifier.fit(full_scaler.transform(usable_features), targets)
+    latest_features = features[-1:]
+    latest_probability = float(full_classifier.predict_proba(full_scaler.transform(latest_features))[0, 1])
+    return {
+        "scaler": full_scaler,
+        "classifier": full_classifier,
+        "features": features,
+        "feature_names": feature_names,
+        "latest_probability": latest_probability,
+        "metrics": metrics,
+        "horizon_days": horizon,
+        "target_definition": f"at least one crisis-labelled day in the next {horizon} trading days",
+    }
+
+
+def build_directional_screen(data: dict[str, np.ndarray]) -> list[dict[str, Any]]:
+    returns = np.nan_to_num(np.asarray(data["returns"], dtype=np.float64), nan=0.0)
+    tickers = data["tickers"]
+    rows = []
+    for index, ticker in enumerate(tickers):
+        recent = returns[-20:, index]
+        return_20 = float(np.expm1(recent.sum()))
+        volatility = float(recent.std() * np.sqrt(252))
+        score = float(return_20 / (volatility + 1e-8))
+        rows.append({
+            "symbol": ticker,
+            "return_20d": return_20,
+            "volatility_annualized": volatility,
+            "direction_score": score,
+            "signal": "positive trend" if score > 0.25 else "negative trend" if score < -0.25 else "mixed",
+        })
+    return sorted(rows, key=lambda row: row["direction_score"], reverse=True)
+
+
 def nan_to_float(arr: np.ndarray) -> list:
     """Convert numpy array to JSON-safe list, replacing NaN/Inf."""
     arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
@@ -135,6 +223,8 @@ async def lifespan(app: FastAPI):
     global MODEL_STATE
     MODEL_STATE["data"] = load_data()
     MODEL_STATE["device"] = torch.device("cpu")
+    MODEL_STATE["forecast"] = build_forecast_state(MODEL_STATE["data"])
+    MODEL_STATE["directional_screen"] = build_directional_screen(MODEL_STATE["data"])
     yield
 
 
@@ -178,6 +268,40 @@ async def get_stats():
         "returns_shape": list(data["returns"].shape),
         "daily_crisis_days": int(data["daily_regimes"].sum()),
         "daily_total_days": int(len(data["daily_regimes"])),
+    }
+
+
+@app.get("/api/forecast/outlook")
+async def get_forecast_outlook(horizon_days: int = Query(5, ge=1, le=20)):
+    """Return a calibrated baseline next-horizon crisis outlook and stock screen."""
+    data = MODEL_STATE["data"]
+    forecast = MODEL_STATE["forecast"]
+    if horizon_days != forecast["horizon_days"]:
+        forecast = build_forecast_state(data, horizon_days)
+    probability = forecast["latest_probability"]
+    regime = "elevated risk" if probability >= 0.6 else "watch" if probability >= 0.35 else "lower risk"
+    directional = forecast.get("directional_screen") or MODEL_STATE["directional_screen"]
+    return {
+        "horizon_days": horizon_days,
+        "crisis_probability": probability,
+        "risk_regime": regime,
+        "confidence": float(abs(probability - 0.5) * 2),
+        "target_definition": forecast["target_definition"],
+        "as_of": str(data["returns"].shape[0] - 1),
+        "features": {
+            name: float(value)
+            for name, value in zip(forecast["feature_names"], forecast["features"][-1])
+        },
+        "drivers": [
+            {"name": name, "value": float(value)}
+            for name, value in zip(forecast["feature_names"], forecast["features"][-1])
+        ],
+        "validation": forecast["metrics"],
+        "directional_screen": {
+            "strongest_positive": directional[:5],
+            "strongest_negative": list(reversed(directional[-5:])),
+        },
+        "method": "Causal logistic-regression baseline over rolling market return, volatility, breadth, and drawdown features. This is a research forecast, not a guaranteed price prediction or investment advice.",
     }
 
 

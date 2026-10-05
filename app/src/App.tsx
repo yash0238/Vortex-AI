@@ -9,6 +9,7 @@ import Training from "./pages/Training";
 import MutualFunds from "./pages/MutualFunds";
 import MarketExplorer from "./pages/MarketExplorer";
 import ResearchPage from "./pages/ResearchPage";
+import ForwardOutlook from "./pages/ForwardOutlook";
 import { apiClient } from "./lib/api";
 import type { DataStats } from "./types";
 
@@ -53,6 +54,8 @@ export default function App() {
             return <MarketExplorer />;
           case "research":
             return <ResearchPage />;
+          case "forecast":
+            return <ForwardOutlook />;
           default:
             return <Overview {...pageProps} />;
         }
