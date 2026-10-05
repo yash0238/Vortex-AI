@@ -10,6 +10,7 @@ import LoadingState from "../components/LoadingState";
 interface ScenarioGenerationProps {
   stats: DataStats | null;
   health: "loading" | "connected" | "disconnected";
+  modelLoaded: boolean;
 }
 
 const NIFTY50_TICKERS = [
@@ -25,7 +26,7 @@ const NIFTY50_TICKERS = [
   "BAJAJFINSV", "SBILIFE", "HDFCLIFE", "INDUSINDBK", "LTI",
 ];
 
-export default function ScenarioGeneration({ stats, health }: ScenarioGenerationProps) {
+export default function ScenarioGeneration({ stats, health, modelLoaded }: ScenarioGenerationProps) {
   const [result, setResult] = useState<ScenarioResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,9 @@ export default function ScenarioGeneration({ stats, health }: ScenarioGeneration
 
   if (health === "disconnected") {
     return <ErrorState title="Backend Disconnected" message="Start the API server to use this page." />;
+  }
+  if (!modelLoaded) {
+    return <ErrorState title="Trained generator not loaded" message="A compatible CG-NSDE checkpoint is required before synthetic scenarios can be generated." />;
   }
 
   if (!stats) {

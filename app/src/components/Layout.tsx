@@ -6,9 +6,10 @@ import {
   Brain,
   Zap,
   BarChart2,
-  Settings,
   Activity,
   ExternalLink,
+  Wallet,
+  Menu,
 } from "lucide-react";
 
 type NavItem = {
@@ -24,6 +25,7 @@ const navItems: NavItem[] = [
   { id: "gat", label: "GAT Encoder", icon: <GitBranch size={20} />, description: "Dynamic Graph Attention" },
   { id: "sde", label: "Neural SDE", icon: <Brain size={20} />, description: "Latent SDE path generation" },
   { id: "scenario", label: "Scenario Generation", icon: <Zap size={20} />, description: "Synthetic scenario sampling" },
+  { id: "funds", label: "Mutual Funds", icon: <Wallet size={20} />, description: "NAV history and fund comparison" },
   { id: "evaluation", label: "Evaluation", icon: <BarChart2 size={20} />, description: "Statistical and discriminative metrics" },
   { id: "training", label: "Training", icon: <Activity size={20} />, description: "Loss curves and simulation" },
 ];
@@ -64,7 +66,8 @@ export default function Layout({ children }: LayoutProps) {
                   setActivePage(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-left transition-colors ${
+                data-active={activePage === item.id}
+                className={`dashboard-nav-item flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-left transition-colors ${
                   activePage === item.id
                     ? "bg-primary/10 text-primary"
                     : "text-gray-400 hover:bg-card-bg hover:text-gray-200"
@@ -93,13 +96,15 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto lg:ml-0">
+      <main className="min-w-0 flex-1 overflow-y-auto lg:ml-64">
         <div className="h-12 border-b border-border bg-card-bg/30 flex items-center justify-between px-4">
           <button
             className="lg:hidden p-2 text-gray-400 hover:text-gray-200"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation menu"
+            title="Open navigation menu"
           >
-            <Settings size={20} />
+            <Menu size={20} />
           </button>
           <h2 className="text-lg font-semibold capitalize">
             {navItems.find((i) => i.id === activePage)?.label || "Dashboard"}

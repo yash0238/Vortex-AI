@@ -10,9 +10,10 @@ import LoadingState from "../components/LoadingState";
 interface EvaluationProps {
   stats: DataStats | null;
   health: "loading" | "connected" | "disconnected";
+  modelLoaded: boolean;
 }
 
-export default function Evaluation({ stats, health }: EvaluationProps) {
+export default function Evaluation({ stats, health, modelLoaded }: EvaluationProps) {
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +34,16 @@ export default function Evaluation({ stats, health }: EvaluationProps) {
   };
 
   useEffect(() => {
-    if (health === "connected") {
+    if (health === "connected" && modelLoaded) {
       runEvaluation();
     }
-  }, [health]);
+  }, [health, modelLoaded]);
 
   if (health === "disconnected") {
     return <ErrorState title="Backend Disconnected" message="Start the API server to use this page." />;
+  }
+  if (!modelLoaded) {
+    return <ErrorState title="Trained model not loaded" message="Live model evaluation is disabled because this workspace has no compatible CG-NSDE generator checkpoint. See the saved three-seed evaluation summary for validated results." />;
   }
 
   if (!stats || (loading && !result)) {

@@ -10,9 +10,10 @@ import LoadingState from "../components/LoadingState";
 interface OverviewProps {
   stats: DataStats | null;
   health: "loading" | "connected" | "disconnected";
+  modelLoaded: boolean;
 }
 
-export default function Overview({ stats, health }: OverviewProps) {
+export default function Overview({ stats, health, modelLoaded }: OverviewProps) {
   const [returnsData, setReturnsData] = useState<any>(null);
 
   useEffect(() => {
@@ -23,6 +24,7 @@ export default function Overview({ stats, health }: OverviewProps) {
     }
   }, [stats]);
 
+  const crisisPercent = stats ? stats.crisis_ratio * 100 : 0;
   const statusColor = health === "connected" ? "text-green-400" : health === "loading" ? "text-yellow-400" : "text-red-400";
 
   if (health === "disconnected") {
@@ -55,11 +57,17 @@ export default function Overview({ stats, health }: OverviewProps) {
         </div>
       </div>
 
+      {!modelLoaded && (
+        <div role="status" className="rounded border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-sm text-amber-200">
+          No trained CG-NSDE generator checkpoint is loaded. Scenario generation and live model evaluation are unavailable; the saved research results are summarized in PROJECT_STATUS_SUMMARY.md.
+        </div>
+      )}
+
       {/* Key Metrics */}
       <StatsGrid cards={[
         { label: "Total Windows", value: stats.n_windows.toLocaleString(), icon: <Calendar size={20} />, description: "60-day sliding windows" },
         { label: "Assets", value: stats.n_stocks, icon: <Globe size={20} />, description: "NIFTY-50 stocks" },
-        { label: "Crisis Windows", value: `${stats.n_crisis} (${stats.crisis_ratio.toFixed(1)}%)`, icon: <TrendingUp size={20} />, description: "Regime-labeled crisis periods", change: `${stats.crisis_ratio.toFixed(1)}%`, changeType: "neutral" },
+        { label: "Crisis Windows", value: `${stats.n_crisis} (${crisisPercent.toFixed(1)}%)`, icon: <TrendingUp size={20} />, description: "Regime-labeled crisis periods", change: `${crisisPercent.toFixed(1)}%`, changeType: "neutral" },
         { label: "Total Trading Days", value: stats.daily_total_days.toLocaleString(), icon: <Activity size={20} />, description: "2010-2024 data range" },
       ]} />
 

@@ -53,12 +53,24 @@ class VortexDataset(Dataset):
             self.windows = raw_windows.astype(np.float32)
             print("Warning: scaler.npz missing, using raw returns")
         # 2.3: canonical corrected labels (v2, last-day labeling ~15% crisis),
-        # fallback to v1 if v2 missing.
+        # derive them from daily labels when the generated v2 file is missing.
         regimes_path = data_dir / "window_regimes_v2.npy"
-        if not regimes_path.exists():
-            regimes_path = data_dir / "window_regimes.npy"
-        self.regimes = np.load(regimes_path)  # (N,)
-        print(f"Regime labels from: {regimes_path.name}")
+        if regimes_path.exists():
+            self.regimes = np.load(regimes_path)
+            print(f"Regime labels from: {regimes_path.name}")
+        else:
+            daily_regimes_path = data_dir / "regimes.npy"
+            if daily_regimes_path.exists():
+                daily_regimes = np.load(daily_regimes_path)
+                first_window_end = self.windows.shape[1] - 1
+                self.regimes = daily_regimes[
+                    first_window_end:first_window_end + len(self.windows)
+                ]
+                print(f"Derived final-day regime labels from: {daily_regimes_path.name}")
+            else:
+                regimes_path = data_dir / "window_regimes.npy"
+                self.regimes = np.load(regimes_path)
+                print(f"Regime labels from legacy {regimes_path.name}")
         self.adj_matrices = np.load(data_dir / "adj_matrices.npy")  # (N, stocks, stocks)
 
         # Align to shortest length (data artifacts can drift by one window)
@@ -382,7 +394,7 @@ def train(args: argparse.Namespace):
     
     # Initialize model
     model = VORTEXModel(
-        n_stocks=config.get("n_stocks", 50),
+        n_stocks=dataset.n_stocks,
         T=config.get("T", 60),
         in_feats=config.get("in_feats", 6),
         latent_dim=config.get("latent_dim", 64),

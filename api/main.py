@@ -13,11 +13,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 import torchsde
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+from data.node_features import compute_node_features_compact
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -36,10 +39,19 @@ NIFTY50_TICKERS = [
 ]
 
 MODEL_STATE: dict[str, Any] = {}
+CHECKPOINT_DIR = BASE_DIR / "models" / "checkpoints"
+
+
+def require_loaded_generator() -> None:
+    if MODEL_STATE.get("generator") is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No trained CG-NSDE generator checkpoint is loaded. Train and load a compatible VORTEXModel checkpoint before running inference.",
+        )
 
 
 class ModelConfig(BaseModel):
-    n_stocks: int = 47
+    n_stocks: int = 50
     T: int = 60
     latent_dim: int = 64
     proj_dim: int = 32
@@ -55,11 +67,38 @@ class ModelConfig(BaseModel):
 def load_data() -> dict[str, np.ndarray]:
     """Load all data artifacts, handling length mismatches."""
     windows = np.load(RAW_DIR / "windows.npy", allow_pickle=True)
-    regimes = np.load(RAW_DIR / "window_regimes_v2.npy", allow_pickle=True)
-    adj = np.load(RAW_DIR / "adj_matrices.npy", allow_pickle=True)
-    node_feats = np.load(RAW_DIR / "window_node_features.npy", allow_pickle=True)
-    returns = np.load(RAW_DIR / "returns.npy", allow_pickle=True)
     regimes_daily = np.load(RAW_DIR / "regimes.npy", allow_pickle=True)
+    regimes_path = RAW_DIR / "window_regimes_v2.npy"
+    if regimes_path.exists():
+        regimes = np.load(regimes_path, allow_pickle=True)
+    else:
+        first_window_end = windows.shape[1] - 1
+        regimes = regimes_daily[first_window_end:first_window_end + len(windows)]
+    adj = np.load(RAW_DIR / "adj_matrices.npy", allow_pickle=True)
+    node_features_path = RAW_DIR / "window_node_features.npy"
+    returns = np.load(RAW_DIR / "returns.npy", allow_pickle=True)
+    close_path = RAW_DIR / "nifty50_close.csv"
+    tickers = pd.read_csv(close_path, index_col=0, nrows=0).columns.tolist()
+
+    if node_features_path.exists():
+        node_feats = np.load(node_features_path, allow_pickle=True)
+        if node_feats.ndim == 4:
+            node_feats = node_feats[:, -1]
+    else:
+        volume_path = RAW_DIR / "nifty50_volume.csv"
+        volume = None
+        if volume_path.exists():
+            volume = pd.read_csv(volume_path, index_col=0).to_numpy(dtype=np.float32)
+            if volume.shape != returns.shape:
+                volume = None
+        daily_features = compute_node_features_compact(returns, volume, tickers)
+        first_window_end = windows.shape[1] - 1
+        node_feats = daily_features[first_window_end:first_window_end + len(windows)]
+
+    if len(tickers) != windows.shape[2]:
+        raise ValueError(
+            f"Ticker count ({len(tickers)}) does not match data width ({windows.shape[2]})."
+        )
 
     n = min(len(windows), len(regimes), len(adj), len(node_feats))
     return {
@@ -69,6 +108,7 @@ def load_data() -> dict[str, np.ndarray]:
         "node_features": node_feats[:n],
         "returns": returns,
         "daily_regimes": regimes_daily,
+        "tickers": tickers,
     }
 
 
@@ -91,10 +131,8 @@ def chunk_array(arr: np.ndarray, chunk_size: int = 50) -> list:
 async def lifespan(app: FastAPI):
     """Load data and build model on startup."""
     global MODEL_STATE
-    st.info("Loading data artifacts...")
     MODEL_STATE["data"] = load_data()
     MODEL_STATE["device"] = torch.device("cpu")
-    st.success("Data loaded successfully!")
     yield
 
 
@@ -117,7 +155,11 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model_loaded": "model" in MODEL_STATE}
+    return {
+        "status": "ok",
+        "model_loaded": MODEL_STATE.get("generator") is not None,
+        "generator_checkpoint_available": any(CHECKPOINT_DIR.glob("*.ckpt")),
+    }
 
 
 @app.get("/api/stats")
@@ -152,7 +194,7 @@ async def get_returns(
     regimes_daily = data["daily_regimes"]
 
     return {
-        "ticker": NIFTY50_TICKERS[stock_idx],
+        "ticker": data["tickers"][stock_idx],
         "cumulative_returns": nan_to_float(cum_returns),
         "daily_returns": nan_to_float(returns[:, stock_idx]),
         "regimes": regimes_daily.tolist(),
@@ -188,14 +230,14 @@ async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
     try:
         centrality = nx.degree_centrality(G)
         top_nodes = sorted(centrality.items(), key=lambda x: -x[1])[:10]
-        top_tickers = [NIFTY50_TICKERS[i] for i, _ in top_nodes]
+        top_tickers = [data["tickers"][i] for i, _ in top_nodes]
     except Exception:
-        top_tickers = NIFTY50_TICKERS[:10]
+        top_tickers = data["tickers"][:10]
 
     return {
         "z": nan_to_float(adj),
-        "x": NIFTY50_TICKERS,
-        "y": NIFTY50_TICKERS,
+        "x": data["tickers"],
+        "y": data["tickers"],
         "regime": "Crisis" if regimes[window_idx] else "Normal",
         "regime_idx": int(regimes[window_idx]),
         "edge_density": density,
@@ -208,11 +250,11 @@ async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
 async def get_node_features(window_idx: int = Query(0, ge=0, le=3639)):
     """Get node features for a specific window."""
     data = MODEL_STATE["data"]
-    feats = data["node_features"][window_idx, -1, :, :]
+    feats = data["node_features"][window_idx]
     feat_names = ["Return", "Abs Return", "Volume", "Sector ID", "Band Limit", "Dist to Band"]
 
     return {
-        "tickers": NIFTY50_TICKERS,
+        "tickers": data["tickers"],
         "feature_names": feat_names,
         "data": nan_to_float(feats),
     }
@@ -237,6 +279,7 @@ async def get_regime_distribution():
 @app.post("/api/model/gat-forward")
 async def gat_forward(config: ModelConfig = None):
     """Run GAT encoder forward pass on a batch of data."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -258,7 +301,7 @@ async def gat_forward(config: ModelConfig = None):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -286,6 +329,7 @@ async def gat_forward(config: ModelConfig = None):
 @app.post("/api/model/sde-forward")
 async def sde_forward(config: ModelConfig = None):
     """Run Neural SDE forward pass on a batch of data."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -315,7 +359,7 @@ async def sde_forward(config: ModelConfig = None):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -346,6 +390,7 @@ async def sde_forward(config: ModelConfig = None):
 @app.post("/api/scenario/generate")
 async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0, n_scenarios: int = 5, stock_idx: int = 0):
     """Generate synthetic scenarios from the CG-NSDE model."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -375,7 +420,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -419,7 +464,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
     return {
         "scenarios": nan_to_float(synth_returns),
         "real_avg": nan_to_float(real_returns.mean(axis=0)),
-        "tickers": [NIFTY50_TICKERS[stock_idx]],
+        "tickers": [data["tickers"][stock_idx]],
         "stock_idx": stock_idx,
         "stats": {
             "real_kurtosis": real_kurt,
@@ -438,6 +483,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
 @app.get("/api/evaluation/metrics")
 async def get_evaluation_metrics(batch_size: int = 8):
     """Run full evaluation metrics on model output."""
+    require_loaded_generator()
     data = MODEL_STATE["data"]
     device = MODEL_STATE["device"]
     cfg = ModelConfig()
@@ -464,7 +510,7 @@ async def get_evaluation_metrics(batch_size: int = 8):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
     regimes = torch.from_numpy(data["window_regimes"][:n]).float().to(device)
@@ -494,11 +540,13 @@ async def get_evaluation_metrics(batch_size: int = 8):
                     acf_vals.append(c[0, 1])
         return float(np.mean(acf_vals)) if acf_vals else 0.0
 
-    real_acf = mean_acf_sq_batch(real_flat)
-    synth_acf = mean_acf_sq_batch(synth_flat)
+    real_acf = mean_acf_sq_batch(x.detach().cpu().numpy())
+    synth_acf = mean_acf_sq_batch(r_hat.detach().cpu().numpy())
 
-    corr_real = np.corrcoef(real_flat[:50] if len(real_flat) >= 50 else real_flat)
-    corr_synth = np.corrcoef(synth_flat[:50] if len(synth_flat) >= 50 else synth_flat)
+    real_returns = x.detach().cpu().numpy().reshape(-1, x.shape[-1])
+    synth_returns = r_hat.detach().cpu().numpy().reshape(-1, r_hat.shape[-1])
+    corr_real = np.corrcoef(real_returns, rowvar=False)
+    corr_synth = np.corrcoef(synth_returns, rowvar=False)
     corr_error = float(np.linalg.norm(corr_real - corr_synth, "fro")) if corr_real.shape == corr_synth.shape else float("NaN")
 
     from sklearn.ensemble import GradientBoostingClassifier
@@ -611,7 +659,7 @@ async def training_simulation(epochs: int = 10, batch_size: int = 8, lr: float =
         adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][idx]).float(),
                                nan=0.0, posinf=1.0, neginf=0.0).to(device)
         node_feats = torch.nan_to_num(
-            torch.from_numpy(data["node_features"][idx, -1, :, :]).float(),
+            torch.from_numpy(data["node_features"][idx]).float(),
             nan=0.0, posinf=0.0, neginf=0.0
         ).to(device)
         reg = torch.from_numpy(data["window_regimes"][idx]).float().to(device)
@@ -654,4 +702,4 @@ from sklearn.decomposition import PCA
 from scipy.stats import kurtosis as scipy_kurtosis
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import cross_val_score
-from training.losses import reconstruction_loss
+from training.losses import graph_consistency_loss, reconstruction_loss
