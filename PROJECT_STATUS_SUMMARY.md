@@ -8,7 +8,7 @@
 
 The local `main` now contains the history from local `main`, fetched `origin/main`, `complete_implementation`, and `fix/stabilize`. The existing `feature/gat-and-modules` work was already an ancestor of local `main`. Safety refs `main_backup` and `local_main_backup` remain at the pre-merge local snapshot. The original local and remote main histories had no common ancestor, so they were joined with a merge commit; neither history was reset or force-pushed.
 
-The React dashboard builds and runs, FastAPI starts against the checked-in data, and the new Mutual Fund Watchlist loads five live NAV series. The backend now derives missing final-day window labels and the small node-feature slice it actually needs, without creating a multi-hundred-megabyte cache. Training data alignment was corrected to use all 50 stocks and the intended approximately 15% crisis rate.
+The React dashboard builds and runs, FastAPI starts against the checked-in data, and the dashboard now has a Market Explorer, searchable mutual-fund catalogue, five requested preloaded fund comparisons, a browser-local paper portfolio, session-only price alerts, and a Research & Evidence view. The backend now derives missing final-day window labels and the small node-feature slice it actually needs, without creating a multi-hundred-megabyte cache. Training data alignment was corrected to use all 50 stocks and the intended approximately 15% crisis rate.
 
 Important limit: there is **no trained CG-NSDE generator checkpoint** in this workspace. The two checked-in `.pt` files are older classifier checkpoints, not compatible latent-SDE generator weights. The UI and API now report/gate model inference rather than presenting random initialization as valid scenario or evaluation results. Stored research results are available, but a full generator training run was not performed here.
 
@@ -50,7 +50,15 @@ The live backend was verified with the real files: 3,641 windows, 50 stocks, 60 
 
 ## Dashboard
 
-The app contains Overview, Data Pipeline, GAT Encoder, Neural SDE, Scenario Generation, Mutual Funds, Evaluation, and Training views. A typed Axios API client now connects those pages to FastAPI. Desktop navigation is visible with the correct main-content offset; mobile navigation uses a drawer. The 390px mobile and 1440px desktop checks show no page-width overflow.
+The app contains Overview, Data Pipeline, GAT Encoder, Neural SDE, Scenario Generation, Mutual Funds, Market Explorer, Research & Evidence, Evaluation, and Training views. A typed Axios API client now connects those pages to FastAPI. Desktop navigation is visible with the correct main-content offset; mobile navigation uses a drawer. The 390px mobile and 1440px desktop checks show no page-width overflow.
+
+Market Explorer workflows:
+
+- Debounced search across NSE/BSE-listed Yahoo instruments, e.g. Infosys returns `INFY.NS` and `INFY.BO`.
+- Quote card with price, previous close, open, day range, volume, market cap, market date, source, and freshness caveat.
+- 1W/1M/6M/1Y/5Y chart ranges. The 1W option uses 15-minute bars when the public provider makes them available; longer ranges use daily or weekly bars.
+- Browser-local watchlist, paper holdings with weighted average cost and unrealized P&L, and local price alerts checked while the page is open.
+- Explicit disclaimer: this is not a licensed exchange stream or broker and cannot place orders.
 
 The Mutual Fund Watchlist retrieves NAV histories from the public MFAPI service at page load and refresh; it needs an internet connection but no API key. It supports 1Y/3Y/5Y/MAX chart ranges and scheme visibility toggles. The chart rebases each available series to 100. Table calculations are:
 
@@ -69,6 +77,15 @@ Latest values returned by the source (all dated 2026-10-01):
 | Bandhan Small Cap Fund - Direct Growth | 147946 | 56.085 | 10.49% | 15.87% | 29.88% |
 
 The MFAPI/AMFI catalog reports the HSBC active series simply as `HSBC Small Cap Fund` and omits its plan label; the dashboard does not claim a plan for that row. NAV histories can be revised or delayed by the upstream provider. These are historical NAV calculations, not investment advice or forecasts.
+
+The fund page also searches the full MFAPI scheme catalogue. Results are ranked by query relevance and fixed-maturity products are suppressed unless the query explicitly asks for FMP/fixed maturity. Adding a result expands the comparison table and chart.
+
+## Data Freshness and Product Boundary
+
+- **NSE/BSE quotes and bars:** Yahoo Finance through `yfinance`. It returned current-session data during this run, including 15-minute `RELIANCE.NS` bars, but `yfinance` documents itself as an unofficial personal/research interface. The app therefore shows source and freshness metadata and does not call this exchange-grade real-time data.
+- **Official exchange context:** NSE's live-equity page advertises streaming market data and shows the session timestamp. Production redistribution, depth, alerts, and execution require an authorized/licensed data and broker integration.
+- **Mutual-fund NAV:** MFAPI scheme history, cross-checked against AMFI's NAV listing. NAV is daily scheme data, not tick data.
+- **No credentials used:** The current prototype needs no API key or Hugging Face resource. A production feed, broker API, authentication, portfolio sync, push notifications, or order routing would require provider credentials and legal/compliance review.
 
 ## Saved Research Results
 
@@ -90,6 +107,8 @@ The run therefore clears intermediate convergence gates (correlation error below
 `results/baseline_table.csv` records the fallback iid-Gaussian and static-t-PPCA comparisons. The same table marks TimeGAN and QuantGAN as blocked because their external submodules/runners were empty or unavailable in the Python 3.13 environment. Do not present them as reproduced baselines.
 
 Research notes and interpretation are in `CONVERGENCE_PLAN.md`, `README.md`, `PRESENTATION.md`, `IMPLEMENTATION_PLAN.md`, and the stage evaluation artifacts. They discuss the GAT, neural-SDE, TimeGAN/QuantGAN, contrastive learning, NSE constraints, ablations, and why unconstrained diffusion, endpoint-only reconstruction, and early contrastive loss can undermine fidelity. Any paper claims still need primary-source citation verification before publication.
+
+The in-app Research & Evidence page and this summary were updated after a 2026-10-05 scan of relevant work. Recent overlap includes HGAN-SDEs (Hermite-guided adversarial Neural-SDE training), SFAG (stylized-fact alignment for reliable financial generation), Deep-MKV-TS (path-dependent scenario control), and graph-conditioned diffusion for stochastic graph signals/stock forecasting. VORTEX's defensible candidate contribution is the combination of dynamic cross-asset graph structure, regime-aware latent SDE generation, and NSE-specific stress/risk evaluation. It is not defensible to claim that graph-conditioned financial generation or Neural-SDE generation alone is novel.
 
 ## Run Locally
 
@@ -121,6 +140,7 @@ Open `http://127.0.0.1:5173`. API health is at `http://127.0.0.1:8000/api/health
 - Real-data VORTEX forward pass: finite `(1, 60, 50)`, `(1, 50, 50)`, `(1, 32)` outputs.
 - Training simulation endpoint: one epoch, batch size 2, finite loss `0.6264`; this is an in-memory simulation and saves no checkpoint.
 - Browser: desktop and mobile layout, five live NAV rows, MAX range toggle, backend status, and no browser page errors verified.
+- Browser: NSE/BSE search, RELIANCE quote/history selection, full MFAPI search/add flow, local alert creation, and Research & Evidence view verified.
 
 ## Remaining Work
 
@@ -129,3 +149,4 @@ Open `http://127.0.0.1:5173`. API health is at `http://127.0.0.1:8000/api/health
 - Rerun full validation on the trained checkpoint, including three seeds, ACF of squared returns, correlation fidelity, discriminative score, contagion boost, and CVaR. Current saved results fail some masterplan gates as detailed above.
 - Repair/fetch the TimeGAN and QuantGAN submodules and run comparable baselines before claiming a full baseline comparison.
 - The old `sandbox/mf_case_study.py` uses mock fund portfolios; the end-user dashboard instead uses live NAV series and does not infer current portfolio holdings.
+- For a production/industry launch, replace the unofficial Yahoo interface with a licensed market-data feed, add authentication and server-side user storage, broker/portfolio integration, push alerts, audit logging, rate limiting, observability, security review, and investment/regulatory disclosures.

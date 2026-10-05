@@ -7,6 +7,8 @@ import ScenarioGeneration from "./pages/ScenarioGeneration";
 import Evaluation from "./pages/Evaluation";
 import Training from "./pages/Training";
 import MutualFunds from "./pages/MutualFunds";
+import MarketExplorer from "./pages/MarketExplorer";
+import ResearchPage from "./pages/ResearchPage";
 import { apiClient } from "./lib/api";
 import type { DataStats } from "./types";
 
@@ -47,6 +49,10 @@ export default function App() {
             return <Training {...pageProps} />;
           case "funds":
             return <MutualFunds />;
+          case "market":
+            return <MarketExplorer />;
+          case "research":
+            return <ResearchPage />;
           default:
             return <Overview {...pageProps} />;
         }

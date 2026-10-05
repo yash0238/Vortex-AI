@@ -6,15 +6,28 @@ import Chart from "../components/Chart";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
 
-const schemes = [
+interface FundDefinition {
+  id: string;
+  name: string;
+  category: string;
+  code: number;
+  color: string;
+}
+
+interface MfSearchMatch {
+  schemeCode: number;
+  schemeName: string;
+}
+
+const DEFAULT_SCHEMES: FundDefinition[] = [
   { id: "edelweiss", name: "Edelweiss Mid Cap", category: "Mid cap", code: 140228, color: "#38bdf8" },
   { id: "invesco", name: "Invesco India Mid Cap", category: "Mid cap", code: 120403, color: "#f97316" },
   { id: "mirae", name: "Mirae Asset Midcap", category: "Mid cap", code: 147445, color: "#a3e635" },
   { id: "hsbc", name: "HSBC Small Cap", category: "Small cap", code: 151130, color: "#fb7185" },
   { id: "bandhan", name: "Bandhan Small Cap", category: "Small cap", code: 147946, color: "#c084fc" },
-] as const;
+] ;
 
-type SchemeId = (typeof schemes)[number]["id"];
+const FUND_COLORS = ["#38bdf8", "#f97316", "#a3e635", "#fb7185", "#c084fc", "#facc15", "#2dd4bf"];
 type Period = "1Y" | "3Y" | "5Y" | "MAX";
 
 interface NavPoint {
@@ -24,7 +37,7 @@ interface NavPoint {
 }
 
 interface FundHistory {
-  id: SchemeId;
+  id: string;
   name: string;
   category: string;
   code: number;
@@ -105,12 +118,17 @@ function chartSeries(funds: FundHistory[], visibleIds: string[], period: Period)
 }
 
 export default function MutualFunds() {
+  const [schemes, setSchemes] = useState<FundDefinition[]>(DEFAULT_SCHEMES);
   const [funds, setFunds] = useState<FundHistory[]>([]);
-  const [visibleIds, setVisibleIds] = useState<string[]>(schemes.map((scheme) => scheme.id));
+  const [visibleIds, setVisibleIds] = useState<string[]>(DEFAULT_SCHEMES.map((scheme) => scheme.id));
   const [period, setPeriod] = useState<Period>("3Y");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [fundQuery, setFundQuery] = useState("");
+  const [fundSearchResults, setFundSearchResults] = useState<MfSearchMatch[]>([]);
+  const [searchingFunds, setSearchingFunds] = useState(false);
+  const [fundSearchError, setFundSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -145,7 +163,56 @@ export default function MutualFunds() {
     return () => {
       active = false;
     };
-  }, [refreshKey]);
+  }, [schemes, refreshKey]);
+
+  useEffect(() => {
+    let active = true;
+    const term = fundQuery.trim();
+    if (term.length < 2) {
+      setFundSearchResults([]);
+      setFundSearchError(null);
+      setSearchingFunds(false);
+      return () => { active = false; };
+    }
+
+    setSearchingFunds(true);
+    const timer = window.setTimeout(() => {
+      axios.get<MfSearchMatch[]>("https://api.mfapi.in/mf/search", { params: { q: term } })
+        .then((response) => {
+          if (!active) return;
+          const normalizedQuery = term.toLocaleLowerCase();
+          const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+          const explicitFmpSearch = /\b(fmp|fixed maturity)\b/i.test(term);
+          const matches = response.data
+            .filter((match) => explicitFmpSearch || !/\bFMP\b|fixed maturity/i.test(match.schemeName))
+            .map((match, index) => {
+              const name = match.schemeName.toLocaleLowerCase();
+              const tokenMatches = tokens.filter((token) => name.includes(token)).length;
+              const score = (name.includes(normalizedQuery) ? 100 : 0) + tokenMatches * 10
+                + (/direct plan/i.test(name) ? 2 : 0) + (/growth/i.test(name) ? 1 : 0);
+              return { match, index, score };
+            })
+            .sort((left, right) => right.score - left.score || left.index - right.index)
+            .slice(0, 12)
+            .map(({ match }) => match);
+          setFundSearchResults(matches);
+          setFundSearchError(matches.length === 0 ? "No matching mutual fund schemes found." : null);
+        })
+        .catch((requestError: unknown) => {
+          if (!active) return;
+          setFundSearchError(axios.isAxiosError(requestError) ? requestError.message : "Fund search is unavailable.");
+          setFundSearchResults([]);
+        })
+        .finally(() => {
+          if (active) setSearchingFunds(false);
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [fundQuery]);
 
   const chartData = chartSeries(funds, visibleIds, period);
   const chartOptions: ChartOptions<"line"> = {
@@ -176,6 +243,33 @@ export default function MutualFunds() {
     setVisibleIds((current) => current.includes(id)
       ? current.filter((visibleId) => visibleId !== id)
       : [...current, id]);
+  };
+
+  const addFund = (match: MfSearchMatch) => {
+    if (schemes.some((scheme) => scheme.code === match.schemeCode)) {
+      setFundSearchError("That scheme is already in the comparison.");
+      return;
+    }
+    if (schemes.length >= 12) {
+      setFundSearchError("The comparison is limited to 12 schemes at a time.");
+      return;
+    }
+    const name = match.schemeName
+      .replace(/\s*-\s*(Direct|Regular) Plan\s*-\s*(Growth|IDCW).*$/i, "")
+      .replace(/\s+-\s+(Growth|IDCW)\s+Direct$/i, "")
+      .trim();
+    const fund: FundDefinition = {
+      id: `mf-${match.schemeCode}`,
+      name: name || match.schemeName,
+      category: match.schemeName,
+      code: match.schemeCode,
+      color: FUND_COLORS[schemes.length % FUND_COLORS.length],
+    };
+    setSchemes((current) => [...current, fund]);
+    setVisibleIds((current) => [...current, fund.id]);
+    setFundQuery("");
+    setFundSearchResults([]);
+    setFundSearchError(null);
   };
 
   if (loading && funds.length === 0) return <LoadingState text="Loading mutual fund NAV history..." />;
@@ -262,6 +356,35 @@ export default function MutualFunds() {
           <a className="inline-flex items-center gap-1 text-xs text-sky-300 hover:text-sky-200" href="https://www.mfapi.in/" target="_blank" rel="noreferrer">
             NAV source: MFAPI.in <ExternalLink size={13} />
           </a>
+        </div>
+        <div className="fund-search-area">
+          <label className="param-label" htmlFor="fund-search">Search and add any mutual fund scheme</label>
+          <input
+            id="fund-search"
+            type="search"
+            autoComplete="off"
+            className="fund-search-input"
+            value={fundQuery}
+            onChange={(event) => setFundQuery(event.target.value)}
+            placeholder="Search scheme, AMC, or category"
+          />
+          {searchingFunds && <p className="mt-2 text-xs text-gray-500">Searching scheme catalogue...</p>}
+          {fundSearchError && <p role="alert" className="mt-2 text-xs text-amber-200">{fundSearchError}</p>}
+          {fundSearchResults.length > 0 && (
+            <div className="fund-search-results" role="listbox" aria-label="Matching mutual fund schemes">
+              {fundSearchResults.map((match) => {
+                const alreadyAdded = schemes.some((scheme) => scheme.code === match.schemeCode);
+                return (
+                  <div className="fund-search-result" key={match.schemeCode}>
+                    <span>{match.schemeName}</span>
+                    <button type="button" className="btn-secondary" disabled={alreadyAdded} onClick={() => addFund(match)}>
+                      {alreadyAdded ? "Added" : "Add"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse text-left text-sm">

@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 import torch
 import torchsde
+import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -200,6 +202,130 @@ async def get_returns(
         "regimes": regimes_daily.tolist(),
         "dates": list(range(len(returns))),
     }
+
+
+def normalize_market_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9^.-]{1,24}", normalized):
+        raise HTTPException(status_code=400, detail="Invalid market symbol.")
+    return normalized
+
+
+def market_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
+
+@app.get("/api/market/search")
+def search_market_instruments(
+    q: str = Query(..., min_length=2, max_length=80),
+    limit: int = Query(10, ge=1, le=20),
+):
+    """Search NSE/BSE equities through Yahoo Finance's public search API."""
+    try:
+        matches = yf.Search(q.strip(), max_results=limit * 3, news_count=0).quotes
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Market search is temporarily unavailable: {exc}") from exc
+
+    instruments = []
+    seen: set[str] = set()
+    for match in matches:
+        symbol = str(match.get("symbol", "")).upper()
+        if symbol in seen or not symbol.endswith((".NS", ".BO")):
+            continue
+        seen.add(symbol)
+        instruments.append({
+            "symbol": symbol,
+            "name": match.get("shortname") or match.get("longname") or symbol,
+            "exchange": "NSE" if symbol.endswith(".NS") else "BSE",
+            "currency": match.get("currency") or "INR",
+            "quote_type": match.get("quoteType") or "EQUITY",
+        })
+        if len(instruments) == limit:
+            break
+    return {"query": q.strip(), "results": instruments}
+
+
+@app.get("/api/market/quote")
+def get_market_quote(symbol: str = Query(..., min_length=1, max_length=24)):
+    """Return the latest available Yahoo Finance quote and its session date."""
+    normalized = normalize_market_symbol(symbol)
+    try:
+        ticker = yf.Ticker(normalized)
+        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+        if history.empty:
+            raise HTTPException(status_code=404, detail=f"No recent market data for {normalized}.")
+        fast = dict(ticker.fast_info)
+        latest = history.iloc[-1]
+        previous = history.iloc[-2] if len(history) > 1 else None
+        previous_close = market_float(fast.get("previousClose"))
+        if previous_close is None and previous is not None:
+            previous_close = market_float(previous["Close"])
+        price = market_float(fast.get("lastPrice")) or market_float(latest["Close"])
+        volume = market_float(fast.get("lastVolume"))
+        if volume is None or volume <= 0:
+            volume = market_float(latest["Volume"])
+        change = price - previous_close if price is not None and previous_close is not None else None
+        return {
+            "symbol": normalized,
+            "price": price,
+            "previous_close": previous_close,
+            "change": change,
+            "change_percent": change / previous_close * 100 if change is not None and previous_close else None,
+            "open": market_float(fast.get("open")) or market_float(latest["Open"]),
+            "day_high": market_float(fast.get("dayHigh")) or market_float(latest["High"]),
+            "day_low": market_float(fast.get("dayLow")) or market_float(latest["Low"]),
+            "volume": int(volume) if volume is not None and volume > 0 else None,
+            "market_cap": market_float(fast.get("marketCap")),
+            "currency": fast.get("currency") or "INR",
+            "exchange": "NSE" if normalized.endswith(".NS") or normalized == "^NSEI" else "BSE",
+            "as_of": history.index[-1].isoformat(),
+            "source": "Yahoo Finance via yfinance",
+            "freshness_note": "Latest available quote; may be delayed and is not licensed exchange streaming data.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Quote is temporarily unavailable for {normalized}: {exc}") from exc
+
+
+@app.get("/api/market/history")
+def get_market_history(
+    symbol: str = Query(..., min_length=1, max_length=24),
+    period: Literal["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"] = "1y",
+    interval: Literal["1m", "5m", "15m", "30m", "60m", "1d", "1wk", "1mo"] = "1d",
+):
+    """Return OHLCV bars for a selected NSE/BSE symbol and chart range."""
+    normalized = normalize_market_symbol(symbol)
+    try:
+        bars = yf.Ticker(normalized).history(period=period, interval=interval, auto_adjust=False)
+        if bars.empty:
+            raise HTTPException(status_code=404, detail=f"No history returned for {normalized}.")
+        rows = []
+        for timestamp, bar in bars.iterrows():
+            rows.append({
+                "date": timestamp.isoformat(),
+                "open": market_float(bar["Open"]),
+                "high": market_float(bar["High"]),
+                "low": market_float(bar["Low"]),
+                "close": market_float(bar["Close"]),
+                "volume": int(market_float(bar["Volume"]) or 0),
+            })
+        return {
+            "symbol": normalized,
+            "period": period,
+            "interval": interval,
+            "source": "Yahoo Finance via yfinance",
+            "freshness_note": "Historical bars; availability and delay depend on Yahoo Finance.",
+            "bars": rows,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"History is temporarily unavailable for {normalized}: {exc}") from exc
 
 
 @app.get("/api/window")

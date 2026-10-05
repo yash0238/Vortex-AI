@@ -4,6 +4,11 @@ import type {
   DataStats,
   EvaluationResult,
   GatForwardResult,
+  MarketHistory,
+  MarketInstrument,
+  MarketInterval,
+  MarketPeriod,
+  MarketQuote,
   ModelConfig,
   NodeFeaturesData,
   RegimeDistribution,
@@ -63,5 +68,15 @@ export const apiClient = {
   trainingSimulation: async (epochs: number, batchSize: number, lr: number) =>
     (await client.get<TrainingResult>("/api/training/simulate", {
       params: { epochs, batch_size: batchSize, lr },
+    })).data,
+  searchMarket: async (query: string, limit = 10) =>
+    (await client.get<{ query: string; results: MarketInstrument[] }>("/api/market/search", {
+      params: { q: query, limit },
+    })).data,
+  getMarketQuote: async (symbol: string) =>
+    (await client.get<MarketQuote>("/api/market/quote", { params: { symbol } })).data,
+  getMarketHistory: async (symbol: string, period: MarketPeriod, interval: MarketInterval) =>
+    (await client.get<MarketHistory>("/api/market/history", {
+      params: { symbol, period, interval },
     })).data,
 };

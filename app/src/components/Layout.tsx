@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Wallet,
   Menu,
+  Search,
+  Microscope,
 } from "lucide-react";
 
 type NavItem = {
@@ -26,6 +28,8 @@ const navItems: NavItem[] = [
   { id: "sde", label: "Neural SDE", icon: <Brain size={20} />, description: "Latent SDE path generation" },
   { id: "scenario", label: "Scenario Generation", icon: <Zap size={20} />, description: "Synthetic scenario sampling" },
   { id: "funds", label: "Mutual Funds", icon: <Wallet size={20} />, description: "NAV history and fund comparison" },
+  { id: "market", label: "Market Explorer", icon: <Search size={20} />, description: "Search NSE/BSE stocks and watch prices" },
+  { id: "research", label: "Research & Evidence", icon: <Microscope size={20} />, description: "Method, novelty, results, and limits" },
   { id: "evaluation", label: "Evaluation", icon: <BarChart2 size={20} />, description: "Statistical and discriminative metrics" },
   { id: "training", label: "Training", icon: <Activity size={20} />, description: "Loss curves and simulation" },
 ];
