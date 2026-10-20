@@ -50,7 +50,6 @@ def generate_scenarios(
     real_list = []
     gen_list = []
     regime_list = []
-    adj_list = []
     
     with torch.no_grad():
         for batch in dataloader:
@@ -63,22 +62,21 @@ def generate_scenarios(
             node_feats = batch["node_features"].to(device)
             regimes = batch["regimes"].to(device)
             
-            # Generate synthetic data
-            r_hat, A_learned, _ = model(x, adj, node_feats)
+            # Generate synthetic data using regime-conditional prior sampling
+            # (actual SDE generation from z0 ~ p(z0 | regime), not reconstruction)
+            gen = model.sample_prior_scenarios(adj, node_feats, regimes)
             
             # Store
             real_list.append(x.cpu().numpy())
-            gen_list.append(r_hat.cpu().numpy())
+            gen_list.append(gen.cpu().numpy())
             regime_list.append(regimes.cpu().numpy())
-            adj_list.append(A_learned.cpu().numpy())
     
     # Concatenate
     real_returns = np.concatenate(real_list, axis=0)[:n_scenarios]
     gen_returns = np.concatenate(gen_list, axis=0)[:n_scenarios]
     regimes = np.concatenate(regime_list, axis=0)[:n_scenarios]
-    adj_learned = np.concatenate(adj_list, axis=0)[:n_scenarios]
     
-    return real_returns, gen_returns, regimes, adj_learned
+    return real_returns, gen_returns, regimes
 
 
 def run_evaluation(args: argparse.Namespace) -> Dict:
@@ -108,7 +106,7 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     
     # Generate scenarios
     print(f"\nGenerating {args.n_scenarios} synthetic scenarios...")
-    real_returns, gen_returns, regimes, adj_learned = generate_scenarios(
+    real_returns, gen_returns, regimes = generate_scenarios(
         model, test_loader, args.n_scenarios, args.device
     )
     
