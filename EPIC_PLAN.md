@@ -34,27 +34,42 @@
 
 ---
 
-### Story 3: End-to-End Training Run — COMPLETED
+### Story 3: End-to-End Training Run — COMPLETED (GPU)
 **Priority:** P0 (primary deliverable)  
 **Status:** DONE — committed  
-**Summary:** Trained VORTEXModel through Stage 2 (correlation loss + vol dynamics + Student-t emission). Best checkpoint: `models/checkpoints/vortex-epoch=48-val/total=64.9007.ckpt` (val/total=64.90 NLL). Checkpoint loads and forward pass produces finite (B,T,N), (B,N,N), (B,proj_dim) outputs.
+**Summary:** Trained on RTX 3050 Laptop GPU across 8+ configurations. Best result:
+raw returns + point emission + graph loss + contrastive loss + stylized facts.
+Best checkpoint: `models/checkpoints/vortex-epoch=10-val/total=0.3081.ckpt`
+(val/total=0.308, test/reconstruction=0.096). Checkpoint loads and forward pass
+produces finite outputs.
+
+**Config used:** lam_graph=0.3, lam_con=0.2, lambda_styl=0.1,
+sde_sigma_max=0.2, weight_decay=0.0005, emission=point, lam_corr=0.0,
+vol_dyn=false, rank_K=0, batch_size=8, accelerator=cuda.
 
 ---
 
 ### Story 4: Full Evaluation Against Masterplan Gates — COMPLETED
 **Priority:** P0  
 **Status:** DONE — results committed  
-**Summary:** Evaluation ran successfully. Results:
+**Summary:** Best evaluation results (raw returns + point + graph + contrastive):
+
 | Metric | Target | Result | Status |
 |---|---|---|---|
-| Kurtosis | > 3.0 | 3.21 | PASS |
-| ACF(r²) | > 0.05 | -0.059 | FAIL |
-| Corr error (Frob) | < 2.5 | 13.81 | FAIL |
+| Kurtosis | > 3.0 | 7.18 | PASS |
+| ACF(r²) | > 0.05 | -0.090 | FAIL |
+| Corr error (Frob) | < 2.5 | 19.62 | FAIL |
 | Discriminative score | < 0.60 | 1.00 | FAIL |
-| Crisis corr boost | > 50% | -7.7% | FAIL |
-| CVaR ratio | > 3x | 0.93x | FAIL |
+| Crisis corr boost | > 50% | 3.56% | FAIL |
+| CVaR ratio | > 3x | 0.48x | FAIL |
 
-Overall: 0/4 gates pass. Key blocker: discriminative score = 1.0 (synthetic data trivially distinguishable from real). GPU training recommended to close gaps.
+Overall: 1/4 gates pass. Key blocker: discriminative score = 1.0 (synthetic
+data trivially distinguishable from real). Synthetic data matches kurtosis but
+not correlation structure, volatility clustering, or regime-dependent behavior.
+
+GPU training confirmed working — ~4s/epoch on RTX 3050, 200 epochs feasible.
+Config space explored: standardized/raw returns, point/t/mt emission, rank_K=0/8,
+sigma_max 0.05-3.0, lam_graph 0-0.3, lam_con 0-0.2, lambda_styl 0-0.5.
 
 ---
 
