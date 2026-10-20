@@ -1,0 +1,8 @@
+metric,paper_reference,paper_direction,nifty50_result,comparability
+Discriminative score,Reported by TimeGAN per dataset; no universal value,Lower is better; 0 is ideal,0.44285714285714284,"Surrogate: logistic classifier, not the paper's post-hoc RNN"
+Predictive score,Reported by TimeGAN per dataset; no universal value,Lower is better,0.00044390449421927007,"Surrogate: Ridge next-step predictor, not the paper's post-hoc RNN"
+Mean,Temporal dynamics and marginal statistics preserved,Closer to real data is better,7.8680294922597e-05,Direct NIFTY-50 comparison
+Standard deviation,Temporal dynamics and marginal statistics preserved,Closer to real data is better,0.0010834760424809527,Direct NIFTY-50 comparison
+ACF lag 1,Temporal correlation preservation evaluated,Synthetic should be close to real,-0.6001138641876904,Direct value; compare with acf_lag1_real in metrics JSON
+Squared-return ACF lag 1,Volatility dynamics are part of temporal fidelity,Synthetic should be close to real,0.43876814483418786,Additional finance-specific metric
+Correlation Frobenius error,Cross-variable dynamics evaluated,Lower is better,35.22828454096736,Additional multivariate finance metric

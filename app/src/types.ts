@@ -160,3 +160,83 @@ export interface TrainingResult {
   initial_loss: number;
   trend: string;
 }
+
+export interface MarketInstrument {
+  symbol: string;
+  name: string;
+  exchange: string;
+  currency: string;
+  quote_type: string;
+}
+
+export interface MarketQuote {
+  symbol: string;
+  price: number | null;
+  previous_close: number | null;
+  change: number | null;
+  change_percent: number | null;
+  open: number | null;
+  day_high: number | null;
+  day_low: number | null;
+  volume: number | null;
+  market_cap: number | null;
+  currency: string;
+  exchange: string;
+  as_of: string;
+  source: string;
+  freshness_note: string;
+}
+
+export interface MarketBar {
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number;
+}
+
+export type MarketPeriod = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" | "max";
+export type MarketInterval = "1m" | "5m" | "15m" | "30m" | "60m" | "1d" | "1wk" | "1mo";
+
+export interface MarketHistory {
+  symbol: string;
+  period: MarketPeriod;
+  interval: MarketInterval;
+  source: string;
+  freshness_note: string;
+  bars: MarketBar[];
+}
+
+export interface ForecastStockSignal {
+  symbol: string;
+  return_20d: number;
+  volatility_annualized: number;
+  direction_score: number;
+  signal: string;
+}
+
+export interface ForecastOutlook {
+  horizon_days: number;
+  crisis_probability: number;
+  risk_regime: string;
+  confidence: number;
+  target_definition: string;
+  as_of: string;
+  features: Record<string, number>;
+  drivers: Array<{ name: string; value: number }>;
+  validation: {
+    holdout_start_index: number;
+    holdout_samples: number;
+    holdout_positive_rate: number;
+    accuracy: number;
+    brier_score: number;
+    roc_auc: number | null;
+    split: string;
+  };
+  directional_screen: {
+    strongest_positive: ForecastStockSignal[];
+    strongest_negative: ForecastStockSignal[];
+  };
+  method: string;
+}

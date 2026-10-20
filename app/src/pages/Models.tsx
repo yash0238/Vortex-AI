@@ -25,6 +25,7 @@ const NIFTY50_TICKERS = [
 
 interface ModelsProps {
   health: "loading" | "connected" | "disconnected";
+  modelLoaded: boolean;
   tab?: "gat" | "sde";
 }
 
@@ -42,7 +43,7 @@ const defaultConfig: ModelConfig = {
   batch_size: 8,
 };
 
-export default function Models({ health, tab = "gat" }: ModelsProps) {
+export default function Models({ health, modelLoaded, tab = "gat" }: ModelsProps) {
   const [activeTab, setActiveTab] = useState(tab);
   const [gatResult, setGatResult] = useState<GatForwardResult | null>(null);
   const [sdeResult, setSdeResult] = useState<SdeForwardResult | null>(null);
@@ -82,6 +83,9 @@ export default function Models({ health, tab = "gat" }: ModelsProps) {
 
   if (health === "disconnected") {
     return <ErrorState title="Backend Disconnected" message="Start the FastAPI server to use this page." />;
+  }
+  if (!modelLoaded) {
+    return <ErrorState title="Trained model not loaded" message="The available checkpoints are classifier-only. A compatible CG-NSDE generator checkpoint must be trained and loaded before model inference is available." />;
   }
 
   return (

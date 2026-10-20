@@ -49,7 +49,7 @@ def load_ticker_list() -> list[str]:
     close_path = RAW_DATA_DIR / "nifty50_close.csv"
     if close_path.exists():
         df = pd.read_csv(close_path, index_col=0, nrows=0)
-        return [c for c in df.columns if c in NIFTY50_SECTORS]
+        return df.columns.tolist()
     return [t for t in NIFTY50_SECTORS]
 
 

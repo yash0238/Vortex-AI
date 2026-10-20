@@ -8,16 +8,24 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
+import pandas as pd
 import torch
 import torchsde
+import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+
+from data.node_features import compute_node_features_compact
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -36,10 +44,19 @@ NIFTY50_TICKERS = [
 ]
 
 MODEL_STATE: dict[str, Any] = {}
+CHECKPOINT_DIR = BASE_DIR / "models" / "checkpoints"
+
+
+def require_loaded_generator() -> None:
+    if MODEL_STATE.get("generator") is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No trained CG-NSDE generator checkpoint is loaded. Train and load a compatible VORTEXModel checkpoint before running inference.",
+        )
 
 
 class ModelConfig(BaseModel):
-    n_stocks: int = 47
+    n_stocks: int = 50
     T: int = 60
     latent_dim: int = 64
     proj_dim: int = 32
@@ -55,11 +72,38 @@ class ModelConfig(BaseModel):
 def load_data() -> dict[str, np.ndarray]:
     """Load all data artifacts, handling length mismatches."""
     windows = np.load(RAW_DIR / "windows.npy", allow_pickle=True)
-    regimes = np.load(RAW_DIR / "window_regimes_v2.npy", allow_pickle=True)
-    adj = np.load(RAW_DIR / "adj_matrices.npy", allow_pickle=True)
-    node_feats = np.load(RAW_DIR / "window_node_features.npy", allow_pickle=True)
-    returns = np.load(RAW_DIR / "returns.npy", allow_pickle=True)
     regimes_daily = np.load(RAW_DIR / "regimes.npy", allow_pickle=True)
+    regimes_path = RAW_DIR / "window_regimes_v2.npy"
+    if regimes_path.exists():
+        regimes = np.load(regimes_path, allow_pickle=True)
+    else:
+        first_window_end = windows.shape[1] - 1
+        regimes = regimes_daily[first_window_end:first_window_end + len(windows)]
+    adj = np.load(RAW_DIR / "adj_matrices.npy", allow_pickle=True)
+    node_features_path = RAW_DIR / "window_node_features.npy"
+    returns = np.load(RAW_DIR / "returns.npy", allow_pickle=True)
+    close_path = RAW_DIR / "nifty50_close.csv"
+    tickers = pd.read_csv(close_path, index_col=0, nrows=0).columns.tolist()
+
+    if node_features_path.exists():
+        node_feats = np.load(node_features_path, allow_pickle=True)
+        if node_feats.ndim == 4:
+            node_feats = node_feats[:, -1]
+    else:
+        volume_path = RAW_DIR / "nifty50_volume.csv"
+        volume = None
+        if volume_path.exists():
+            volume = pd.read_csv(volume_path, index_col=0).to_numpy(dtype=np.float32)
+            if volume.shape != returns.shape:
+                volume = None
+        daily_features = compute_node_features_compact(returns, volume, tickers)
+        first_window_end = windows.shape[1] - 1
+        node_feats = daily_features[first_window_end:first_window_end + len(windows)]
+
+    if len(tickers) != windows.shape[2]:
+        raise ValueError(
+            f"Ticker count ({len(tickers)}) does not match data width ({windows.shape[2]})."
+        )
 
     n = min(len(windows), len(regimes), len(adj), len(node_feats))
     return {
@@ -69,7 +113,93 @@ def load_data() -> dict[str, np.ndarray]:
         "node_features": node_feats[:n],
         "returns": returns,
         "daily_regimes": regimes_daily,
+        "tickers": tickers,
     }
+
+
+def build_forecast_features(returns: np.ndarray) -> tuple[np.ndarray, list[str]]:
+    """Build only information available through each day for a causal risk baseline."""
+    market = np.nan_to_num(returns, nan=0.0).mean(axis=1)
+    cross_sectional_vol = np.nan_to_num(returns, nan=0.0).std(axis=1)
+    features: list[list[float]] = []
+    names = ["market_return_5d", "market_return_20d", "volatility_20d", "volatility_60d", "negative_breadth_5d", "drawdown_60d"]
+    for index in range(60, len(market)):
+        window_5 = market[index - 5:index]
+        window_20 = market[index - 20:index]
+        window_60 = market[index - 60:index]
+        equity_curve = np.exp(np.cumsum(window_60))
+        drawdown = float(np.min(equity_curve / np.maximum.accumulate(equity_curve) - 1.0))
+        features.append([
+            float(window_5.sum()),
+            float(window_20.sum()),
+            float(cross_sectional_vol[index - 20:index].mean()),
+            float(cross_sectional_vol[index - 60:index].mean()),
+            float((returns[index - 5:index] < 0).mean()),
+            drawdown,
+        ])
+    return np.asarray(features, dtype=np.float64), names
+
+
+def build_forecast_state(data: dict[str, np.ndarray], horizon: int = 5) -> dict[str, Any]:
+    """Fit a chronological logistic baseline for next-horizon crisis probability."""
+    returns = np.asarray(data["returns"], dtype=np.float64)
+    daily_regimes = np.asarray(data["daily_regimes"], dtype=np.int64)
+    features, feature_names = build_forecast_features(returns)
+    start = 60
+    targets = np.asarray([
+        int(daily_regimes[index + 1:index + horizon + 1].max())
+        for index in range(start, len(daily_regimes) - horizon)
+    ], dtype=np.int64)
+    usable_features = features[:len(targets)]
+    split = max(int(len(targets) * 0.7), 1)
+    scaler = StandardScaler().fit(usable_features[:split])
+    classifier = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
+    classifier.fit(scaler.transform(usable_features[:split]), targets[:split])
+    holdout_probability = classifier.predict_proba(scaler.transform(usable_features[split:]))[:, 1]
+    holdout_prediction = (holdout_probability >= 0.5).astype(int)
+    metrics = {
+        "holdout_start_index": int(start + split),
+        "holdout_samples": int(len(targets) - split),
+        "holdout_positive_rate": float(targets[split:].mean()),
+        "accuracy": float(accuracy_score(targets[split:], holdout_prediction)),
+        "brier_score": float(brier_score_loss(targets[split:], holdout_probability)),
+        "roc_auc": float(roc_auc_score(targets[split:], holdout_probability)) if len(np.unique(targets[split:])) > 1 else None,
+        "split": "chronological 70/30 holdout",
+    }
+    full_scaler = StandardScaler().fit(usable_features)
+    full_classifier = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
+    full_classifier.fit(full_scaler.transform(usable_features), targets)
+    latest_features = features[-1:]
+    latest_probability = float(full_classifier.predict_proba(full_scaler.transform(latest_features))[0, 1])
+    return {
+        "scaler": full_scaler,
+        "classifier": full_classifier,
+        "features": features,
+        "feature_names": feature_names,
+        "latest_probability": latest_probability,
+        "metrics": metrics,
+        "horizon_days": horizon,
+        "target_definition": f"at least one crisis-labelled day in the next {horizon} trading days",
+    }
+
+
+def build_directional_screen(data: dict[str, np.ndarray]) -> list[dict[str, Any]]:
+    returns = np.nan_to_num(np.asarray(data["returns"], dtype=np.float64), nan=0.0)
+    tickers = data["tickers"]
+    rows = []
+    for index, ticker in enumerate(tickers):
+        recent = returns[-20:, index]
+        return_20 = float(np.expm1(recent.sum()))
+        volatility = float(recent.std() * np.sqrt(252))
+        score = float(return_20 / (volatility + 1e-8))
+        rows.append({
+            "symbol": ticker,
+            "return_20d": return_20,
+            "volatility_annualized": volatility,
+            "direction_score": score,
+            "signal": "positive trend" if score > 0.25 else "negative trend" if score < -0.25 else "mixed",
+        })
+    return sorted(rows, key=lambda row: row["direction_score"], reverse=True)
 
 
 def nan_to_float(arr: np.ndarray) -> list:
@@ -91,10 +221,10 @@ def chunk_array(arr: np.ndarray, chunk_size: int = 50) -> list:
 async def lifespan(app: FastAPI):
     """Load data and build model on startup."""
     global MODEL_STATE
-    st.info("Loading data artifacts...")
     MODEL_STATE["data"] = load_data()
     MODEL_STATE["device"] = torch.device("cpu")
-    st.success("Data loaded successfully!")
+    MODEL_STATE["forecast"] = build_forecast_state(MODEL_STATE["data"])
+    MODEL_STATE["directional_screen"] = build_directional_screen(MODEL_STATE["data"])
     yield
 
 
@@ -117,7 +247,11 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model_loaded": "model" in MODEL_STATE}
+    return {
+        "status": "ok",
+        "model_loaded": MODEL_STATE.get("generator") is not None,
+        "generator_checkpoint_available": any(CHECKPOINT_DIR.glob("*.ckpt")),
+    }
 
 
 @app.get("/api/stats")
@@ -137,6 +271,40 @@ async def get_stats():
     }
 
 
+@app.get("/api/forecast/outlook")
+async def get_forecast_outlook(horizon_days: int = Query(5, ge=1, le=20)):
+    """Return a calibrated baseline next-horizon crisis outlook and stock screen."""
+    data = MODEL_STATE["data"]
+    forecast = MODEL_STATE["forecast"]
+    if horizon_days != forecast["horizon_days"]:
+        forecast = build_forecast_state(data, horizon_days)
+    probability = forecast["latest_probability"]
+    regime = "elevated risk" if probability >= 0.6 else "watch" if probability >= 0.35 else "lower risk"
+    directional = forecast.get("directional_screen") or MODEL_STATE["directional_screen"]
+    return {
+        "horizon_days": horizon_days,
+        "crisis_probability": probability,
+        "risk_regime": regime,
+        "confidence": float(abs(probability - 0.5) * 2),
+        "target_definition": forecast["target_definition"],
+        "as_of": str(data["returns"].shape[0] - 1),
+        "features": {
+            name: float(value)
+            for name, value in zip(forecast["feature_names"], forecast["features"][-1])
+        },
+        "drivers": [
+            {"name": name, "value": float(value)}
+            for name, value in zip(forecast["feature_names"], forecast["features"][-1])
+        ],
+        "validation": forecast["metrics"],
+        "directional_screen": {
+            "strongest_positive": directional[:5],
+            "strongest_negative": list(reversed(directional[-5:])),
+        },
+        "method": "Causal logistic-regression baseline over rolling market return, volatility, breadth, and drawdown features. This is a research forecast, not a guaranteed price prediction or investment advice.",
+    }
+
+
 @app.get("/api/returns")
 async def get_returns(
     stock_idx: int = Query(0, ge=0, le=49),
@@ -152,12 +320,136 @@ async def get_returns(
     regimes_daily = data["daily_regimes"]
 
     return {
-        "ticker": NIFTY50_TICKERS[stock_idx],
+        "ticker": data["tickers"][stock_idx],
         "cumulative_returns": nan_to_float(cum_returns),
         "daily_returns": nan_to_float(returns[:, stock_idx]),
         "regimes": regimes_daily.tolist(),
         "dates": list(range(len(returns))),
     }
+
+
+def normalize_market_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9^.-]{1,24}", normalized):
+        raise HTTPException(status_code=400, detail="Invalid market symbol.")
+    return normalized
+
+
+def market_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
+
+@app.get("/api/market/search")
+def search_market_instruments(
+    q: str = Query(..., min_length=2, max_length=80),
+    limit: int = Query(10, ge=1, le=20),
+):
+    """Search NSE/BSE equities through Yahoo Finance's public search API."""
+    try:
+        matches = yf.Search(q.strip(), max_results=limit * 3, news_count=0).quotes
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Market search is temporarily unavailable: {exc}") from exc
+
+    instruments = []
+    seen: set[str] = set()
+    for match in matches:
+        symbol = str(match.get("symbol", "")).upper()
+        if symbol in seen or not symbol.endswith((".NS", ".BO")):
+            continue
+        seen.add(symbol)
+        instruments.append({
+            "symbol": symbol,
+            "name": match.get("shortname") or match.get("longname") or symbol,
+            "exchange": "NSE" if symbol.endswith(".NS") else "BSE",
+            "currency": match.get("currency") or "INR",
+            "quote_type": match.get("quoteType") or "EQUITY",
+        })
+        if len(instruments) == limit:
+            break
+    return {"query": q.strip(), "results": instruments}
+
+
+@app.get("/api/market/quote")
+def get_market_quote(symbol: str = Query(..., min_length=1, max_length=24)):
+    """Return the latest available Yahoo Finance quote and its session date."""
+    normalized = normalize_market_symbol(symbol)
+    try:
+        ticker = yf.Ticker(normalized)
+        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+        if history.empty:
+            raise HTTPException(status_code=404, detail=f"No recent market data for {normalized}.")
+        fast = dict(ticker.fast_info)
+        latest = history.iloc[-1]
+        previous = history.iloc[-2] if len(history) > 1 else None
+        previous_close = market_float(fast.get("previousClose"))
+        if previous_close is None and previous is not None:
+            previous_close = market_float(previous["Close"])
+        price = market_float(fast.get("lastPrice")) or market_float(latest["Close"])
+        volume = market_float(fast.get("lastVolume"))
+        if volume is None or volume <= 0:
+            volume = market_float(latest["Volume"])
+        change = price - previous_close if price is not None and previous_close is not None else None
+        return {
+            "symbol": normalized,
+            "price": price,
+            "previous_close": previous_close,
+            "change": change,
+            "change_percent": change / previous_close * 100 if change is not None and previous_close else None,
+            "open": market_float(fast.get("open")) or market_float(latest["Open"]),
+            "day_high": market_float(fast.get("dayHigh")) or market_float(latest["High"]),
+            "day_low": market_float(fast.get("dayLow")) or market_float(latest["Low"]),
+            "volume": int(volume) if volume is not None and volume > 0 else None,
+            "market_cap": market_float(fast.get("marketCap")),
+            "currency": fast.get("currency") or "INR",
+            "exchange": "NSE" if normalized.endswith(".NS") or normalized == "^NSEI" else "BSE",
+            "as_of": history.index[-1].isoformat(),
+            "source": "Yahoo Finance via yfinance",
+            "freshness_note": "Latest available quote; may be delayed and is not licensed exchange streaming data.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Quote is temporarily unavailable for {normalized}: {exc}") from exc
+
+
+@app.get("/api/market/history")
+def get_market_history(
+    symbol: str = Query(..., min_length=1, max_length=24),
+    period: Literal["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"] = "1y",
+    interval: Literal["1m", "5m", "15m", "30m", "60m", "1d", "1wk", "1mo"] = "1d",
+):
+    """Return OHLCV bars for a selected NSE/BSE symbol and chart range."""
+    normalized = normalize_market_symbol(symbol)
+    try:
+        bars = yf.Ticker(normalized).history(period=period, interval=interval, auto_adjust=False)
+        if bars.empty:
+            raise HTTPException(status_code=404, detail=f"No history returned for {normalized}.")
+        rows = []
+        for timestamp, bar in bars.iterrows():
+            rows.append({
+                "date": timestamp.isoformat(),
+                "open": market_float(bar["Open"]),
+                "high": market_float(bar["High"]),
+                "low": market_float(bar["Low"]),
+                "close": market_float(bar["Close"]),
+                "volume": int(market_float(bar["Volume"]) or 0),
+            })
+        return {
+            "symbol": normalized,
+            "period": period,
+            "interval": interval,
+            "source": "Yahoo Finance via yfinance",
+            "freshness_note": "Historical bars; availability and delay depend on Yahoo Finance.",
+            "bars": rows,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"History is temporarily unavailable for {normalized}: {exc}") from exc
 
 
 @app.get("/api/window")
@@ -188,14 +480,14 @@ async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
     try:
         centrality = nx.degree_centrality(G)
         top_nodes = sorted(centrality.items(), key=lambda x: -x[1])[:10]
-        top_tickers = [NIFTY50_TICKERS[i] for i, _ in top_nodes]
+        top_tickers = [data["tickers"][i] for i, _ in top_nodes]
     except Exception:
-        top_tickers = NIFTY50_TICKERS[:10]
+        top_tickers = data["tickers"][:10]
 
     return {
         "z": nan_to_float(adj),
-        "x": NIFTY50_TICKERS,
-        "y": NIFTY50_TICKERS,
+        "x": data["tickers"],
+        "y": data["tickers"],
         "regime": "Crisis" if regimes[window_idx] else "Normal",
         "regime_idx": int(regimes[window_idx]),
         "edge_density": density,
@@ -208,11 +500,11 @@ async def get_adjacency(window_idx: int = Query(0, ge=0, le=3639)):
 async def get_node_features(window_idx: int = Query(0, ge=0, le=3639)):
     """Get node features for a specific window."""
     data = MODEL_STATE["data"]
-    feats = data["node_features"][window_idx, -1, :, :]
+    feats = data["node_features"][window_idx]
     feat_names = ["Return", "Abs Return", "Volume", "Sector ID", "Band Limit", "Dist to Band"]
 
     return {
-        "tickers": NIFTY50_TICKERS,
+        "tickers": data["tickers"],
         "feature_names": feat_names,
         "data": nan_to_float(feats),
     }
@@ -237,6 +529,7 @@ async def get_regime_distribution():
 @app.post("/api/model/gat-forward")
 async def gat_forward(config: ModelConfig = None):
     """Run GAT encoder forward pass on a batch of data."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -258,7 +551,7 @@ async def gat_forward(config: ModelConfig = None):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -286,6 +579,7 @@ async def gat_forward(config: ModelConfig = None):
 @app.post("/api/model/sde-forward")
 async def sde_forward(config: ModelConfig = None):
     """Run Neural SDE forward pass on a batch of data."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -315,7 +609,7 @@ async def sde_forward(config: ModelConfig = None):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -346,6 +640,7 @@ async def sde_forward(config: ModelConfig = None):
 @app.post("/api/scenario/generate")
 async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0, n_scenarios: int = 5, stock_idx: int = 0):
     """Generate synthetic scenarios from the CG-NSDE model."""
+    require_loaded_generator()
     if config is None:
         config = ModelConfig()
     data = MODEL_STATE["data"]
@@ -375,7 +670,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
 
@@ -419,7 +714,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
     return {
         "scenarios": nan_to_float(synth_returns),
         "real_avg": nan_to_float(real_returns.mean(axis=0)),
-        "tickers": [NIFTY50_TICKERS[stock_idx]],
+        "tickers": [data["tickers"][stock_idx]],
         "stock_idx": stock_idx,
         "stats": {
             "real_kurtosis": real_kurt,
@@ -438,6 +733,7 @@ async def generate_scenario(config: ModelConfig = None, noise_scale: float = 1.0
 @app.get("/api/evaluation/metrics")
 async def get_evaluation_metrics(batch_size: int = 8):
     """Run full evaluation metrics on model output."""
+    require_loaded_generator()
     data = MODEL_STATE["data"]
     device = MODEL_STATE["device"]
     cfg = ModelConfig()
@@ -464,7 +760,7 @@ async def get_evaluation_metrics(batch_size: int = 8):
     adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][:n]).float(),
                            nan=0.0, posinf=1.0, neginf=0.0).to(device)
     node_feats = torch.nan_to_num(
-        torch.from_numpy(data["node_features"][:n, -1, :, :]).float(),
+        torch.from_numpy(data["node_features"][:n]).float(),
         nan=0.0, posinf=0.0, neginf=0.0
     ).to(device)
     regimes = torch.from_numpy(data["window_regimes"][:n]).float().to(device)
@@ -494,11 +790,13 @@ async def get_evaluation_metrics(batch_size: int = 8):
                     acf_vals.append(c[0, 1])
         return float(np.mean(acf_vals)) if acf_vals else 0.0
 
-    real_acf = mean_acf_sq_batch(real_flat)
-    synth_acf = mean_acf_sq_batch(synth_flat)
+    real_acf = mean_acf_sq_batch(x.detach().cpu().numpy())
+    synth_acf = mean_acf_sq_batch(r_hat.detach().cpu().numpy())
 
-    corr_real = np.corrcoef(real_flat[:50] if len(real_flat) >= 50 else real_flat)
-    corr_synth = np.corrcoef(synth_flat[:50] if len(synth_flat) >= 50 else synth_flat)
+    real_returns = x.detach().cpu().numpy().reshape(-1, x.shape[-1])
+    synth_returns = r_hat.detach().cpu().numpy().reshape(-1, r_hat.shape[-1])
+    corr_real = np.corrcoef(real_returns, rowvar=False)
+    corr_synth = np.corrcoef(synth_returns, rowvar=False)
     corr_error = float(np.linalg.norm(corr_real - corr_synth, "fro")) if corr_real.shape == corr_synth.shape else float("NaN")
 
     from sklearn.ensemble import GradientBoostingClassifier
@@ -611,7 +909,7 @@ async def training_simulation(epochs: int = 10, batch_size: int = 8, lr: float =
         adj = torch.nan_to_num(torch.from_numpy(data["adj_matrices"][idx]).float(),
                                nan=0.0, posinf=1.0, neginf=0.0).to(device)
         node_feats = torch.nan_to_num(
-            torch.from_numpy(data["node_features"][idx, -1, :, :]).float(),
+            torch.from_numpy(data["node_features"][idx]).float(),
             nan=0.0, posinf=0.0, neginf=0.0
         ).to(device)
         reg = torch.from_numpy(data["window_regimes"][idx]).float().to(device)
@@ -654,4 +952,4 @@ from sklearn.decomposition import PCA
 from scipy.stats import kurtosis as scipy_kurtosis
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import cross_val_score
-from training.losses import reconstruction_loss
+from training.losses import graph_consistency_loss, reconstruction_loss
