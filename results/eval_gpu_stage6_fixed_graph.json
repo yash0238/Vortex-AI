@@ -1,0 +1,58 @@
+{
+  "statistical_fidelity": {
+    "kurtosis_real": 23.13022858234242,
+    "kurtosis_gen": 4.521441172432538,
+    "kurtosis_pass": true,
+    "kurtosis_interval": [
+      5.586982900415579,
+      51.97130173681476
+    ],
+    "kurtosis_median_rule": false,
+    "acf_sq_real": 0.01116881894024658,
+    "acf_sq_gen": -0.018460954209363705,
+    "acf_sq_pass": false,
+    "corr_error": 12.511259743608676,
+    "corr_mae": 0.19928744523411246,
+    "corr_error_pass": false,
+    "all_tests_pass": false
+  },
+  "distribution_comparison": {
+    "mean_real": -0.014080538972259844,
+    "mean_gen": -0.010456571471621903,
+    "std_real": 0.9306197549523574,
+    "std_gen": 0.14223720602070136,
+    "mean_abs_diff": 0.0036239675006379413,
+    "std_abs_diff": 0.788382548931656,
+    "skew_real": -0.17462126298449163,
+    "skew_gen": -0.27071769819881175,
+    "kurtosis_real": 23.13022858234242,
+    "kurtosis_gen": 4.521441172432538
+  },
+  "returns_acf": {
+    "returns_acf_lag1": 0.11254797121356974,
+    "returns_uncorrelated": false
+  },
+  "discriminative": {
+    "discriminative_score": 1.0,
+    "discriminative_std": 0.0,
+    "discriminative_pass": false,
+    "indistinguishability": 0.0
+  },
+  "predictive": {
+    "predictive_mse": 0.2034921772529075,
+    "predictive_r2": 0.010517507540117155,
+    "predictive_pass": true
+  },
+  "contagion": {
+    "corr_normal": 0.4901143515464399,
+    "corr_crisis": 0.45552546806056765,
+    "crisis_corr_boost": -0.07057308845728595,
+    "contagion_pass": false
+  },
+  "cvar": {
+    "cvar_normal": 0.060617934820277164,
+    "cvar_crisis": 0.074649611047288,
+    "cvar_ratio": 1.2314773056623025,
+    "cvar_pass": false
+  }
+}
