@@ -449,23 +449,24 @@ def train(args: argparse.Namespace):
         print(f"Run dir: runs/{run_id}")
     
     # Setup callbacks
+    monitor_metric = config.get("monitor_metric", "val/reconstruction")
     ckpt_tag = "vortex" if ablation == "none" else f"vortex-abl-{ablation}"
     checkpoint_callback = ModelCheckpoint(
         dirpath="models/checkpoints",
-        filename=ckpt_tag + "-{epoch:02d}-{val/reconstruction:.4f}",
-        monitor="val/reconstruction",
+        filename=ckpt_tag + "-{epoch:02d}-{" + monitor_metric.split("/")[1] + ":.4f}",
+        monitor=monitor_metric,
         mode="min",
         save_top_k=config.get("save_top_k", 3),
         save_last=True,
     )
     
     early_stopping = EarlyStopping(
-        monitor="val/reconstruction",
+        monitor=monitor_metric,
         patience=config.get("patience", 20),
         mode="min",
         verbose=True,
     )
-    print(f"EarlyStopping patience: {config.get('patience', 20)} (best_val monitor val/reconstruction)")
+    print(f"EarlyStopping patience: {config.get('patience', 20)} (best_val monitor {monitor_metric})")
     
     # Setup trainer (logger=False when wandb off: env tensorboard/protobuf is broken)
     trainer = pl.Trainer(
