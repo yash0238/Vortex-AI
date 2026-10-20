@@ -83,6 +83,23 @@ def test_circuit_bands():
     assert len(BAND_A_STOCKS) == 3
 
 
+def test_regime_conditional_prior():
+    from training.vortex_model import VORTEXModel
+    import torch
+    m = VORTEXModel(n_stocks=6, latent_dim=8, T=10).eval()
+    # prior_mu and prior_logvar should be (2 regimes, latent_dim)
+    assert m.prior_mu.shape == (2, 8)
+    assert m.prior_logvar.shape == (2, 8)
+    # _kl_to_prior should work with mixed regime batch
+    regimes = torch.tensor([0, 0, 1, 1])
+    # Need to stash stats first
+    mu = torch.randn(4, 8)
+    logvar = torch.randn(4, 8)
+    m.sde_model._last_stats = (mu, logvar)
+    kl = m._kl_to_prior(regimes)
+    assert torch.isfinite(kl) and kl >= 0.0
+
+
 if __name__ == "__main__":
     test_imports()
     print("imports ok")
@@ -96,4 +113,6 @@ if __name__ == "__main__":
     print("eval ok")
     test_circuit_bands()
     print("circuit ok")
+    test_regime_conditional_prior()
+    print("regime prior ok")
     print("ALL SMOKE TESTS PASSED")

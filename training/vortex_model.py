@@ -185,6 +185,11 @@ class VORTEXModel(pl.LightningModule):
         progress = (self.current_epoch + 1) / self.warmup_epochs
         return self.lam_con * min(1.0, progress)
 
+    def _eff_lambda_styl(self) -> float:
+        """Ramp stylized facts weight 0 -> lambda_styl over warmup_epochs."""
+        progress = (self.current_epoch + 1) / self.warmup_epochs
+        return self.lambda_styl * min(1.0, progress)
+
     def _eff_beta(self) -> float:
         """KL weight ramp 0 -> beta_max over prior_warmup epochs."""
         progress = (self.current_epoch + 1) / self.prior_warmup
@@ -306,7 +311,7 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
-            lambda_styl=self.lambda_styl,
+            lambda_styl=self._eff_lambda_styl(),
         )
 
         # 7.1: KL to regime-conditional prior (beta ramped)
@@ -367,7 +372,7 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
-            lambda_styl=self.lambda_styl,
+            lambda_styl=self._eff_lambda_styl(),
         )
 
         # Log all components
@@ -406,7 +411,7 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
-            lambda_styl=self.lambda_styl,
+            lambda_styl=self._eff_lambda_styl(),
         )
         for key, value in components.items():
             key_val = key.replace("loss/", "")

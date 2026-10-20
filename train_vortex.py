@@ -287,11 +287,9 @@ def create_dataloaders(
             self.seed = seed
             self.epoch = 0
             pool_labels = self.labels[self.pool]
-            crisis_frac = float(pool_labels.mean())
-            n_crisis = max(min_per_class, int(round(batch_size * crisis_frac)))
-            n_crisis = min(n_crisis, batch_size - min_per_class)
-            self.n_crisis = n_crisis
-            self.n_normal = batch_size - n_crisis
+            # 50/50 crisis/normal split per batch (crisis oversampled from ~12% to 50%)
+            self.n_crisis = batch_size // 2
+            self.n_normal = batch_size - self.n_crisis
 
         def __iter__(self):
             g = torch.Generator().manual_seed(self.seed + self.epoch)
@@ -454,20 +452,20 @@ def train(args: argparse.Namespace):
     ckpt_tag = "vortex" if ablation == "none" else f"vortex-abl-{ablation}"
     checkpoint_callback = ModelCheckpoint(
         dirpath="models/checkpoints",
-        filename=ckpt_tag + "-{epoch:02d}-{val/total:.4f}",
-        monitor="val/total",
+        filename=ckpt_tag + "-{epoch:02d}-{val/reconstruction:.4f}",
+        monitor="val/reconstruction",
         mode="min",
         save_top_k=config.get("save_top_k", 3),
         save_last=True,
     )
     
     early_stopping = EarlyStopping(
-        monitor="val/total",
+        monitor="val/reconstruction",
         patience=config.get("patience", 20),
         mode="min",
         verbose=True,
     )
-    print(f"EarlyStopping patience: {config.get('patience', 20)} (best_val monitor val/total)")
+    print(f"EarlyStopping patience: {config.get('patience', 20)} (best_val monitor val/reconstruction)")
     
     # Setup trainer (logger=False when wandb off: env tensorboard/protobuf is broken)
     trainer = pl.Trainer(
