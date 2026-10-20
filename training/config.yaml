@@ -19,21 +19,27 @@ cgnsde:
   proj_dim: 32
   in_feats: 6
   gat_heads: 4
-  gat_dropout: 0.1
+  gat_dropout: 0.6
   tau: 0.07
   lr: 0.001
   sde_hidden_dim: 128
   max_epochs: 200
-  batch_size: 32
+  batch_size: 8
   test_size: 0.2
   validation_size: 0.15
   seed: 42
   gradient_clip: 1.0
+  num_workers: 0
   crisis_percentile: 85
   loss_weights:
     lam_rec: 1.0
-    lam_graph: 0.3
-    lam_con: 0.2
-    lam_na: 0.05
-  lambda_styl: 0.5
+    lam_graph: 0.0
+    lam_con: 0.0
+    lam_na: 0.0
+  lambda_styl: 0.0
   warmup_epochs: 20
+  sde_sigma_max: 0.5
+  weight_decay: 0.0005
+  lam_corr: 10.0
+  vol_dyn: true
+  emission: t

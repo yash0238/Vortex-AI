@@ -103,7 +103,7 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=0,  # 0 required on Windows (spawn/pickle truncation)
     )
     
     # Generate scenarios

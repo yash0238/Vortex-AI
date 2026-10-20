@@ -6,7 +6,6 @@ sys.path.insert(0, ".")
 from data.preprocess import label_regimes
 
 px = pd.read_csv("data/raw/nifty50_close.csv", index_col=0, parse_dates=True)
-px = px.loc["2010-11-08":]
 px = px.apply(pd.to_numeric, errors="coerce").ffill().bfill()
 ret = np.log(px / px.shift(1)).dropna(how="all").fillna(0.0)
 R = ret.values.astype(np.float64)

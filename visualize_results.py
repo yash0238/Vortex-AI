@@ -347,7 +347,7 @@ def visualize_all(args: argparse.Namespace):
     # Load dataset
     print("Loading dataset...")
     dataset = VortexDataset(Path("data/raw"))
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
     
     # 1. Fan chart
     print("\n" + "-"*80)
