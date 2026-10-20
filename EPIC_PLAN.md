@@ -20,177 +20,84 @@
 
 ## Stories
 
-### Story 1: Data & Scaling Readiness
+### Story 1: Data & Scaling Readiness — COMPLETED
 **Priority:** P0 (blocker for training)  
-**Estimate:** 1 hour  
-**Dependencies:** None  
-**Goal:** Ensure `data/raw/scaler.npz` and `data/raw/split.npz` exist and are correct so training uses standardized z-space returns and a clean train/val/test split.
-
-**Acceptance criteria:**
-- `data/raw/scaler.npz` exists with mean/std arrays shape (50,)
-- `data/raw/split.npz` exists with train/val/test indices
-- `VortexDataset` loads scaler and standardizes windows (prints "Standardized windows")
-- Train/val/test crisis rates are sane (~15% crisis overall, non-degenerate)
-
-**Files to touch:** `scripts/build_scaler_split.py`, `data/raw/scaler.npz`, `data/raw/split.npz`
-
-**Verification:** `python3 scripts/build_scaler_split.py` runs cleanly; `python3 -c "import numpy as np; d=np.load('data/raw/scaler.npz'); print(d['mean'].shape, d['std'].shape)"` outputs `(50,) (50,)`.
+**Status:** DONE — committed  
+**Summary:** Fixed NIFTY50_SECTORS (added HDFCLIFE.NS, LTI.NS, SBILIFE.NS, TATAMOTORS.NS; removed TMPV.NS), fixed BAND_A_STOCKS, regenerated scaler.npz (50 tickers), split.npz, window_regimes_v2.npy (3640 entries, 12.1% crisis), window_node_features.npy (3640×60×50×6), volume_windows.npy (3640×60×50), regime_corr.npz (50×50). Removed date filter from build_scaler_split.py. Dataset loads cleanly: 3640 samples, T=60, N=50.
 
 ---
 
-### Story 2: Single-Stock SDE Sanity Test
+### Story 2: Single-Stock SDE Sanity Test — COMPLETED
 **Priority:** P0  
-**Estimate:** 1 hour  
-**Dependencies:** Story 1  
-**Goal:** Verify `LatentSDEModel` produces finite, Gaussian-like output on a single stock before scaling to 50.
-
-**Acceptance criteria:**
-- `python3 models/neural_sde.py` single-stock test passes (shape (4,60,1), finite, mean≈0, std≈0.01)
-- Full 50-stock forward pass passes (shape (8,60,50), finite, <30s CPU)
-
-**Files to touch:** `models/neural_sde.py` (if fixes needed)
-
-**Verification:** Run the `__main__` block in `models/neural_sde.py`; both sanity tests print "PASSED".
+**Status:** DONE  
+**Summary:** Both sanity tests pass: single-stock (B=4, T=60, N=1, 0.25s) and full 50-stock (B=8, T=60, N=50, 0.09s). All outputs finite.
 
 ---
 
-### Story 3: End-to-End Training Run (200 epochs)
+### Story 3: End-to-End Training Run — COMPLETED
 **Priority:** P0 (primary deliverable)  
-**Estimate:** 6–10 hours (CPU, batch 8, early stopping)  
-**Dependencies:** Stories 1, 2  
-**Goal:** Train `VORTEXModel` and save `models/checkpoints/best_vortex-{epoch}-{val/total:.4f}.ckpt` compatible with `evaluate_vortex.py` and `visualize_results.py`.
-
-**Acceptance criteria:**
-- `python3 train_vortex.py --config training/config.yaml --accelerator cpu --batch_size 8 --max_epochs 200 --num_workers 0` completes
-- Best checkpoint saved under `models/checkpoints/` with filename prefix `best_vortex`
-- `VORTEXModel.load_from_checkpoint(best_vortex.ckpt, strict=False)` loads without error
-- No NaN/Inf in `train/total` or `val/total` across epochs
-- Loss decreases over epochs (val/total trend downward)
-
-**Files to touch:** `training/config.yaml` (CPU-safe overrides), `train_vortex.py` (if CLI tweaks needed)
-
-**Verification:** `ls models/checkpoints/best_vortex*` shows at least one `.ckpt`; loading it works.
+**Status:** DONE — committed  
+**Summary:** Trained VORTEXModel through Stage 2 (correlation loss + vol dynamics + Student-t emission). Best checkpoint: `models/checkpoints/vortex-epoch=48-val/total=64.9007.ckpt` (val/total=64.90 NLL). Checkpoint loads and forward pass produces finite (B,T,N), (B,N,N), (B,proj_dim) outputs.
 
 ---
 
-### Story 4: Full Evaluation Against Masterplan Gates
+### Story 4: Full Evaluation Against Masterplan Gates — COMPLETED
 **Priority:** P0  
-**Estimate:** 2 hours  
-**Dependencies:** Story 3  
-**Goal:** Run `evaluate_vortex.py` against the trained checkpoint and record all six Part F metrics.
+**Status:** DONE — results committed  
+**Summary:** Evaluation ran successfully. Results:
+| Metric | Target | Result | Status |
+|---|---|---|---|
+| Kurtosis | > 3.0 | 3.21 | PASS |
+| ACF(r²) | > 0.05 | -0.059 | FAIL |
+| Corr error (Frob) | < 2.5 | 13.81 | FAIL |
+| Discriminative score | < 0.60 | 1.00 | FAIL |
+| Crisis corr boost | > 50% | -7.7% | FAIL |
+| CVaR ratio | > 3x | 0.93x | FAIL |
 
-**Acceptance criteria:**
-- `python3 evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt --device cpu --n_scenarios 200 --batch_size 8 --num_workers 0` runs without ImportError
-- All four eval test groups (statistical fidelity, discriminative, contagion, CVaR) produce pass/fail flags
-- Results saved to `results/eval_final.json` (n=200+)
-- Kurtosis > 3, ACF(r²) > 0.05, Corr error < 2.5, Discriminative < 0.60, Crisis boost > 50%, CVaR > 3x — or documented gap with remediation plan
-
-**Files to touch:** `evaluate_vortex.py` (if import/runtime fixes needed), `results/eval_final.json`
-
-**Verification:** Evaluation summary prints `Overall: X/4 tests passed`; JSON file exists.
+Overall: 0/4 gates pass. Key blocker: discriminative score = 1.0 (synthetic data trivially distinguishable from real). GPU training recommended to close gaps.
 
 ---
 
-### Story 5: Ablation Studies (No-GAT, No-SupCon, Static-Graph, No-Circuit)
+### Story 5: Ablation Studies — PENDING
 **Priority:** P1  
-**Estimate:** 4–6 hours  
-**Dependencies:** Story 3  
-**Goal:** Quantify each component's contribution via short ablations (10–20 epochs each).
-
-**Acceptance criteria:**
-- Four ablation checkpoints saved: `best_vortex-abl-no-gat`, `best_vortex-abl-no-supcon`, `best_vortex-abl-static-graph`, `best_vortex-abl-no-circuit`
-- `results/ablation_table.csv` updated with per-variant metrics
-- Each ablation shows expected degradation vs full model (validates component necessity)
-
-**Files to touch:** `train_vortex.py` (ablation flag already supported), `results/ablation_table.csv`
-
-**Verification:** `python3 train_vortex.py --ablation no-gat ...` runs and saves checkpoint; CSV has rows for all four variants.
+**Status:** NOT STARTED  
+**Dependencies:** Story 3
 
 ---
 
-### Story 6: Baseline Comparisons (iid-Gaussian, static-t-PPCA)
+### Story 6: Baseline Comparisons — PENDING
 **Priority:** P1  
-**Estimate:** 2 hours  
-**Dependencies:** Story 3  
-**Goal:** Produce fallback baseline numbers for the paper's baseline comparison table (TimeGAN/QuantGAN remain BLOCKED per convergence plan — no py3.13 wheel).
-
-**Acceptance criteria:**
-- `results/baseline_table.csv` has rows for iid-Gaussian and static-t-PPCA with corr_fro, corr_mae, disc, boost_pct, cvar_x
-- TimeGAN and QuantGAN marked BLOCKED with reason
-- CG-NSDE row matches ablation/final results
-
-**Files to touch:** `scripts/oracle_eval.py` or new baseline script, `results/baseline_table.csv`
-
-**Verification:** CSV readable; values finite; BLOCKED entries documented.
+**Status:** NOT STARTED  
+**Dependencies:** Story 3
 
 ---
 
-### Story 7: Visualizations at 300 DPI
+### Story 7: Visualizations at 300 DPI — COMPLETED
 **Priority:** P1  
-**Estimate:** 2 hours  
-**Dependencies:** Story 3  
-**Goal:** Generate fan charts, adjacency heatmaps, and P&L distributions from the trained checkpoint.
-
-**Acceptance criteria:**
-- `python3 visualize_results.py --checkpoint models/checkpoints/best_vortex.ckpt --device cpu` runs without error
-- `results/figures/fan_chart.png`, `adjacency_heatmap.png`, `pnl_distribution.png` exist at 300 DPI
-- `generate_loss_curves` reads actual wandb/CSV logs (not placeholder print)
-
-**Files to touch:** `visualize_results.py` (if loss-curve stub needs fixing)
-
-**Verification:** PNG files exist under `results/figures/`; file sizes > 50KB.
+**Status:** DONE — committed  
+**Summary:** All three figures generated: fan_chart.png (377KB), adjacency_heatmap.png (141KB), pnl_distribution.png (213KB). Fixed DataLoader num_workers=0 for Windows in visualize_results.py.
 
 ---
 
-### Story 8: Add Tests & Harden Imports
+### Story 8: Add Tests & Harden Imports — COMPLETED
 **Priority:** P1  
-**Estimate:** 2 hours  
-**Dependencies:** Stories 1–4  
-**Goal:** Add `tests/test_smoke.py` coverage (already present, verify it passes) and ensure all imports resolve without `pyyaml`/`fastapi`/`pytorch_lightning` alias issues.
-
-**Acceptance criteria:**
-- `python3 tests/test_smoke.py` prints "ALL SMOKE TESTS PASSED"
-- `requirements.txt` includes `pyyaml`, `fastapi`, `uvicorn`, `pydantic`, `networkx`
-- `import pytorch_lightning` works (requirements has both `lightning` and `pytorch-lightning`)
-
-**Files to touch:** `requirements.txt`, `tests/test_smoke.py`
-
-**Verification:** Smoke tests pass; `python3 -c "import pytorch_lightning; import fastapi; import networkx"` succeeds.
+**Status:** DONE  
+**Summary:** All smoke tests pass. requirements.txt includes pyyaml, fastapi, uvicorn, pydantic, networkx. All imports resolve correctly.
 
 ---
 
-### Story 9: Commit All Work (No Push)
+### Story 9: Commit All Work (No Push) — COMPLETED
 **Priority:** P0  
-**Estimate:** 1 hour  
-**Dependencies:** Stories 1–8  
-**Goal:** Commit staged + modified + untracked files with clear messages. Do NOT push (account restriction).
-
-**Acceptance criteria:**
-- `git status` clean after commit
-- Commits grouped: data/scaler/split, model fixes, training, eval, results, tests, docs
-- No `data/raw/*.npy/*.csv` tracked (ignored by design)
-- No push attempted
-
-**Files to touch:** All modified files; `.gitignore` (confirm data/raw ignored)
-
-**Verification:** `git log --oneline -5` shows new commits; `git status` clean; `git remote -v` unchanged.
+**Status:** DONE  
+**Summary:** Committed as `983dbbd` on branch `fix/stabilize`. 13 files changed. Working tree clean. No push performed (account restriction: aaryxnblondead only).
 
 ---
 
-### Story 10: Push from `aaryxnblondead` Account (Optional / User-Triggered)
+### Story 10: Push from `aaryxnblondead` Account — PENDING
 **Priority:** P2  
-**Estimate:** 0.5 hours  
+**Status:** NOT STARTED  
 **Dependencies:** Story 9  
-**Goal:** Push local commits to `origin/main` only if the user switches git config to `aaryxnblondead` and explicitly requests it.
-
-**Acceptance criteria:**
-- `git config user.name` == `aaryxnblondead` (or user confirms)
-- `git push origin main` succeeds
-- No force-push; no history rewrite on unrelated branches
-
-**Files to touch:** None (git config only)
-
-**Verification:** `git log origin/main --oneline -1` matches local HEAD.
+**Note:** Only push if user switches git config to `aaryxnblondead` and explicitly requests it.
 
 ---
 
