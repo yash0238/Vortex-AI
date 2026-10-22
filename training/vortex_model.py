@@ -311,7 +311,9 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
+            lam_corr=self._eff_lam_corr(),
             lambda_styl=self._eff_lambda_styl(),
+            regime_corr=self._load_regime_corr(x.device),
         )
 
         # 7.1: KL to regime-conditional prior (beta ramped)
@@ -372,7 +374,9 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
+            lam_corr=self._eff_lam_corr(),
             lambda_styl=self._eff_lambda_styl(),
+            regime_corr=self._load_regime_corr(x.device),
         )
 
         # Log all components
@@ -411,7 +415,9 @@ class VORTEXModel(pl.LightningModule):
             lam_graph=self.lam_graph,
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
+            lam_corr=self._eff_lam_corr(),
             lambda_styl=self._eff_lambda_styl(),
+            regime_corr=self._load_regime_corr(x.device),
         )
         for key, value in components.items():
             key_val = key.replace("loss/", "")

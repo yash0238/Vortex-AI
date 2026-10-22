@@ -115,20 +115,45 @@ def graph_consistency_loss(
     return (a_learned - a_empirical).pow(2).mean()
 
 
-def circuit_filter_loss(
-    r_hat: torch.Tensor,
-    band: float = 0.10,
-) -> torch.Tensor:
-    """Soft penalty for returns exceeding NSE circuit filter bands.
+def _pooled_correlation(r: torch.Tensor) -> torch.Tensor:
+    """Pooled correlation matrix for (B, T, N) or (B, N) returns."""
+    if r.dim() == 3:
+        r = r.reshape(-1, r.shape[-1])  # (B*T, N)
+    r = r - r.mean(dim=0, keepdim=True)
+    cov = (r.T @ r) / max(1, r.shape[0] - 1)
+    sd = torch.sqrt(torch.diag(cov)).clamp(min=1e-8)
+    return cov / sd.unsqueeze(1) / sd.unsqueeze(0)
 
-    Penalizes squared magnitude of any return exceeding the band limit.
+
+def correlation_loss(
+    r_gen: torch.Tensor,
+    regimes: torch.Tensor,
+    regime_corr: dict[str, torch.Tensor],
+) -> torch.Tensor:
+    """Per-regime pooled correlation Frobenius error vs empirical targets.
 
     Args:
-        r_hat: (..., N) — predicted returns
-        band: Circuit filter limit (default 10% for most NIFTY-50 stocks)
+        r_gen: (B, T, N) or (B, N) — generated returns
+        regimes: (B,) — regime labels (0=normal, 1=crisis)
+        regime_corr: dict with "crisis" and "normal" (N, N) correlation matrices
+
+    Returns:
+        Mean Frobenius^2 error over off-diagonal elements across regimes with >=4 samples
     """
-    violation = torch.clamp(r_hat.abs() - band, min=0.0)
-    return violation.pow(2).mean()
+    n = r_gen.shape[-1]
+    mask = ~torch.eye(n, device=r_gen.device, dtype=torch.bool)
+    tot, cnt = 0.0, 0
+    for rg, nm in ((1, "crisis"), (0, "normal")):
+        sel = (regimes.long() == rg).nonzero(as_tuple=True)[0]
+        if len(sel) < 4:
+            continue
+        cg = _pooled_correlation(r_gen[sel])
+        tg = regime_corr[nm]
+        tot = tot + ((cg[mask] - tg[mask]).pow(2).sum() / (n * (n - 1)))
+        cnt += 1
+    if cnt == 0:
+        return torch.tensor(0.0, device=r_gen.device)
+    return tot / cnt
 
 
 def total_loss(
@@ -143,16 +168,19 @@ def total_loss(
     lam_graph: float = 0.1,
     lam_con: float = 0.1,
     lam_na: float = 0.05,
+    lam_corr: float = 0.0,
     lambda_styl: float = 0.1,
+    regime_corr: dict[str, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Assemble the full CG-NSDE loss.
 
     L_total = lam_rec * L_rec + lam_graph * L_graph
              + lam_con * L_con + lam_na * L_circuit
+             + lam_corr * L_corr
 
     Returns:
         total: weighted sum scalar tensor.
-        components: dict with keys total/reconstruction/graph/contrastive/circuit.
+        components: dict with keys total/reconstruction/graph/contrastive/circuit/correlation.
 
     Args:
         r_real: (B, T, N) — true window returns
@@ -162,19 +190,26 @@ def total_loss(
         z_proj: (B, proj_dim) — projection head output for contrastive loss
         regime_labels: (B,) — regime labels (0=normal, 1=crisis)
         supcon_loss_fn: Callable — SupConLoss instance
-        lam_rec, lam_graph, lam_con, lam_na: Loss weights
+        lam_rec, lam_graph, lam_con, lam_na, lam_corr: Loss weights
         lambda_styl: Stylized facts weight in reconstruction loss
+        regime_corr: dict with "crisis" and "normal" (N, N) correlation matrices for correlation loss
     """
     l_rec = reconstruction_loss(r_real, r_hat, lambda_styl=lambda_styl)
     l_graph = graph_consistency_loss(a_learned, a_empirical)
     l_con = supcon_loss_fn(z_proj, regime_labels)
     l_na = circuit_filter_loss(r_hat, band=0.10)
+    l_corr = (
+        correlation_loss(r_hat, regime_labels, regime_corr)
+        if (lam_corr > 0.0 and regime_corr is not None)
+        else torch.tensor(0.0, device=r_hat.device)
+    )
 
     total = (
         lam_rec * l_rec
         + lam_graph * l_graph
         + lam_con * l_con
         + lam_na * l_na
+        + lam_corr * l_corr
     )
     components = {
         "total": total,
@@ -182,6 +217,7 @@ def total_loss(
         "graph": l_graph,
         "contrastive": l_con,
         "circuit": l_na,
+        "correlation": l_corr,
     }
     return total, components
 
@@ -194,3 +230,19 @@ __all__ = [
     "circuit_filter_loss",
     "total_loss",
 ]
+
+
+def circuit_filter_loss(
+    r_hat: torch.Tensor,
+    band: float = 0.10,
+) -> torch.Tensor:
+    """Soft penalty for returns exceeding NSE circuit filter bands.
+
+    Penalizes squared magnitude of any return exceeding the band limit.
+
+    Args:
+        r_hat: (..., N) — predicted returns
+        band: Circuit filter limit (default 10% for most NIFTY-50 stocks)
+    """
+    violation = torch.clamp(r_hat.abs() - band, min=0.0)
+    return violation.pow(2).mean()

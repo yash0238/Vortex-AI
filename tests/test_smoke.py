@@ -37,7 +37,7 @@ def test_total_loss_contract():
                      SupConLoss(), lam_na=0.05)
     assert isinstance(out, tuple) and len(out) == 2
     loss, comp = out
-    assert set(comp) == {"total", "reconstruction", "graph", "contrastive", "circuit"}
+    assert set(comp) == {"total", "reconstruction", "graph", "contrastive", "circuit", "correlation"}
     assert torch.isfinite(loss) and all(torch.isfinite(v).all() for v in comp.values())
 
 
