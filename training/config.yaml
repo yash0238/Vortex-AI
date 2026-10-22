@@ -43,9 +43,9 @@ cgnsde:
   warmup_epochs: 20
   sde_sigma_max: 3.0
   weight_decay: 0.0005
-  lam_corr: 50.0
-  vol_dyn: false
+  lam_corr: 200.0
+  vol_dyn: true
   emission: mt
   rank_K: 8
-  beta_max: 0.05
-  prior_warmup: 10
+  beta_max: 0.3
+  prior_warmup: 5

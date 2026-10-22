@@ -114,7 +114,8 @@ class VORTEXModel(pl.LightningModule):
         self.supcon = SupConLoss(temperature=tau)
 
         # 7.1: regime-conditional prior p(z0 | regime), one Gaussian per regime
-        self.prior_mu = nn.Parameter(torch.zeros(2, latent_dim))
+        # Initialize with small random values; will be trained via KL to encoder posterior
+        self.prior_mu = nn.Parameter(torch.randn(2, latent_dim) * 0.1)
         self.prior_logvar = nn.Parameter(torch.zeros(2, latent_dim))
         self.beta_max = beta_max
         self.prior_warmup = max(1, prior_warmup)
@@ -321,6 +322,17 @@ class VORTEXModel(pl.LightningModule):
         kl = self._kl_to_prior(regimes)
         loss = loss + beta * kl
         components["kl"] = kl.detach()
+        
+        # Correlation loss on generated scenarios (from regime prior) —
+        # this matches the evaluation protocol and drives regime-dependent correlation
+        if self.lam_corr > 0.0:
+            r_gen, _ = self.generate_from_prior(adj, node_feats, regimes)
+            lcorr_gen = self.correlation_loss(r_gen, regimes)
+            wcorr_gen = self._eff_lam_corr() * lcorr_gen
+            loss = loss + wcorr_gen
+            self.log("train/corr_gen_raw", lcorr_gen.detach(), on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/corr_gen_w", wcorr_gen.detach(), on_step=True, on_epoch=True, prog_bar=True)
+
         # 7.2: variance matching (z-space pooled std per stock)
         lvar = self.variance_loss(r_hat, x)
         loss = loss + self.lam_var * lvar
@@ -332,6 +344,19 @@ class VORTEXModel(pl.LightningModule):
             self.log(f"train/{key}", value, on_step=True, on_epoch=True, prog_bar=True)
 
         return loss
+
+    def generate_from_prior(self, adj, node_feats, regimes):
+        """Generate scenarios from regime-conditional prior (matches evaluation protocol)."""
+        if self.use_gat:
+            node_embs, _ = self.gat(node_feats, adj)
+        else:
+            node_embs = self.gat_fallback(node_feats)
+        graph_emb = node_embs.mean(dim=1)  # (B, H)
+        r = regimes.long().clamp(0, 1)
+        eps = torch.randn_like(self.prior_mu[r])
+        z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
+        r_gen, _ = self.sde_model.decode_from_z0(graph_emb, z0)
+        return r_gen, z0
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Validation step."""
