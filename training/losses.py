@@ -138,14 +138,14 @@ def correlation_loss(
         regime_corr: dict with "crisis" and "normal" (N, N) correlation matrices
 
     Returns:
-        Mean Frobenius^2 error over off-diagonal elements across regimes with >=4 samples
+        Mean Frobenius^2 error over off-diagonal elements across regimes with >=2 samples (batch_size=4, 50/50 split)
     """
     n = r_gen.shape[-1]
     mask = ~torch.eye(n, device=r_gen.device, dtype=torch.bool)
     tot, cnt = 0.0, 0
     for rg, nm in ((1, "crisis"), (0, "normal")):
         sel = (regimes.long() == rg).nonzero(as_tuple=True)[0]
-        if len(sel) < 4:
+        if len(sel) < 2:  # Reduced from 4 to 2 for batch_size=4 with 50/50 split
             continue
         cg = _pooled_correlation(r_gen[sel])
         tg = regime_corr[nm]

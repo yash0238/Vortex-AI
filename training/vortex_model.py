@@ -162,14 +162,14 @@ class VORTEXModel(pl.LightningModule):
         return cov / sd.unsqueeze(1) / sd.unsqueeze(0)
 
     def correlation_loss(self, r_gen: torch.Tensor, regimes: torch.Tensor) -> torch.Tensor:
-        """Lane 1A: per-regime pooled-corr Fro^2 vs train targets, regimes with >=4 windows."""
+        """Lane 1A: per-regime pooled-corr Fro^2 vs train targets, regimes with >=2 windows (batch_size=4, 50/50 split gives 2 per regime)."""
         tg = self._load_regime_corr(r_gen.device)
         n = r_gen.shape[-1]
         mask = ~torch.eye(n, device=r_gen.device, dtype=torch.bool)
         tot, cnt = 0.0, 0
         for rg, nm in ((1, "crisis"), (0, "normal")):
             sel = (regimes.long() == rg).nonzero(as_tuple=True)[0]
-            if len(sel) < 4:
+            if len(sel) < 2:  # Reduced from 4 to 2 for batch_size=4 with 50/50 split
                 continue
             cg = self._pooled_corr(r_gen[sel])
             tot = tot + ((cg[mask] - tg[nm][mask]).pow(2).sum() / (n * (n - 1)))

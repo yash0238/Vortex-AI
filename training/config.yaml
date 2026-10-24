@@ -30,7 +30,7 @@ cgnsde:
   gradient_clip: 1.0
   num_workers: 0
   crisis_percentile: 85
-  patience: 100
+  patience: 200
   accelerator: cuda
   devices: 1
   monitor_metric: val/nll
@@ -43,9 +43,10 @@ cgnsde:
   warmup_epochs: 20
   sde_sigma_max: 3.0
   weight_decay: 0.0005
-  lam_corr: 200.0
+  lam_corr: 100.0
   vol_dyn: true
   emission: mt
   rank_K: 8
-  beta_max: 0.3
-  prior_warmup: 5
+  beta_max: 1.0
+  prior_warmup: 20
+  corr_ramp: 10
