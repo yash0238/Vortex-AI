@@ -63,6 +63,7 @@ class VORTEXModel(pl.LightningModule):
         lam_var: float = 0.0,  # 7.2: variance-matching loss weight
         lam_corr: float = 0.0,  # Lane 1A: correlation loss weight (OFF default)
         corr_ramp: int = 5,  # Lane 1A: ramp epochs for lam_corr
+        lam_emission_corr: float = 0.0,  # emission correlation loss weight (OFF default)
         vol_dyn: bool = False,  # Lane 1B: market vol state (OFF default)
         emission: str = "point",  # 7.3: "point" (MSE), "hetero"/"t" (NLL emission)
         rank_K: int = 0,  # 7.3: factor rank for emission covariance
@@ -313,8 +314,11 @@ class VORTEXModel(pl.LightningModule):
             lam_con=self._eff_lam_con(),
             lam_na=self.lam_na,
             lam_corr=self._eff_lam_corr(),
+            lam_emission_corr=self.lam_emission_corr,
             lambda_styl=self._eff_lambda_styl(),
             regime_corr=self._load_regime_corr(x.device),
+            sde_model=self.sde_model,
+            zs=self._last_zs,
         )
 
         # 7.1: KL to regime-conditional prior (beta ramped)
@@ -322,16 +326,6 @@ class VORTEXModel(pl.LightningModule):
         kl = self._kl_to_prior(regimes)
         loss = loss + beta * kl
         components["kl"] = kl.detach()
-        
-        # Correlation loss on generated scenarios (from regime prior) —
-        # this matches the evaluation protocol and drives regime-dependent correlation
-        if self.lam_corr > 0.0:
-            r_gen, _ = self.generate_from_prior(adj, node_feats, regimes)
-            lcorr_gen = self.correlation_loss(r_gen, regimes)
-            wcorr_gen = self._eff_lam_corr() * lcorr_gen
-            loss = loss + wcorr_gen
-            self.log("train/corr_gen_raw", lcorr_gen.detach(), on_step=True, on_epoch=True, prog_bar=True)
-            self.log("train/corr_gen_w", wcorr_gen.detach(), on_step=True, on_epoch=True, prog_bar=True)
 
         # 7.2: variance matching (z-space pooled std per stock)
         lvar = self.variance_loss(r_hat, x)

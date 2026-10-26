@@ -125,34 +125,61 @@ def _pooled_correlation(r: torch.Tensor) -> torch.Tensor:
     return cov / sd.unsqueeze(1) / sd.unsqueeze(0)
 
 
-def correlation_loss(
-    r_gen: torch.Tensor,
+def _emission_correlation(sde_model, zs: torch.Tensor) -> torch.Tensor:
+    """Compute emission's implied correlation from Bf@Bf.T + diag(d).
+
+    Args:
+        sde_model: LatentSDEModel with emission heads
+        zs: (B, T, latent_dim) latent paths
+
+    Returns:
+        (B, T, N, N) implied correlation matrices
+    """
+    m, d, Bf = sde_model._base_mdB(zs)
+    if Bf is not None:
+        cov = torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d)
+    else:
+        cov = torch.diag_embed(d)
+    sd = torch.sqrt(torch.diagonal(cov, dim1=-2, dim2=-1)).clamp(min=1e-8)
+    corr = cov / sd.unsqueeze(-1) / sd.unsqueeze(-2)
+    return corr
+
+
+def emission_correlation_loss(
+    sde_model,
+    zs: torch.Tensor,
     regimes: torch.Tensor,
     regime_corr: dict[str, torch.Tensor],
 ) -> torch.Tensor:
-    """Per-regime pooled correlation Frobenius error vs empirical targets.
+    """Per-regime Frobenius error between emission's implied correlation and empirical targets.
+
+    This directly penalizes the emission's implied correlation (Bf@Bf.T + diag(d))
+    rather than the generated samples' correlation.
 
     Args:
-        r_gen: (B, T, N) or (B, N) — generated returns
-        regimes: (B,) — regime labels (0=normal, 1=crisis)
-        regime_corr: dict with "crisis" and "normal" (N, N) correlation matrices
+        sde_model: LatentSDEModel
+        zs: (B, T, latent_dim) latent paths
+        regimes: (B,) regime labels
+        regime_corr: dict with "crisis" and "normal" (N, N) target correlation matrices
 
     Returns:
-        Mean Frobenius^2 error over off-diagonal elements across regimes with >=2 samples (batch_size=4, 50/50 split)
+        Mean Frobenius^2 error over off-diagonal elements
     """
-    n = r_gen.shape[-1]
-    mask = ~torch.eye(n, device=r_gen.device, dtype=torch.bool)
+    corr_implied = _emission_correlation(sde_model, zs)  # (B, T, N, N)
+    n = corr_implied.shape[-1]
+    mask = ~torch.eye(n, device=zs.device, dtype=torch.bool)
     tot, cnt = 0.0, 0
     for rg, nm in ((1, "crisis"), (0, "normal")):
         sel = (regimes.long() == rg).nonzero(as_tuple=True)[0]
-        if len(sel) < 2:  # Reduced from 4 to 2 for batch_size=4 with 50/50 split
+        if len(sel) < 2:
             continue
-        cg = _pooled_correlation(r_gen[sel])
+        # Average over time dimension for this regime
+        cg = corr_implied[sel].mean(dim=0)  # (T, N, N) -> (N, N) averaged over batch and time
         tg = regime_corr[nm]
         tot = tot + ((cg[mask] - tg[mask]).pow(2).sum() / (n * (n - 1)))
         cnt += 1
     if cnt == 0:
-        return torch.tensor(0.0, device=r_gen.device)
+        return torch.tensor(0.0, device=corr_implied.device)
     return tot / cnt
 
 
@@ -169,18 +196,21 @@ def total_loss(
     lam_con: float = 0.1,
     lam_na: float = 0.05,
     lam_corr: float = 0.0,
+    lam_emission_corr: float = 0.0,
     lambda_styl: float = 0.1,
     regime_corr: dict[str, torch.Tensor] | None = None,
+    sde_model: torch.nn.Module | None = None,
+    zs: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Assemble the full CG-NSDE loss.
 
     L_total = lam_rec * L_rec + lam_graph * L_graph
              + lam_con * L_con + lam_na * L_circuit
-             + lam_corr * L_corr
+             + lam_corr * L_corr + lam_emission_corr * L_emission_corr
 
     Returns:
         total: weighted sum scalar tensor.
-        components: dict with keys total/reconstruction/graph/contrastive/circuit/correlation.
+        components: dict with keys total/reconstruction/graph/contrastive/circuit/correlation/emission_correlation.
 
     Args:
         r_real: (B, T, N) — true window returns
@@ -190,9 +220,11 @@ def total_loss(
         z_proj: (B, proj_dim) — projection head output for contrastive loss
         regime_labels: (B,) — regime labels (0=normal, 1=crisis)
         supcon_loss_fn: Callable — SupConLoss instance
-        lam_rec, lam_graph, lam_con, lam_na, lam_corr: Loss weights
+        lam_rec, lam_graph, lam_con, lam_na, lam_corr, lam_emission_corr: Loss weights
         lambda_styl: Stylized facts weight in reconstruction loss
         regime_corr: dict with "crisis" and "normal" (N, N) correlation matrices for correlation loss
+        sde_model: LatentSDEModel for emission correlation loss
+        zs: (B, T, latent_dim) latent paths for emission correlation loss
     """
     l_rec = reconstruction_loss(r_real, r_hat, lambda_styl=lambda_styl)
     l_graph = graph_consistency_loss(a_learned, a_empirical)
@@ -203,6 +235,11 @@ def total_loss(
         if (lam_corr > 0.0 and regime_corr is not None)
         else torch.tensor(0.0, device=r_hat.device)
     )
+    l_emission_corr = (
+        emission_correlation_loss(sde_model, zs, regime_labels, regime_corr)
+        if (lam_emission_corr > 0.0 and regime_corr is not None and sde_model is not None and zs is not None)
+        else torch.tensor(0.0, device=r_hat.device)
+    )
 
     total = (
         lam_rec * l_rec
@@ -210,6 +247,7 @@ def total_loss(
         + lam_con * l_con
         + lam_na * l_na
         + lam_corr * l_corr
+        + lam_emission_corr * l_emission_corr
     )
     components = {
         "total": total,
@@ -218,6 +256,7 @@ def total_loss(
         "contrastive": l_con,
         "circuit": l_na,
         "correlation": l_corr,
+        "emission_correlation": l_emission_corr,
     }
     return total, components
 

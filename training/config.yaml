@@ -44,6 +44,7 @@ cgnsde:
   sde_sigma_max: 0.5
   weight_decay: 0.0005
   lam_corr: 100.0
+  lam_emission_corr: 100.0
   vol_dyn: true
   emission: mt
   rank_K: 16
