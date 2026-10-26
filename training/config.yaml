@@ -41,12 +41,12 @@ cgnsde:
     lam_na: 0.0
   lambda_styl: 0.5
   warmup_epochs: 20
-  sde_sigma_max: 3.0
+  sde_sigma_max: 0.5
   weight_decay: 0.0005
   lam_corr: 100.0
   vol_dyn: true
   emission: mt
-  rank_K: 8
+  rank_K: 16
   beta_max: 1.0
   prior_warmup: 20
-  corr_ramp: 10
+  corr_ramp: 5
