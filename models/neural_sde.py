@@ -212,6 +212,14 @@ class LatentSDEModel(nn.Module):
             nn.init.normal_(self.emi_B.weight, std=0.05)
             nn.init.zeros_(self.emi_B.bias)
             self.raw_nu = nn.Parameter(torch.tensor(3.47))
+        elif emission == "smt":
+            self.emi_m = nn.Linear(latent_dim, n_stocks)
+            self.emi_d = nn.Linear(latent_dim, n_stocks)
+            nn.init.constant_(self.emi_d.bias, 0.54)
+            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K)
+            nn.init.normal_(self.emi_B.weight, std=0.05)
+            nn.init.zeros_(self.emi_B.bias)
+            self.raw_nu = nn.Parameter(torch.tensor(3.47))
         else:
             self.emi_m = self.emi_d = self.emi_B = None
 
@@ -327,6 +335,9 @@ class LatentSDEModel(nn.Module):
         if self.emission == "mt":
             Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
             return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
+        if self.emission == "smt":
+            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
         if self.rank_K > 0 and self.emi_B is not None:
             Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
             return LowRankMultivariateNormal(m, Bf, d)
@@ -341,7 +352,7 @@ class LatentSDEModel(nn.Module):
 
     def emission_sample_corr(self, zs: torch.Tensor) -> torch.Tensor:
         """Lane 1A: rsampled scenarios with nu detached (correlation loss only)."""
-        if self.emission == "mt":
+        if self.emission in ("mt", "smt"):
             m, d, Bf = self._base_mdB(zs)
             nu = self._nu(zs).detach()
             w = torch.distributions.Chi2(nu.expand(zs.shape[0], zs.shape[1])).rsample()

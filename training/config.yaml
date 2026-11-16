@@ -33,7 +33,7 @@ cgnsde:
   patience: 200
   accelerator: cuda
   devices: 1
-  monitor_metric: val/nll
+  monitor_metric: val/total
   loss_weights:
     lam_rec: 1.0
     lam_graph: 0.5
@@ -46,8 +46,8 @@ cgnsde:
   lam_corr: 100.0
   lam_emission_corr: 200.0
   vol_dyn: true
-  emission: mt
-  rank_K: 32
+  emission: smt
+  rank_K: 8
   beta_max: 1.0
   prior_warmup: 20
   corr_ramp: 5

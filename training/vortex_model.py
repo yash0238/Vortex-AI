@@ -122,6 +122,7 @@ class VORTEXModel(pl.LightningModule):
         self.prior_warmup = max(1, prior_warmup)
         self.lam_var = lam_var
         self.lam_corr = lam_corr
+        self.lam_emission_corr = lam_emission_corr
         self.corr_ramp = max(1, corr_ramp)
         self.vol_dyn = vol_dyn
         self._regime_corr = None  # lazy cache of data/raw/regime_corr.npz
