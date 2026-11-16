@@ -1,0 +1,31 @@
+market: us
+label: US large-cap 47
+n_assets: 47
+n_days: 3556
+first_date: 2010-11-12
+last_date: 2024-12-31
+nan_in_returns: 0
+max_zero_run: 2
+n_abs_ret_gt_030: 4
+kurtosis_median: 9.502539296970728
+kurtosis_max: 31.908807305460172
+sha256_returns: 25ce09519be1d13e288bd6f5465da9c8d6e96be00f87d53159fb3f8d957c18bf
+source: Yahoo Finance via yfinance (auto-adjusted close)
+tickers: AAPL, MSFT, NVDA, AMZN, GOOGL, BRK-B, TSLA, JPM, LLY, AVGO, XOM, UNH, V, MA, COST, HD, PG, WMT, JNJ, NFLX, BAC, CRM, ORCL, CVX, KO, MRK, CSCO, WFC, ACN, ADBE, PEP, LIN, MCD, AMD, IBM, DIS, TMO, ABT, PM, GE, CAT, GS, ISRG, QCOM, TXN, VZ, INTU
+
+cleaning log:
+  NOT_USED     AXP                       beyond n_assets
+  NOT_USED     MS                        beyond n_assets
+  NOT_USED     CMCSA                     beyond n_assets
+  NOT_USED     T                         beyond n_assets
+  NOT_USED     PFE                       beyond n_assets
+  NOT_USED     AMGN                      beyond n_assets
+  NOT_USED     NEE                       beyond n_assets
+  NOT_USED     RTX                       beyond n_assets
+  NOT_USED     HON                       beyond n_assets
+  NOT_USED     UNP                       beyond n_assets
+  NOT_USED     LOW                       beyond n_assets
+  WHITELISTED  NFLX           2011-10-25 r=-0.4292 kept as a real move
+  WHITELISTED  NFLX           2013-01-24 r=+0.3522 kept as a real move
+  WHITELISTED  NFLX           2022-04-20 r=-0.4326 kept as a real move
+  WHITELISTED  AMD            2016-04-22 r=+0.4206 kept as a real move

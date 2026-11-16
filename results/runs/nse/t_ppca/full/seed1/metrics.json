@@ -1,0 +1,248 @@
+{
+  "main": {
+    "metrics": {
+      "std_ratio": {
+        "value": 1.000743549555733,
+        "err": 0.008847484848690152,
+        "inside": true,
+        "produced": true
+      },
+      "corr_fro": {
+        "value": 1.6147352905380254,
+        "err": 0.6224607528418447,
+        "inside": true,
+        "produced": true
+      },
+      "corr_mae": {
+        "value": 0.023918181603303067,
+        "err": 0.4759802995581859,
+        "inside": true,
+        "produced": true
+      },
+      "eig_dist": {
+        "value": 0.15252787332470163,
+        "err": 0.458130268284236,
+        "inside": true,
+        "produced": true
+      },
+      "kurt_med": {
+        "value": 1.0369457895384135,
+        "err": 2.0430102005714854,
+        "inside": false,
+        "produced": true
+      },
+      "acf1_ret": {
+        "value": 0.00022359099112339418,
+        "err": 0.011728436617592139,
+        "inside": true,
+        "produced": true
+      },
+      "acf1_sq": {
+        "value": 0.0003900226979134632,
+        "err": 3.4029323204214172,
+        "inside": false,
+        "produced": true
+      },
+      "acf5_sq_mean": {
+        "value": -0.00017867136086344225,
+        "err": 2.1517580946539354,
+        "inside": false,
+        "produced": true
+      },
+      "skew_ew": {
+        "value": 0.020396626560761532,
+        "err": 1.47624843832631,
+        "inside": false,
+        "produced": true
+      },
+      "pc1_share": {
+        "value": 0.3001026493973971,
+        "err": 0.16613785070484804,
+        "inside": true,
+        "produced": true
+      },
+      "crisis_freq": {
+        "value": 0.104,
+        "err": 0.8436169360224395,
+        "inside": true,
+        "produced": true
+      },
+      "tail_coexc": {
+        "value": 0.17633580018501388,
+        "err": 0.574730007287409,
+        "inside": true,
+        "produced": true
+      },
+      "boost_pct": {
+        "value": 2.6963623153450578,
+        "err": 1.0944598495381168,
+        "inside": false,
+        "produced": true
+      },
+      "cvar_ratio": {
+        "value": 1.2581810292887046,
+        "err": 0.9023206383406247,
+        "inside": false,
+        "produced": true
+      },
+      "pc1_share_gap": {
+        "value": 0.008067067921194104,
+        "err": 1.1903077622457021,
+        "inside": false,
+        "produced": true
+      },
+      "connect_gap": {
+        "value": 0.00909765390714741,
+        "err": 0.9005396951542546,
+        "inside": false,
+        "produced": true
+      },
+      "disc_feat": {
+        "value": 0.9615,
+        "err": 3.0361842105263155,
+        "inside": false,
+        "produced": true
+      },
+      "disc_raw": {
+        "value": 0.5625,
+        "err": 3.125,
+        "inside": false,
+        "produced": true
+      }
+    },
+    "family": {
+      "A": 1.5157541625732385,
+      "B": 0.4306772928472787,
+      "C": 0.9176624814314245,
+      "D": 3.0805921052631575
+    }
+  },
+  "alt_rule": {
+    "metrics": {
+      "std_ratio": {
+        "value": 1.000743549555733,
+        "err": 0.008847484848690152,
+        "inside": true,
+        "produced": true
+      },
+      "corr_fro": {
+        "value": 1.6147352905380254,
+        "err": 0.6224607528418447,
+        "inside": true,
+        "produced": true
+      },
+      "corr_mae": {
+        "value": 0.023918181603303067,
+        "err": 0.4759802995581859,
+        "inside": true,
+        "produced": true
+      },
+      "eig_dist": {
+        "value": 0.15252787332470163,
+        "err": 0.458130268284236,
+        "inside": true,
+        "produced": true
+      },
+      "kurt_med": {
+        "value": 1.0369457895384135,
+        "err": 2.0430102005714854,
+        "inside": false,
+        "produced": true
+      },
+      "acf1_ret": {
+        "value": 0.00022359099112339418,
+        "err": 0.011728436617592139,
+        "inside": true,
+        "produced": true
+      },
+      "acf1_sq": {
+        "value": 0.0003900226979134632,
+        "err": 3.4029323204214172,
+        "inside": false,
+        "produced": true
+      },
+      "acf5_sq_mean": {
+        "value": -0.00017867136086344225,
+        "err": 2.1517580946539354,
+        "inside": false,
+        "produced": true
+      },
+      "skew_ew": {
+        "value": 0.020396626560761532,
+        "err": 1.47624843832631,
+        "inside": false,
+        "produced": true
+      },
+      "pc1_share": {
+        "value": 0.3001026493973971,
+        "err": 0.16613785070484804,
+        "inside": true,
+        "produced": true
+      },
+      "crisis_freq": {
+        "value": 0.183,
+        "err": 0.5518539394682024,
+        "inside": true,
+        "produced": true
+      },
+      "tail_coexc": {
+        "value": 0.17633580018501388,
+        "err": 0.574730007287409,
+        "inside": true,
+        "produced": true
+      },
+      "boost_pct": {
+        "value": 13.69859354215029,
+        "err": 1.4752925071243221,
+        "inside": false,
+        "produced": true
+      },
+      "cvar_ratio": {
+        "value": 1.3925557611429986,
+        "err": 1.2234325893416471,
+        "inside": false,
+        "produced": true
+      },
+      "pc1_share_gap": {
+        "value": 0.03993121818241668,
+        "err": 1.5729332351994856,
+        "inside": false,
+        "produced": true
+      },
+      "connect_gap": {
+        "value": 0.04262592010484555,
+        "err": 1.027108905932659,
+        "inside": false,
+        "produced": true
+      }
+    },
+    "family": {
+      "A": 1.5157541625732385,
+      "B": 0.4306772928472787,
+      "C": 1.0708918640589542
+    }
+  },
+  "n_gen": 2000,
+  "n_gen_crisis": 208,
+  "market": "nse",
+  "generator": "t_ppca",
+  "base_generator": "t_ppca",
+  "fit": "full",
+  "seed": 1,
+  "family_tag": "static",
+  "impl_source": "own",
+  "train_minutes": 0.011992855866750082,
+  "sample_seconds": 0.1822211742401123,
+  "fit_days": 3483,
+  "fit_first": "2010-11-15",
+  "fit_last": "2024-12-31",
+  "ref_windows": 3424,
+  "hparams": {
+    "k": 8
+  },
+  "info": {
+    "nu": 9.75,
+    "k": 8
+  },
+  "protocol_version": "1.0.0"
+}

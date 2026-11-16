@@ -1,0 +1,42 @@
+{
+  "H1": {
+    "verdict": "not supported",
+    "evidence": "NSE in-sample tau(B,C) = 0.49 [0.38, 0.56] over 11 models; held-out tau(B,C) = 0.31 [0.02, 0.38]"
+  },
+  "H2": {
+    "verdict": "supported",
+    "evidence": "Regime Gaussian crisis score 0.53 vs CG-NSDE 1.22 \u00b1 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 \u00b1 0.28"
+  },
+  "G1": {
+    "verdict": "FAIL"
+  },
+  "H4": {
+    "verdict": "supported",
+    "evidence": "US: tau(B,C) = 0.60 [0.56, 0.64]; KR: tau(B,C) = 0.29 [0.21, 0.29]"
+  },
+  "G4": {
+    "verdict": "PASS"
+  },
+  "KILL": {
+    "verdict": "not triggered"
+  },
+  "H5": {
+    "verdict": "supported",
+    "evidence": "pair-order flips after one injected bad tick: see the contamination table"
+  },
+  "G2": {
+    "verdict": "FAIL",
+    "evidence": "CG-NSDE v1 boost inside the real episode interval on 0 of 2 episodes"
+  },
+  "H2 (v2, post hoc)": {
+    "verdict": "not supported",
+    "evidence": "Regime Gaussian crisis score 0.53 vs CG-NSDE v2 0.15 \u00b1 0.01; Gaussian HMM crisis score 0.70 vs CG-NSDE v2 0.15 \u00b1 0.01"
+  },
+  "G1 (v2, post hoc)": {
+    "verdict": "PASS"
+  },
+  "G2 (v2, post hoc)": {
+    "verdict": "FAIL",
+    "evidence": "CG-NSDE v2 boost inside the real episode interval on 0 of 2 episodes"
+  }
+}
