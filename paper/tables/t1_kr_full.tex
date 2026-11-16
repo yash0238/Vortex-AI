@@ -1,0 +1,15 @@
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+Model & Corr. err. & Boost \% & CVaR ratio & Tail co-ex. & Kurt. & ACF$(r^2)$ & Disc. & $S_A$ & $S_B$ & $S_C$ & $S_D$ \\
+\midrule
+Real (95\% band) & $\le$2.91 & 22.5 [-0.5, 45.9] & 2.14 [1.35, 2.87] & 0.192 [0.133, 0.243] & 5.02 [3.08, 6.54] & 0.174 [0.092, 0.220] & 0.58 [0.50, 0.61] & -- & -- & -- & -- \\
+\midrule
+i.i.d. Gaussian & \textbf{0.22} & \textbf{2.3} & 1.14 & 0.123 & -0.00 & -0.000 & 0.99 & 1.90 & 0.05 & 0.94 & 4.58 \\
+Static t-PPCA & \textbf{1.82} & \textbf{2.5} & 1.24 & \textbf{0.167} & 1.02 & 0.000 & 0.96 & 1.80 & 0.42 & 0.81 & 4.39 \\
+Stationary bootstrap & \textbf{0.28} & \textbf{20.9} & \textbf{2.14} & \textbf{0.191} & \textbf{5.00} & \textbf{0.166} & \textbf{0.45} & \underline{0.11} & 0.08 & \underline{0.13} & \underline{0.00} \\
+GARCH-t FHS & \textbf{2.51} & \textbf{11.9} & \textbf{1.57} & \textbf{0.159} & \textbf{5.82} & \textbf{0.109} & 0.79 & 0.83 & 0.81 & 0.69 & 2.53 \\
+DCC-GARCH-t & \textbf{2.09} & \textbf{8.3} & \textbf{1.63} & \textbf{0.178} & 9.26 & \textbf{0.106} & 0.89 & 1.36 & 0.69 & 0.63 & 3.07 \\
+Regime Gaussian & \textbf{0.21} & \textbf{11.9} & \textbf{1.57} & \textbf{0.180} & 0.50 & 0.055 & 0.96 & 1.44 & \underline{0.04} & 0.45 & 4.11 \\
+Gaussian HMM & \textbf{0.22} & \textbf{3.4} & 1.30 & \textbf{0.165} & 0.75 & 0.046 & 0.97 & 1.69 & 0.05 & 0.73 & 4.42 \\
+\bottomrule
+\end{tabular}

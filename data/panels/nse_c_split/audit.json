@@ -1,0 +1,22 @@
+{
+  "market": "nse_c_split",
+  "n_assets": 47,
+  "n_days": 3483,
+  "first_date": "2010-11-15",
+  "last_date": "2024-12-31",
+  "sha256_returns": "530812787ee9b29783a4469bddda293c3d4d3abdca91bf6b3c05cd5567ad36b9",
+  "label": "contaminated NSE (nse_c_split)",
+  "source": "cleaned NSE panel + crisisbench.dgp injection",
+  "seed": 20261112,
+  "n_injected": 1,
+  "injected": [
+    {
+      "day": 1413,
+      "date": "2016-08-11",
+      "asset": 15,
+      "ticker": "MARUTI.NS",
+      "clean": 0.003501002383824455,
+      "injected": -0.6931471805599453
+    }
+  ]
+}

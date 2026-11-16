@@ -1,0 +1,38 @@
+market: kr
+label: KOSPI large-cap 47
+n_assets: 47
+n_days: 3478
+first_date: 2010-11-12
+last_date: 2024-12-30
+nan_in_returns: 0
+max_zero_run: 10
+n_abs_ret_gt_030: 3
+kurtosis_median: 4.969094178607671
+kurtosis_max: 22.225667715941373
+sha256_returns: dc29312ecf2766856f717c9a439cdb241189e3b496ba0b92d14752f3e0d82948
+source: Yahoo Finance via yfinance (auto-adjusted close)
+tickers: 005930.KS, 000660.KS, 005380.KS, 000270.KS, 005490.KS, 051910.KS, 006400.KS, 035720.KS, 012330.KS, 055550.KS, 105560.KS, 086790.KS, 066570.KS, 030200.KS, 015760.KS, 034730.KS, 096770.KS, 010950.KS, 009150.KS, 032830.KS, 000810.KS, 033780.KS, 090430.KS, 051900.KS, 011170.KS, 010130.KS, 034020.KS, 024110.KS, 036570.KS, 000720.KS, 004020.KS, 011780.KS, 021240.KS, 097950.KS, 001040.KS, 069960.KS, 000100.KS, 128940.KS, 006800.KS, 016360.KS, 005830.KS, 001450.KS, 000880.KS, 078930.KS, 006360.KS, 002790.KS, 035250.KS
+
+cleaning log:
+  DROPPED      035420.KS                 price unchanged for 18 consecutive days (suspension)
+  DROPPED      003550.KS                 price unchanged for 18 consecutive days (suspension)
+  DROPPED      017670.KS                 price unchanged for 24 consecutive days (suspension)
+  DROPPED      009540.KS                 price unchanged for 25 consecutive days (suspension)
+  DROPPED      010140.KS                 price unchanged for 12 consecutive days (suspension)
+  DROPPED      011200.KS                 price unchanged for 13 consecutive days (suspension)
+  DROPPED      003490.KS                 price unchanged for 33 consecutive days (suspension)
+  DROPPED      023530.KS                 price unchanged for 16 consecutive days (suspension)
+  DROPPED      004170.KS                 price unchanged for 28 consecutive days (suspension)
+  DROPPED      042660.KS                 price unchanged for 314 consecutive days (suspension)
+  DROPPED      012450.KS                 price unchanged for 12 consecutive days (suspension)
+  DROPPED      009830.KS                 price unchanged for 23 consecutive days (suspension)
+  NOT_USED     030000.KS                 beyond n_assets
+  NOT_USED     008770.KS                 beyond n_assets
+  NOT_USED     005940.KS                 beyond n_assets
+  NOT_USED     071050.KS                 beyond n_assets
+  NOT_USED     029780.KS                 beyond n_assets
+  NOT_USED     000120.KS                 beyond n_assets
+  NOT_USED     086280.KS                 beyond n_assets
+  WHITELISTED  010130.KS      2024-10-30 r=-0.3558 kept as a real move
+  WHITELISTED  097950.KS      2020-03-19 r=-0.3037 kept as a real move
+  WHITELISTED  128940.KS      2019-07-04 r=-0.3183 kept as a real move
