@@ -1,0 +1,22 @@
+{
+  "market": "nse_c_tick",
+  "n_assets": 47,
+  "n_days": 3483,
+  "first_date": "2010-11-15",
+  "last_date": "2024-12-31",
+  "sha256_returns": "92daf5f3b96965cca67f4818f2d87fcb62810970b9c55a63200bb08c192485a8",
+  "label": "contaminated NSE (nse_c_tick)",
+  "source": "cleaned NSE panel + crisisbench.dgp injection",
+  "seed": 20261112,
+  "n_injected": 1,
+  "injected": [
+    {
+      "day": 1186,
+      "date": "2015-09-07",
+      "asset": 4,
+      "ticker": "HINDUNILVR.NS",
+      "clean": -0.012304346069854227,
+      "injected": -0.76
+    }
+  ]
+}

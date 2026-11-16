@@ -1,0 +1,187 @@
+{
+  "PROTOCOL_VERSION": "1.0.0",
+  "FROZEN_ON": "2026-11-12",
+  "T": 60,
+  "STRIDE_REAL": 1,
+  "SAMPLE_START": "2010-11-08",
+  "SAMPLE_END": "2024-12-31",
+  "TRAIN_END": "2019-12-31",
+  "VAL_START": "2018-01-01",
+  "VAL_END": "2019-12-31",
+  "PURGE": 60,
+  "FITS": [
+    "full",
+    "pre2020"
+  ],
+  "HELDOUT_EPISODES": {
+    "covid_2020": [
+      "2020-03-01",
+      "2020-07-31"
+    ],
+    "shock_2022": [
+      "2022-02-01",
+      "2022-06-30"
+    ],
+    "mid_2024": [
+      "2024-06-01",
+      "2024-07-31"
+    ]
+  },
+  "SEEDS": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "N_GEN": 2000,
+  "N_GEN_POOL_RISK": 20000,
+  "LABEL_RULE": {
+    "name": "composite_v1",
+    "VOL_LOOKBACK": 20,
+    "DD_LOOKBACK": 5,
+    "DD_THRESH": -0.05,
+    "CIRCUIT_PROX": 0.095,
+    "W_VOL": 0.5,
+    "W_DD": 0.3,
+    "W_CP": 0.2,
+    "RV_REF_Q": 0.99,
+    "CRISIS_PCT": 85.0
+  },
+  "LABEL_RULE_ALT": {
+    "name": "ewvol_v1",
+    "VOL_LOOKBACK": 20,
+    "CRISIS_PCT": 85.0
+  },
+  "MIN_CRISIS_WINDOWS": 20,
+  "METRIC_FAMILIES": {
+    "A": [
+      "std_ratio",
+      "kurt_med",
+      "acf1_ret",
+      "acf1_sq",
+      "acf5_sq_mean",
+      "skew_ew"
+    ],
+    "B": [
+      "corr_fro",
+      "corr_mae",
+      "eig_dist",
+      "pc1_share"
+    ],
+    "C": [
+      "crisis_freq",
+      "boost_pct",
+      "tail_coexc",
+      "cvar_ratio",
+      "pc1_share_gap",
+      "connect_gap"
+    ],
+    "D": [
+      "disc_feat",
+      "disc_raw"
+    ]
+  },
+  "TAIL_Q": 0.05,
+  "CONNECT_RHO": 0.5,
+  "BOOT_B": 500,
+  "BOOT_BLOCK": 120,
+  "CI_LEVEL": 0.95,
+  "NORM_ERR_CAP": 10.0,
+  "DISC": {
+    "model": "HistGradientBoosting",
+    "max_iter": 200,
+    "max_depth": 4,
+    "lr": 0.1,
+    "n_per_class": 1000,
+    "folds": 5,
+    "purge": 60,
+    "raw_pca": 64
+  },
+  "RISK": {
+    "portfolios": [
+      "equal_weight",
+      "dirichlet_seed7"
+    ],
+    "levels": [
+      0.95,
+      0.975,
+      0.99
+    ],
+    "oos_start": "2020-01-01",
+    "refit_dates": [
+      "2019-12-31",
+      "2020-12-31",
+      "2021-12-31",
+      "2022-12-31",
+      "2023-12-31"
+    ],
+    "state": "rv20_ew",
+    "knn_frac": 0.05,
+    "hs_window": 500
+  },
+  "HYPOTHESES": {
+    "H1": "Kendall tau between the family-B ranking and the family-C ranking of generators is below 0.3.",
+    "H2": "At least one non-neural regime model (regime-conditional Gaussian or HMM) has a family-C score within one seed standard deviation of CG-NSDE (or better).",
+    "H3": "Kendall tau between family-C rank and VaR/ES backtest rank exceeds 0.5 and exceeds the tau of family B, with non-overlapping bootstrap intervals.",
+    "H4": "The sign of (tau_B_vs_C < 0.3) replicates on at least one of the two other markets.",
+    "H5": "Injecting a single bad tick flips the order of at least one generator pair on at least one metric."
+  },
+  "GATES": {
+    "G1": "PASS if every regime-aware generator beats every static generator on the family-C score AND no regime-conditional Gaussian/HMM matches CG-NSDE (H2 false). FAIL => benchmark leads the paper.",
+    "G2": "PASS if CG-NSDE's held-out boost_pct lies inside the real 95% interval on at least 2 of 3 episodes.",
+    "G3": "PASS if H3 holds.",
+    "G4": "PASS if H4 holds.",
+    "KILL": "If static generators also rank well on family C across seeds (H1 fails on every market), drop the benchmark framing."
+  },
+  "STATIC": [
+    "iid_gaussian",
+    "t_ppca"
+  ],
+  "GENERATORS": {
+    "iid_gaussian": [
+      "static",
+      "own"
+    ],
+    "t_ppca": [
+      "static",
+      "own"
+    ],
+    "stationary_bootstrap": [
+      "resampling",
+      "own (arch bootstrap)"
+    ],
+    "garch_fhs": [
+      "dynamic-classical",
+      "own on arch"
+    ],
+    "dcc_garch": [
+      "dynamic-classical",
+      "own"
+    ],
+    "regime_gaussian": [
+      "regime",
+      "own"
+    ],
+    "hmm_gaussian": [
+      "regime",
+      "hmmlearn"
+    ],
+    "timegan": [
+      "neural",
+      "own PyTorch reimplementation"
+    ],
+    "quantgan": [
+      "neural",
+      "own PyTorch reimplementation"
+    ],
+    "timevae": [
+      "neural",
+      "own PyTorch reimplementation"
+    ],
+    "cgnsde": [
+      "neural-ours",
+      "own"
+    ]
+  }
+}

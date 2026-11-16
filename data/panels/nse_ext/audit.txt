@@ -1,0 +1,23 @@
+market: nse_ext
+label: NSE-47 extended to Oct 2026
+n_assets: 47
+n_days: 3937
+first_date: 2010-11-15
+last_date: 2026-10-30
+nan_in_returns: 0
+max_zero_run: 2
+n_abs_ret_gt_030: 3
+kurtosis_median: 5.9809037952927255
+kurtosis_max: 33.59304721982197
+sha256_returns: 21649dfef46df917b69743d17b0c6388c669f78cdfb3f4ba0659bd05a7ceaa67
+source: Yahoo Finance via yfinance (auto-adjusted close)
+tickers: RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, HINDUNILVR.NS, ICICIBANK.NS, KOTAKBANK.NS, BHARTIARTL.NS, ITC.NS, AXISBANK.NS, SBIN.NS, LT.NS, BAJFINANCE.NS, HCLTECH.NS, ASIANPAINT.NS, MARUTI.NS, SUNPHARMA.NS, TITAN.NS, ULTRACEMCO.NS, NESTLEIND.NS, WIPRO.NS, POWERGRID.NS, NTPC.NS, M&M.NS, TECHM.NS, TMPV.NS, TATASTEEL.NS, JSWSTEEL.NS, BAJAJ-AUTO.NS, CIPLA.NS, DRREDDY.NS, DIVISLAB.NS, HEROMOTOCO.NS, ONGC.NS, COALINDIA.NS, BPCL.NS, GRASIM.NS, ADANIPORTS.NS, EICHERMOT.NS, APOLLOHOSP.NS, HINDALCO.NS, TATACONSUM.NS, BRITANNIA.NS, SHREECEM.NS, UPL.NS, BAJAJFINSV.NS, INDUSINDBK.NS
+
+cleaning log:
+  DROPPED      SBILIFE.NS                late listing, first price 2017-10-03
+  DROPPED      HDFCLIFE.NS               late listing, first price 2017-11-17
+  DROPPED      LTIM.NS                   no data from vendor
+  WHITELISTED  AXISBANK.NS    2020-03-23 r=-0.3273 kept as a real move
+  CORP_ACTION  TMPV.NS        2025-10-14 r=-0.5134 with no reversal; set to cross-sectional median
+  WHITELISTED  INDUSINDBK.NS  2020-03-26 r=+0.3693 kept as a real move
+  WHITELISTED  INDUSINDBK.NS  2025-03-11 r=-0.3169 kept as a real move

@@ -239,3 +239,19 @@ models/checkpoints/*.pt
 
 Vortex-AI/PRESENTATION.md
 Vortex-AI/IMPLEMENTATION_PLAN.md
+# ---- CrisisBench / VORTEX-AI v2 (2026-11) ----
+# Large regenerable outputs: samples, checkpoints, risk pools, cached references (about 4 GB)
+artifacts/
+# Raw vendor downloads are not redistributed; the panel builder re-downloads them
+data/panels/*/raw/
+# Experiment queue scratch files
+results/queue_*.err
+results/queue_*.log
+results/queue_console.log
+**/.claim
+# Build outputs (rebuilt by scripts)
+cloud/vortex_bundle.zip
+fullscale_results.zip
+paper/vortex_paper_overleaf.zip
+# Per-run benchmark metrics are the source of every table: keep them (the older 'runs/' rule above is for v0 logs)
+!results/runs/

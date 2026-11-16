@@ -5,6 +5,11 @@ scikit-learn>=1.3.0
 statsmodels>=0.14.0
 scipy>=1.10.0
 
+# Classical baselines and tables (crisisbench/)
+arch>=7.0
+hmmlearn>=0.3.0
+tabulate>=0.9.0
+
 # Market data
 yfinance>=0.2.30
 
@@ -41,3 +46,7 @@ dash>=2.11.0
 
 # Strategy sandbox
 backtesting>=0.3.3
+
+# Tests
+pytest>=8.0
+
