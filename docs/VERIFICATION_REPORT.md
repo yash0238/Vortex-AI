@@ -114,6 +114,23 @@ Present: `docs/HONEST_SUMMARY.md`, `README.md`, `api/server.py`, `app/` dashboar
 `app/public/data/{core,markets,samples}.json`. Not verified: every dashboard page in a
 real browser, and the Model page's v2 text. Browser check is still pending.
 
+## Verification log - second pass (same session)
+
+- `python -m crisisbench.run_risk` initially failed with
+  `ModuleNotFoundError: No module named 'arch'`. `arch>=7.0` is declared in
+  `requirements.txt:9` but was missing from the venv. Installed `arch 9.0.0`;
+  `run_risk` then completed with `G3: PASS`, `tau_C = 0.8 [0.6, 1.0]`.
+- After `run_risk`, re-ran `paper_build`: now emits **200 macros** (up from 87),
+  7 figures, 10 tables, and a valid 0.22 MB `paper/vortex_paper_overleaf.zip`.
+  Only `fig_ablation` / `tab_ablation` are skipped (v2_ablation 0/39).
+- `python -m crisisbench.export_web` succeeds (core 0.59 MB, markets 0.57 MB,
+  samples 0.19 MB).
+- `tests/test_risk.py`: 16 passed. `tests/test_classical_garch.py`: 4 errors at
+  setup because the file uses script-style global parameters `R`/`Z` as test
+  arguments (docstring says "Run: python tests/test_classical_garch.py") and there
+  is no `conftest.py` defining them. This is a pre-existing test-harness issue,
+  not an implementation defect, and is outside this plan's scope.
+
 ## Recommended next actions (in order)
 
 1. Run the experiment queue to completion (`crisisbench.queue --stage all --workers 5`);
