@@ -1,13 +1,106 @@
 # GATE_G2_v2_posthoc: FAIL
 
-Rule (frozen in crisisbench/protocol.py): 
+Rule (frozen in crisisbench/protocol.py): PASS if CG-NSDE's held-out boost_pct lies inside the real 95% interval on at least 2 of 3 episodes.
 
 POST HOC: CG-NSDE v2 (fit on data to 2019) boost_pct against each held-out episode's interval.
+
+### Held-Out Episode Multi-Seed Evaluation
+
+| Episode | Real Crisis Windows | Real Boost [95% Block-Boot CI] | CG-NSDE v2 (ours, post hoc) (mean ± SD) | 95% Seed CI | Seeds Passing [95% Binom CI] | All Seeds Pass | Verdict |
+|---|---|---|---|---|---|---|---|
+| COVID crash, 2020 (`covid_2020`) | 72 | 101.1% [65.1, 140.1] | 22.15% ± 2.08% | [20.61, 23.68] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
+| 2022 rate and war shock (`shock_2022`) | 23 | 49.4% [31.4, 71.7] | 22.15% ± 2.08% | [20.61, 23.68] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
+
+**Excluded episodes (< 5 real crisis windows):** `mid_2024` (2024-06-01..2024-07-31)
+
+**Multi-seed G2 consistency:** 0/5 seeds pass G2 across episodes (proportion = 0.00, 95% Clopper-Pearson binomial CI [0.000, 0.522], all seeds pass = `False`).
 
 ```json
 {
   "covid_2020": false,
-  "shock_2022": false
+  "shock_2022": false,
+  "model": "cgnsde2",
+  "episodes_passed": 0,
+  "episodes_evaluated": 2,
+  "multiseed_all_episodes_all_seeds_pass": false,
+  "multiseed_all_seeds_pass": false,
+  "_seeds_passed": 0,
+  "_seeds_total": 5,
+  "pass_proportion": 0.0,
+  "binomial_ci_95": [
+    0.0,
+    0.5218237501049814
+  ],
+  "all_seeds_pass": false,
+  "per_seed_pass": {
+    "0": false,
+    "1": false,
+    "2": false,
+    "3": false,
+    "4": false
+  },
+  "episodes": {
+    "covid_2020": {
+      "episode_label": "COVID crash, 2020",
+      "inside": false,
+      "n_real_crisis": 72,
+      "real_boost_pct": 101.05984949639328,
+      "real_ci_95": [
+        65.11156459949652,
+        140.11759763301075
+      ],
+      "gen_mean": 22.148939584640857,
+      "gen_sd": 2.0758090697836415,
+      "gen_formatted": "22.15 \u00b1 2.08",
+      "gen_ci_95": [
+        20.61454782836922,
+        23.6833313409125
+      ],
+      "seeds_passed": 0,
+      "n_seeds": 5,
+      "all_seeds_pass": false,
+      "pass_proportion": 0.0,
+      "binomial_ci_95": [
+        0.0,
+        0.5218237501049814
+      ]
+    },
+    "shock_2022": {
+      "episode_label": "2022 rate and war shock",
+      "inside": false,
+      "n_real_crisis": 23,
+      "real_boost_pct": 49.41569803935381,
+      "real_ci_95": [
+        31.439158788363287,
+        71.6744546144538
+      ],
+      "gen_mean": 22.148939584640857,
+      "gen_sd": 2.0758090697836415,
+      "gen_formatted": "22.15 \u00b1 2.08",
+      "gen_ci_95": [
+        20.61454782836922,
+        23.6833313409125
+      ],
+      "seeds_passed": 0,
+      "n_seeds": 5,
+      "all_seeds_pass": false,
+      "pass_proportion": 0.0,
+      "binomial_ci_95": [
+        0.0,
+        0.5218237501049814
+      ]
+    }
+  },
+  "excluded_episodes": {
+    "mid_2024": {
+      "window_range": [
+        "2024-06-01",
+        "2024-07-31"
+      ],
+      "min_required_crisis_windows": 5,
+      "reason": "Excluded because real panel contains fewer than 5 crisis-labelled windows in episode."
+    }
+  }
 }
 ```
 

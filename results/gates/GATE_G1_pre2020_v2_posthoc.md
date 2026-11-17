@@ -1,8 +1,20 @@
 # GATE_G1_pre2020_v2_posthoc: PASS
 
-Rule (frozen in crisisbench/protocol.py): 
+Rule (frozen in crisisbench/protocol.py): PASS if every regime-aware generator beats every static generator on the family-C score AND no regime-conditional Gaussian/HMM matches CG-NSDE (H2 false). FAIL => benchmark leads the paper.
 
 POST HOC: same gate evaluated for CG-NSDE v2. Market nse, fit 'pre2020'.
+
+### Multi-Seed Family-C Scores (Mean ± SD over Seeds)
+
+| Generator | Family C Score (mean ± SD) | 95% Seed Bootstrap CI | Seeds |
+|---|---|---|---|
+| i.i.d. Gaussian | 1.140 ± 0.008 | [1.134, 1.147] | 5 |
+| Static t-PPCA | 1.076 ± 0.014 | [1.067, 1.088] | 5 |
+| Regime Gaussian | 0.986 ± 0.008 | [0.981, 0.992] | 5 |
+| Gaussian HMM | 1.004 ± 0.019 | [0.989, 1.018] | 5 |
+| CG-NSDE v2 (ours, post hoc) | 0.742 ± 0.018 | [0.726, 0.753] | 5 |
+
+**Multi-seed gate consistency:** 5/5 seeds pass (proportion = 1.00, 95% Clopper-Pearson binomial CI [0.478, 1.000], all seeds pass = `True`).
 
 ```json
 {
@@ -10,22 +22,114 @@ POST HOC: same gate evaluated for CG-NSDE v2. Market nse, fit 'pre2020'.
   "H2_simple_regime_model_matches_cgnsde": false,
   "H2_detail": {
     "regime_gaussian": {
-      "score_C": 0.9850836705128792,
+      "score_C": 0.986370079724135,
+      "score_C_sd": 0.008042855985992185,
+      "score_C_formatted": "0.986 \u00b1 0.008",
       "cgnsde": 0.7416447436124883,
       "cgnsde_sd": 0.01791536752687564,
+      "cgnsde_formatted": "0.742 \u00b1 0.018",
       "matches": false
     },
     "hmm_gaussian": {
       "score_C": 1.0041107721591644,
+      "score_C_sd": 0.01943286548973483,
+      "score_C_formatted": "1.004 \u00b1 0.019",
       "cgnsde": 0.7416447436124883,
       "cgnsde_sd": 0.01791536752687564,
+      "cgnsde_formatted": "0.742 \u00b1 0.018",
       "matches": false
     }
   },
-  "H1_tau_B_vs_C": 0.3090909090909091,
+  "score_C_multiseed": {
+    "iid_gaussian": {
+      "name": "i.i.d. Gaussian",
+      "mean": 1.1404494232915314,
+      "sd": 0.008169094700308946,
+      "formatted": "1.140 \u00b1 0.008",
+      "ci_95": [
+        1.1343846369355959,
+        1.146514209647467
+      ],
+      "seeds": 5
+    },
+    "t_ppca": {
+      "name": "Static t-PPCA",
+      "mean": 1.0759007113355434,
+      "sd": 0.014048660391703343,
+      "formatted": "1.076 \u00b1 0.014",
+      "ci_95": [
+        1.0665326185487665,
+        1.08763730535256
+      ],
+      "seeds": 5
+    },
+    "regime_gaussian": {
+      "name": "Regime Gaussian",
+      "mean": 0.986370079724135,
+      "sd": 0.008042855985992185,
+      "formatted": "0.986 \u00b1 0.008",
+      "ci_95": [
+        0.9806480097631034,
+        0.9924804144403262
+      ],
+      "seeds": 5
+    },
+    "hmm_gaussian": {
+      "name": "Gaussian HMM",
+      "mean": 1.0041107721591644,
+      "sd": 0.01943286548973483,
+      "formatted": "1.004 \u00b1 0.019",
+      "ci_95": [
+        0.9894032962334701,
+        1.0183299414449263
+      ],
+      "seeds": 5
+    },
+    "cgnsde2": {
+      "name": "CG-NSDE v2 (ours, post hoc)",
+      "mean": 0.7416447436124883,
+      "sd": 0.01791536752687564,
+      "formatted": "0.742 \u00b1 0.018",
+      "ci_95": [
+        0.7257246458269235,
+        0.7534884801523206
+      ],
+      "seeds": 5
+    }
+  },
+  "multiseed_gate": {
+    "seeds_passed": 5,
+    "n_seeds": 5,
+    "_seeds_passed": 5,
+    "_seeds_total": 5,
+    "all_seeds_pass": true,
+    "pass_proportion": 1.0,
+    "binomial_ci_95": [
+      0.47817624989501856,
+      1.0
+    ],
+    "binomial_ci": [
+      0.47817624989501856,
+      1.0
+    ],
+    "per_seed_pass": {
+      "0": true,
+      "1": true,
+      "2": true,
+      "3": true,
+      "4": true
+    }
+  },
+  "multiseed_verdict": "PASS",
+  "aggregate_verdict": "PASS",
+  "H1_tau_B_vs_C": 0.34545454545454546,
   "H1_ci": [
-    0.018181818181818184,
-    0.38181818181818183
+    0.05454545454545454,
+    0.41818181818181815
+  ],
+  "H1_seed_date_ci": [
+    -0.01818181818181818,
+    0.45454545454545453
   ],
   "H1_holds": false
 }
