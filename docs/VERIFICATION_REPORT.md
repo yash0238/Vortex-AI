@@ -131,6 +131,16 @@ real browser, and the Model page's v2 text. Browser check is still pending.
   is no `conftest.py` defining them. This is a pre-existing test-harness issue,
   not an implementation defect, and is outside this plan's scope.
 
+## Verification log - Phase 7 browser pass
+
+Built dashboard served with `npx vite preview` (bound to 4174 because 4173 was
+occupied). Browser-checked routes `#/`, `#/benchmark`, `#/model`, `#/honest`, `#/risk`,
+`#/glossary`: all render non-empty, none stuck on "Loading results…", and no console
+errors on any page. `app/src/pages/Evidence.tsx` already describes v2 explicitly as
+"post hoc" with a v1-vs-v2 architecture comparison and an ablation section that shows
+an empty state because v2_ablation is 0/39. Phase 7's "Model page describes v2" item
+is therefore satisfied; only the full multi-page visual review remains a judgment call.
+
 ## Recommended next actions (in order)
 
 1. Run the experiment queue to completion (`crisisbench.queue --stage all --workers 5`);
