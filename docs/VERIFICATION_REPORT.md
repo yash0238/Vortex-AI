@@ -131,6 +131,19 @@ real browser, and the Model page's v2 text. Browser check is still pending.
   is no `conftest.py` defining them. This is a pre-existing test-harness issue,
   not an implementation defect, and is outside this plan's scope.
 
+## Verification log - Phase 5 (second pass)
+
+New work landed: `results/tables/T6_multiseed.md` now exists with mean ± SD,
+95% seed-resample and block-bootstrap CIs, and per-seed k/n pass counts with exact
+Clopper-Pearson 95% binomial CIs. `crisisbench/analysis.py` gained `multiseed_table()`
+and a gate rule requiring `all_seeds_pass` in addition to the aggregate verdict.
+
+Found and fixed a real defect in that new code: the call site passed the string
+`"nse"` to `multiseed_table(df, markets: tuple[str, ...])`, which iterates it as
+`['n','s','e']`, so the pipeline never actually regenerated T6. Changed to
+`("nse",)`. Verified: `python -m crisisbench.analysis` exits 0 and T6's mtime advanced
+from 01:19:48 to 01:34:48 with both NSE sections intact. Phase 5 is now complete.
+
 ## Verification log - Phase 7 browser pass
 
 Built dashboard served with `npx vite preview` (bound to 4174 because 4173 was
