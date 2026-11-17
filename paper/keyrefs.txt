@@ -1,0 +1,444 @@
+@inproceedings{yoon2019timegan,
+  author    = {Yoon, Jinsung and Jarrett, Daniel and van der Schaar, Mihaela},
+  title     = {Time-series Generative Adversarial Networks},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {32},
+  year      = {2019},
+  url       = {https://papers.nips.cc/paper_files/paper/2019/hash/c9efe5f26cd17ba6216bbe2a7d26d490-Abstract.html}
+}
+
+% note-src: crossref + arxiv 1907.06673
+
+@article{wiese2020quantgans,
+  author  = {Wiese, Magnus and Knobloch, Robert and Korn, Ralf and Kretschmer, Peter},
+  title   = {Quant {GANs}: Deep Generation of Financial Time Series},
+  journal = {Quantitative Finance},
+  volume  = {20},
+  number  = {9},
+  pages   = {1419--1440},
+  year    = {2020},
+  doi     = {10.1080/14697688.2020.1730426}
+}
+
+% note-src: arxiv 2111.08095 (no peer-reviewed venue confirmed; cite as preprint)
+
+@misc{desai2021timevae,
+  author        = {Desai, Abhyuday and Freeman, Cynthia and Wang, Zuhui and Beaver, Ian},
+  title         = {{TimeVAE}: A Variational Auto-Encoder for Multivariate Time Series Generation},
+  year          = {2021},
+  eprint        = {2111.08095},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2111.08095}
+}
+
+% note-src: arxiv 1710.10903 (arXiv comment: "To appear at ICLR 2018")
+
+@inproceedings{velickovic2018gat,
+  author        = {Veli{\v{c}}kovi{\'c}, Petar and Cucurull, Guillem and Casanova, Arantxa and Romero, Adriana and Li{\`o}, Pietro and Bengio, Yoshua},
+  title         = {Graph Attention Networks},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2018},
+  eprint        = {1710.10903},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/1710.10903}
+}
+
+% note-src: page https://proceedings.neurips.cc/paper/2020/hash/d89a66c7c80a29b1bdbab0f2a1a94af8-Abstract.html + arxiv 2004.11362
+
+@inproceedings{khosla2020supcon,
+  author    = {Khosla, Prannay and Teterwak, Piotr and Wang, Chen and Sarna, Aaron and Tian, Yonglong and Isola, Phillip and Maschinot, Aaron and Liu, Ce and Krishnan, Dilip},
+  title     = {Supervised Contrastive Learning},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  year      = {2020},
+  url       = {https://proceedings.neurips.cc/paper/2020/hash/d89a66c7c80a29b1bdbab0f2a1a94af8-Abstract.html}
+}
+
+% note-src: arxiv 2001.01328 (arXiv comment: "AISTATS 2020")
+
+@inproceedings{kidger2021neuralsde,
+  author        = {Kidger, Patrick and Foster, James and Li, Xuechen and Oberhauser, Harald and Lyons, Terry},
+  title         = {Neural {SDEs} as Infinite-Dimensional {GANs}},
+  booktitle     = {International Conference on Machine Learning (ICML)},
+  year          = {2021},
+  eprint        = {2102.03657},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2102.03657}
+}
+
+% note-src: arxiv 2011.13456 (arXiv comment: "ICLR 2021 (Oral)")
+
+@inproceedings{song2021score,
+  author        = {Song, Yang and Sohl-Dickstein, Jascha and Kingma, Diederik P. and Kumar, Abhishek and Ermon, Stefano and Poole, Ben},
+  title         = {Score-Based Generative Modeling through Stochastic Differential Equations},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2021},
+  eprint        = {2011.13456},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2011.13456}
+}
+
+% note-src: page https://openreview.net/forum?id=S1g7FHNqYQ + arxiv 1903.12436 (published at ICLR 2020)
+
+@article{bollerslev1986garch,
+  author  = {Bollerslev, Tim},
+  title   = {Generalized Autoregressive Conditional Heteroskedasticity},
+  journal = {Journal of Econometrics},
+  volume  = {31},
+  number  = {3},
+  pages   = {307--327},
+  year    = {1986},
+  doi     = {10.1016/0304-4076(86)90063-1}
+}
+
+% note-src: crossref (registered title is "Dynamic Conditional Correlation"; the printed subtitle was not confirmed and is omitted)
+
+@article{engle2002dcc,
+  author  = {Engle, Robert},
+  title   = {Dynamic Conditional Correlation},
+  journal = {Journal of Business \& Economic Statistics},
+  volume  = {20},
+  number  = {3},
+  pages   = {339--350},
+  year    = {2002},
+  doi     = {10.1198/073500102288618487}
+}
+
+% note-src: crossref
+
+@article{baroneadesi1999fhs,
+  author  = {Barone-Adesi, Giovanni and Giannopoulos, Kostas and Vosper, Les},
+  title   = {{VaR} without Correlations for Portfolios of Derivative Securities},
+  journal = {Journal of Futures Markets},
+  volume  = {19},
+  number  = {5},
+  pages   = {583--602},
+  year    = {1999},
+  doi     = {10.1002/(SICI)1096-9934(199908)19:5<583::AID-FUT5>3.0.CO;2-S}
+}
+
+% note-src: crossref (only the first page, 357, is registered; end page omitted)
+
+@article{hamilton1989regime,
+  author  = {Hamilton, James D.},
+  title   = {A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle},
+  journal = {Econometrica},
+  volume  = {57},
+  number  = {2},
+  pages   = {357},
+  year    = {1989},
+  doi     = {10.2307/1912559}
+}
+
+% note-src: crossref
+
+@article{longin2001extreme,
+  author  = {Longin, Fran{\c{c}}ois and Solnik, Bruno},
+  title   = {Extreme Correlation of International Equity Markets},
+  journal = {The Journal of Finance},
+  volume  = {56},
+  number  = {2},
+  pages   = {649--676},
+  year    = {2001},
+  doi     = {10.1111/0022-1082.00340}
+}
+
+% note-src: crossref
+
+@article{ang2002asymmetric,
+  author  = {Ang, Andrew and Chen, Joseph},
+  title   = {Asymmetric Correlations of Equity Portfolios},
+  journal = {Journal of Financial Economics},
+  volume  = {63},
+  number  = {3},
+  pages   = {443--494},
+  year    = {2002},
+  doi     = {10.1016/S0304-405X(02)00068-5}
+}
+
+% note-src: crossref
+
+@article{forbes2002contagion,
+  author  = {Forbes, Kristin J. and Rigobon, Roberto},
+  title   = {No Contagion, Only Interdependence: Measuring Stock Market Comovements},
+  journal = {The Journal of Finance},
+  volume  = {57},
+  number  = {5},
+  pages   = {2223--2261},
+  year    = {2002},
+  doi     = {10.1111/0022-1082.00494}
+}
+
+% note-src: crossref
+
+@article{cont2001stylized,
+  author  = {Cont, Rama},
+  title   = {Empirical Properties of Asset Returns: Stylized Facts and Statistical Issues},
+  journal = {Quantitative Finance},
+  volume  = {1},
+  number  = {2},
+  pages   = {223--236},
+  year    = {2001},
+  doi     = {10.1080/713665670}
+}
+
+% note-src: crossref
+
+@article{politis1994stationary,
+  author  = {Politis, Dimitris N. and Romano, Joseph P.},
+  title   = {The Stationary Bootstrap},
+  journal = {Journal of the American Statistical Association},
+  volume  = {89},
+  number  = {428},
+  pages   = {1303--1313},
+  year    = {1994},
+  doi     = {10.1080/01621459.1994.10476870}
+}
+
+% note-src: crossref
+
+@article{kendall1938rank,
+  author  = {Kendall, M. G.},
+  title   = {A New Measure of Rank Correlation},
+  journal = {Biometrika},
+  volume  = {30},
+  number  = {1-2},
+  pages   = {81--93},
+  year    = {1938},
+  doi     = {10.1093/biomet/30.1-2.81}
+}
+
+% note-src: crossref
+
+@article{tipping1999ppca,
+  author  = {Tipping, Michael E. and Bishop, Christopher M.},
+  title   = {Probabilistic Principal Component Analysis},
+  journal = {Journal of the Royal Statistical Society: Series B (Statistical Methodology)},
+  volume  = {61},
+  number  = {3},
+  pages   = {611--622},
+  year    = {1999},
+  doi     = {10.1111/1467-9868.00196}
+}
+
+% note-src: crossref
+
+@article{rabiner1989hmm,
+  author  = {Rabiner, Lawrence R.},
+  title   = {A Tutorial on Hidden {M}arkov Models and Selected Applications in Speech Recognition},
+  journal = {Proceedings of the IEEE},
+  volume  = {77},
+  number  = {2},
+  pages   = {257--286},
+  year    = {1989},
+  doi     = {10.1109/5.18626}
+}
+
+% note-src: crossref (article number 909231; no page range)
+
+@article{kupiec1995techniques,
+  author  = {Kupiec, Paul H.},
+  title   = {Techniques for Verifying the Accuracy of Risk Measurement Models},
+  journal = {The Journal of Derivatives},
+  volume  = {3},
+  number  = {2},
+  pages   = {73--84},
+  year    = {1995},
+  doi     = {10.3905/jod.1995.407942}
+}
+
+% note-src: crossref (only the first page, 841, is registered; end page omitted)
+
+@article{christoffersen1998interval,
+  author  = {Christoffersen, Peter F.},
+  title   = {Evaluating Interval Forecasts},
+  journal = {International Economic Review},
+  volume  = {39},
+  number  = {4},
+  pages   = {841},
+  year    = {1998},
+  doi     = {10.2307/2527341}
+}
+
+% note-src: page https://www.msci.com/documents/1296102/1636401/risk1214msci.pdf (Risk.net reprint, "Risk.net December 2014";
+%           title and both authors confirmed in the reprint; volume and pages not confirmed)
+
+@article{acerbi2014backtesting,
+  author  = {Acerbi, Carlo and Sz{\'e}kely, Bal{\'a}zs},
+  title   = {Back-testing Expected Shortfall},
+  journal = {Risk},
+  month   = dec,
+  year    = {2014},
+  url     = {https://www.risk.net/risk-management/2381658/back-testing-expected-shortfall}
+}
+
+% note-src: crossref
+
+@article{fissler2016elicitability,
+  author  = {Fissler, Tobias and Ziegel, Johanna F.},
+  title   = {Higher Order Elicitability and {O}sband's Principle},
+  journal = {The Annals of Statistics},
+  volume  = {44},
+  number  = {4},
+  pages   = {1680--1707},
+  year    = {2016},
+  doi     = {10.1214/16-AOS1439}
+}
+
+% note-src: crossref
+
+@inproceedings{assefa2020synthetic,
+  author    = {Assefa, Samuel A. and Dervovic, Danial and Mahfouz, Mahmoud and Tillman, Robert E. and Reddy, Prashant and Veloso, Manuela},
+  title     = {Generating Synthetic Data in Finance},
+  booktitle = {Proceedings of the First ACM International Conference on AI in Finance},
+  pages     = {1--8},
+  year      = {2020},
+  doi       = {10.1145/3383455.3422554}
+}
+
+% note-src: arxiv 2401.00081 (first submitted 29 Dec 2023)
+
+@misc{potluru2023synthetic,
+  author        = {Potluru, Vamsi K. and Borrajo, Daniel and Coletta, Andrea and Dalmasso, Niccol{\`o} and El-Laham, Yousef and Fons, Elizabeth and Ghassemi, Mohsen and Gopalakrishnan, Sriram and Gosai, Vikesh and Krea{\v{c}}i{\'c}, Eleonora and Mani, Ganapathy and Obitayo, Saheed and Paramanand, Deepak and Raman, Natraj and Solonin, Mikhail and Sood, Srijan and Vyetrenko, Svitlana and Zhu, Haibei and Veloso, Manuela and Balch, Tucker},
+  title         = {Synthetic Data Applications in Finance},
+  year          = {2023},
+  eprint        = {2401.00081},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2401.00081}
+}
+
+% note-src: arxiv 2106.06364
+
+@misc{eckerli2021gans,
+  author        = {Eckerli, Florian and Osterrieder, Joerg},
+  title         = {Generative Adversarial Networks in Finance: An Overview},
+  year          = {2021},
+  eprint        = {2106.06364},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2106.06364}
+}
+
+% note-src: crossref (article number 66)
+
+@article{cont2022tailgan,
+  author        = {Cont, Rama and Cucuringu, Mihai and Xu, Renyuan and Zhang, Chao},
+  title         = {Tail-{GAN}: Learning to Simulate Tail Risk Scenarios},
+  journal       = {Management Science},
+  volume        = {72},
+  number        = {4},
+  pages         = {2917--2936},
+  year          = {2026},
+  doi           = {10.1287/mnsc.2023.00936},
+  eprint        = {2203.01664},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2203.01664}
+}
+
+% note-src: arxiv 2512.21791
+
+@inproceedings{zhang2026sfag,
+  author        = {Zhang, Fan and Luo, Jiabin and Zhang, Zheng and Huang, Shuanghong and Liu, Zhipeng and Chen, Yu},
+  title         = {Beyond Visual Realism: Toward Reliable Financial Time Series Generation},
+  booktitle     = {IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  year          = {2026},
+  doi           = {10.1109/ICASSP55912.2026.11463522},
+  eprint        = {2601.12990},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2601.12990}
+}
+
+% note-src: crossref (the ICAIF 2023 paper associated with CoMeTS-GAN per secondary sources; published 25 Nov 2023)
+
+@inproceedings{marti2020corrgan,
+  author    = {Marti, Gautier},
+  title     = {{CorrGAN}: Sampling Realistic Financial Correlation Matrices Using Generative Adversarial Networks},
+  booktitle = {ICASSP 2020 - 2020 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  year      = {2020},
+  doi       = {10.1109/ICASSP40776.2020.9053276},
+  eprint    = {1910.09504},
+  archivePrefix = {arXiv}
+}
+
+% note-src: arxiv 2006.14498
+
+@misc{buehler2020market,
+  author        = {B{\"u}hler, Hans and Horvath, Blanka and Lyons, Terry and Perez Arribas, Imanol and Wood, Ben},
+  title         = {A Data-driven Market Simulator for Small Data Environments},
+  year          = {2020},
+  eprint        = {2006.14498},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2006.14498}
+}
+
+% note-src: crossref
+
+@misc{huh2026marketgans,
+  author        = {Huh, Jeonggyu and Jeong, Seungwon and Kim, Hyun-Gyoon and Koo, Hyeng Keun and Lim, Byung Hwa},
+  title         = {{MarketGANs}: Multivariate Financial Time-Series Data Augmentation Using Generative Adversarial Networks},
+  year          = {2026},
+  eprint        = {2601.17773},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2601.17773}
+}
+
+% note-src: arxiv 2510.10807 (single author; no venue listed)
+
+@misc{alzahrani2025marcd,
+  author        = {Alzahrani, Ali Atiah},
+  title         = {Multi-Agent Regime-Conditioned Diffusion ({MARCD}) for {CVaR}-Constrained Portfolio Decisions},
+  year          = {2025},
+  eprint        = {2510.10807},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2510.10807}
+}
+
+% note-src: arxiv 2501.03993 (no venue listed; v6 revised July 2026)
+
+@article{nelson1991egarch,
+  author  = {Nelson, Daniel B.},
+  title   = {Conditional Heteroskedasticity in Asset Returns: A New Approach},
+  journal = {Econometrica},
+  volume  = {59},
+  number  = {2},
+  pages   = {347},
+  year    = {1991},
+  doi     = {10.2307/2938260}
+}
+
+% note-src: ijcai.org + arxiv 2503.04164 (IJCAI 2025, pp. 9357-9365)
+
+@inproceedings{tanaka2025cofindiff,
+  author        = {Tanaka, Yuki and Hashimoto, Ryuji and Takayanagi, Takehiro and Piao, Zhe and Murayama, Yuri and Izumi, Kiyoshi},
+  title         = {{CoFinDiff}: Controllable Financial Diffusion Model for Time Series Generation},
+  booktitle     = {Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence (IJCAI)},
+  pages         = {9357--9365},
+  year          = {2025},
+  doi           = {10.24963/ijcai.2025/1040},
+  eprint        = {2503.04164},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2503.04164}
+}
+
+% note-src: arxiv 2512.20272 + dblp (verified 2026-11-18)
+
+@misc{xu2025hgansde,
+  author        = {Xu, Yuanjian and Yuan, Shuai and Hao, Jianing and Zhang, Guang},
+  title         = {{HGAN-SDEs}: Learning Neural Stochastic Differential Equations with Hermite-Guided Adversarial Training},
+  year          = {2025},
+  eprint        = {2512.20272},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2512.20272}
+}
+
+% note-src: arxiv 2608.19394 (verified 2026-11-18)
+
+@misc{boustany2026deepmkv,
+  author        = {{El Boustany}, Samer and Basseras, Th{\'e}o and Mekkaoui, Samy and Alouadi, Alexandre and Hafsi, Yadh and Pham, Huy{\^e}n},
+  title         = {{Deep-MKV-TS}: Path-Dependent {M}c{K}ean--{V}lasov Control for Financial Time Series Generation},
+  year          = {2026},
+  eprint        = {2608.19394},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2608.19394}
+}
+
+% note-src: arxiv 2607.06833 (verified 2026-11-18)

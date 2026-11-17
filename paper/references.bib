@@ -1,4 +1,4 @@
-% references.bib -- verified entries only (checked 2026-11-14).
+% references.bib -- verified entries only (checked 2026-11-14; re-verified 2026-11-18).
 % Verification source per entry is given in the "note-src" comment line above it:
 %   crossref = Crossref registry record for the DOI (api.crossref.org/works/<doi>)
 %   arxiv    = arXiv metadata record for the identifier (export.arxiv.org/api/query?id_list=<id>)
@@ -93,11 +93,12 @@
   url           = {https://arxiv.org/abs/2011.13456}
 }
 
-% note-src: arxiv 1903.12436 (venue NOT confirmed on an opened page; cite as preprint. First arXiv version 2019.)
-@misc{ghosh2020rae,
+% note-src: page https://openreview.net/forum?id=S1g7FHNqYQ + arxiv 1903.12436 (published at ICLR 2020)
+@inproceedings{ghosh2020rae,
   author        = {Ghosh, Partha and Sajjadi, Mehdi S. M. and Vergari, Antonio and Black, Michael and Sch{\"o}lkopf, Bernhard},
   title         = {From Variational to Deterministic Autoencoders},
-  year          = {2019},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2020},
   eprint        = {1903.12436},
   archivePrefix = {arXiv},
   url           = {https://arxiv.org/abs/1903.12436}
@@ -477,11 +478,16 @@
   url           = {https://arxiv.org/abs/2401.10370}
 }
 
-% note-src: arxiv 2203.01664 (arXiv comment mentions a version for Management Science; journal details not confirmed)
-@misc{cont2022tailgan,
+% note-src: crossref 10.1287/mnsc.2023.00936 + arxiv 2203.01664 (published in Management Science, 2026)
+@article{cont2022tailgan,
   author        = {Cont, Rama and Cucuringu, Mihai and Xu, Renyuan and Zhang, Chao},
   title         = {Tail-{GAN}: Learning to Simulate Tail Risk Scenarios},
-  year          = {2022},
+  journal       = {Management Science},
+  volume        = {72},
+  number        = {4},
+  pages         = {2917--2936},
+  year          = {2026},
+  doi           = {10.1287/mnsc.2023.00936},
   eprint        = {2203.01664},
   archivePrefix = {arXiv},
   url           = {https://arxiv.org/abs/2203.01664}
@@ -497,11 +503,13 @@
   url           = {https://arxiv.org/abs/2512.21791}
 }
 
-% note-src: arxiv 2601.12990 (arXiv comment: "Accepted by ICASSP 2026"; introduces SFAG)
-@misc{zhang2026sfag,
+% note-src: arxiv 2601.12990 + IEEE ICASSP 2026 DOI 10.1109/ICASSP55912.2026.11463522 (introduces SFAG)
+@inproceedings{zhang2026sfag,
   author        = {Zhang, Fan and Luo, Jiabin and Zhang, Zheng and Huang, Shuanghong and Liu, Zhipeng and Chen, Yu},
   title         = {Beyond Visual Realism: Toward Reliable Financial Time Series Generation},
+  booktitle     = {IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
   year          = {2026},
+  doi           = {10.1109/ICASSP55912.2026.11463522},
   eprint        = {2601.12990},
   archivePrefix = {arXiv},
   url           = {https://arxiv.org/abs/2601.12990}
@@ -537,14 +545,16 @@
   url           = {https://arxiv.org/abs/2410.09850}
 }
 
-% note-src: arxiv 2109.10072 (author-supplied journal reference on arXiv: "Risks 10.11 (2022): 199"; DOI not confirmed)
+% note-src: mdpi + arxiv 2109.10072 (Risks 10(11):199, DOI 10.3390/risks10110199)
 @article{flaig2022scenario,
   author        = {Flaig, Solveig and Junike, Gero},
   title         = {Scenario Generation for Market Risk Models Using Generative Neural Networks},
   journal       = {Risks},
   volume        = {10},
   number        = {11},
+  pages         = {199},
   year          = {2022},
+  doi           = {10.3390/risks10110199},
   eprint        = {2109.10072},
   archivePrefix = {arXiv},
   url           = {https://arxiv.org/abs/2109.10072}
@@ -595,10 +605,11 @@
   url           = {https://arxiv.org/abs/2503.17909}
 }
 
-% note-src: arxiv 2606.03184 (arXiv comment: "KDD 2026 (Oral)"; DOI as recorded on arXiv). A FORECASTING benchmark, not a generator benchmark.
-@misc{sun2026finstressts,
+% note-src: arxiv 2606.03184 + KDD 2026 DOI 10.1145/3770855.3817578. A FORECASTING benchmark, not a generator benchmark.
+@inproceedings{sun2026finstressts,
   author        = {Sun, Jiaze and Koa, Kelvin J. L. and Ni, Ruiyang and Liu, Yize and Chen, Haonan and Huang, Ke-Wei},
   title         = {{FinStressTS}: A Parametric Synthetic Benchmark for Time-Series Forecasting in Finance},
+  booktitle     = {Proceedings of the ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)},
   year          = {2026},
   eprint        = {2606.03184},
   archivePrefix = {arXiv},
@@ -616,20 +627,22 @@
   url           = {https://arxiv.org/abs/2605.22215}
 }
 
-% note-src: arxiv 2602.08182 (arXiv comment: "PAKDD2026 Accepted")
-@misc{ozai2026nansde,
+% note-src: arxiv 2602.08182 + PAKDD 2026 accepted
+@inproceedings{ozai2026nansde,
   author        = {Ozai, Hiromu and Nakagawa, Kei},
   title         = {{NANSDE-Net}: A Neural {SDE} Framework for Generating Time Series with Memory},
+  booktitle     = {Pacific-Asia Conference on Knowledge Discovery and Data Mining (PAKDD)},
   year          = {2026},
   eprint        = {2602.08182},
   archivePrefix = {arXiv},
   url           = {https://arxiv.org/abs/2602.08182}
 }
 
-% note-src: arxiv 2510.25769 (arXiv comment: "NeurIPS 2025 (poster)")
-@misc{kiyohara2025nsf,
+% note-src: arxiv 2510.25769 + NeurIPS 2025 proceedings
+@inproceedings{kiyohara2025nsf,
   author        = {Kiyohara, Naoki and Johns, Edward and Li, Yingzhen},
   title         = {Neural Stochastic Flows: Solver-Free Modelling and Inference for {SDE} Solutions},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
   year          = {2025},
   eprint        = {2510.25769},
   archivePrefix = {arXiv},
@@ -729,4 +742,47 @@
   pages   = {347},
   year    = {1991},
   doi     = {10.2307/2938260}
+}
+
+% note-src: ijcai.org + arxiv 2503.04164 (IJCAI 2025, pp. 9357-9365)
+@inproceedings{tanaka2025cofindiff,
+  author        = {Tanaka, Yuki and Hashimoto, Ryuji and Takayanagi, Takehiro and Piao, Zhe and Murayama, Yuri and Izumi, Kiyoshi},
+  title         = {{CoFinDiff}: Controllable Financial Diffusion Model for Time Series Generation},
+  booktitle     = {Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence (IJCAI)},
+  pages         = {9357--9365},
+  year          = {2025},
+  doi           = {10.24963/ijcai.2025/1040},
+  eprint        = {2503.04164},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2503.04164}
+}
+
+% note-src: arxiv 2512.20272 + dblp (verified 2026-11-18)
+@misc{xu2025hgansde,
+  author        = {Xu, Yuanjian and Yuan, Shuai and Hao, Jianing and Zhang, Guang},
+  title         = {{HGAN-SDEs}: Learning Neural Stochastic Differential Equations with Hermite-Guided Adversarial Training},
+  year          = {2025},
+  eprint        = {2512.20272},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2512.20272}
+}
+
+% note-src: arxiv 2608.19394 (verified 2026-11-18)
+@misc{boustany2026deepmkv,
+  author        = {{El Boustany}, Samer and Basseras, Th{\'e}o and Mekkaoui, Samy and Alouadi, Alexandre and Hafsi, Yadh and Pham, Huy{\^e}n},
+  title         = {{Deep-MKV-TS}: Path-Dependent {M}c{K}ean--{V}lasov Control for Financial Time Series Generation},
+  year          = {2026},
+  eprint        = {2608.19394},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2608.19394}
+}
+
+% note-src: arxiv 2607.06833 (verified 2026-11-18)
+@misc{uslu2026graphdiff,
+  author        = {Uslu, Yigit Berkay and Hadou, Samar and Rozada, Sergio and Bidokhti, Shirin Saeedi and Ribeiro, Alejandro},
+  title         = {Generative Diffusion Models of Stochastic Graph Signals},
+  year          = {2026},
+  eprint        = {2607.06833},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2607.06833}
 }
