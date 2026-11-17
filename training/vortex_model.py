@@ -14,7 +14,12 @@ from typing import Any
 from models.gat_encoder import DynamicGATEncoder
 from models.neural_sde import LatentSDEModel
 from models.contrastive import SupConLoss, ProjectionHead
-from training.losses import total_loss
+from training.losses import (
+    total_loss,
+    graph_consistency_loss,
+    emission_correlation_loss,
+    stylized_facts_loss,
+)
 
 
 class VORTEXModel(pl.LightningModule):
@@ -72,8 +77,10 @@ class VORTEXModel(pl.LightningModule):
         static_graph: bool = False,  # 4.1: True = freeze A_learned to input adj
         warmup_epochs: int = 20,  # contrastive ramp: full weight only after this many epochs
         lambda_styl: float = 0.1,  # stylized-facts weight inside reconstruction loss
+        stylized_sampler: str = "seq",  # Defect 2: "seq" (generation's sampler) or "single" (legacy)
         gat_dropout: float = 0.1,  # Stage 1: 0.6 per GAT paper
         weight_decay: float = 0.0,  # Stage 1: 0.0005 L2 per GAT paper
+        scheduler_epochs: int = 0,  # cosine T_max; 0 = 100
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -118,6 +125,16 @@ class VORTEXModel(pl.LightningModule):
         # Initialize with small random values; will be trained via KL to encoder posterior
         self.prior_mu = nn.Parameter(torch.randn(2, latent_dim) * 0.1)
         self.prior_logvar = nn.Parameter(torch.zeros(2, latent_dim))
+        # Generative prior per regime, fitted after training on the aggregate
+        # posterior (fit_generation_priors). Together with prior_mu/prior_logvar
+        # these are the ONLY inputs the generator gets: nothing about the window
+        # it is asked to produce.
+        self.regime_graph_emb = nn.Parameter(torch.zeros(2, latent_dim))
+        self.regime_log_vol = nn.Parameter(torch.zeros(2))
+        # Spread of the per-window log-volatility within each regime. Without it
+        # every generated window of a regime shares a single volatility level,
+        # which is a trivial structural tell for the discriminative test.
+        self.regime_log_vol_std = nn.Parameter(torch.zeros(2))
         self.beta_max = beta_max
         self.prior_warmup = max(1, prior_warmup)
         self.lam_var = lam_var
@@ -127,7 +144,11 @@ class VORTEXModel(pl.LightningModule):
         self.vol_dyn = vol_dyn
         self._regime_corr = None  # lazy cache of data/raw/regime_corr.npz
         self.emission = emission
-        self._use_nll = emission in ("hetero", "t", "mt")
+        # "smt"/"mt"/"t"/"hetero" are likelihood emissions. Leaving "smt" out
+        # trained the emission heads with an MSE-on-the-mean objective, so the
+        # heads never left their initialisation and evaluation returned the
+        # decoder mean instead of a sample.
+        self._use_nll = emission in ("hetero", "t", "mt", "smt")
         self.rank_K = rank_K
         self.sde_sigma_max = sde_sigma_max
         
@@ -138,7 +159,16 @@ class VORTEXModel(pl.LightningModule):
         self.lam_na = lam_na
         self.warmup_epochs = max(1, warmup_epochs)
         self.lambda_styl = lambda_styl
+        if stylized_sampler not in ("single", "seq"):
+            raise ValueError(
+                f"stylized_sampler must be 'single' or 'seq', got {stylized_sampler!r}"
+            )
+        # Defect 2: training/validation used emission_sample (one joint draw)
+        # while generation used emission_sample_seq (vol-feedback recursion), so
+        # the objective never trained the deployed sampler.
+        self.stylized_sampler = stylized_sampler
         self.lr = lr
+        self.scheduler_epochs = max(1, int(scheduler_epochs)) if scheduler_epochs else 100
 
     def _eff_lam_con(self) -> float:
         """Linear contrastive warmup: reconstruction first, regimes later."""
@@ -154,6 +184,14 @@ class VORTEXModel(pl.LightningModule):
             z = np.load("data/raw/regime_corr.npz")
             self._regime_corr = {k: torch.from_numpy(z[k]).float().to(device) for k in ("crisis", "normal")}
         return {k: v.to(device) for k, v in self._regime_corr.items()}
+
+    def set_regime_corr(self, corr: dict) -> None:
+        """Install per-regime correlation targets computed from the aligned train split."""
+        self._regime_corr = {
+            k: torch.as_tensor(np.asarray(v), dtype=torch.float32)
+            for k, v in corr.items()
+        }
+        print("Regime correlation targets installed from the training split.")
 
     @staticmethod
     def _pooled_corr(x: torch.Tensor) -> torch.Tensor:
@@ -179,14 +217,6 @@ class VORTEXModel(pl.LightningModule):
         if cnt == 0:
             return torch.tensor(0.0, device=r_gen.device)
         return tot / cnt
-        """Linear contrastive warmup: reconstruction first, regimes later.
-
-        Early epochs have random projections and unscaled SDE outputs, so a
-        full contrastive weight fights rescaling. Ramp 0 -> lam_con over
-        warmup_epochs; 1.0 thereafter.
-        """
-        progress = (self.current_epoch + 1) / self.warmup_epochs
-        return self.lam_con * min(1.0, progress)
 
     def _eff_lambda_styl(self) -> float:
         """Ramp stylized facts weight 0 -> lambda_styl over warmup_epochs."""
@@ -197,6 +227,16 @@ class VORTEXModel(pl.LightningModule):
         """KL weight ramp 0 -> beta_max over prior_warmup epochs."""
         progress = (self.current_epoch + 1) / self.prior_warmup
         return self.beta_max * min(1.0, progress)
+
+    def _nll_per_asset(self, nll: torch.Tensor) -> torch.Tensor:
+        """Likelihood per asset, so auxiliary moment terms are comparable.
+
+        The raw NLL is a joint log-density over 50 assets (~65). Divided by the
+        asset count it is ~1.3, which is the same order as the stylized-fact,
+        correlation and graph terms. Without this the likelihood is 99% of the
+        loss and every fidelity term is decoration.
+        """
+        return nll / max(1, self.sde_model.n_stocks)
 
     @staticmethod
     def variance_loss(r_hat: torch.Tensor, r_real: torch.Tensor) -> torch.Tensor:
@@ -277,27 +317,61 @@ class VORTEXModel(pl.LightningModule):
         if self._use_nll:
             # 7.3: NLL replaces MSE recon and L_var; MSE kept as diagnostic only
             zs_tail = self._last_zs
+            lv = self.sde_model.log_vol(x)
             if self.vol_dyn:
-                nll = self.sde_model.emission_nll_vol(zs_tail, x)
+                nll = self.sde_model.emission_nll_vol(zs_tail, x, regimes, lv)
                 rho, kappa = self.sde_model._rho_kappa(x)
                 self.log("train/rho", rho.detach(), on_step=False, on_epoch=True, prog_bar=False)
                 self.log("train/kappa", kappa.detach(), on_step=False, on_epoch=True, prog_bar=False)
             else:
-                nll = self.sde_model.emission_nll(zs_tail, x)
+                nll = self.sde_model.emission_nll(zs_tail, x, regimes, lv)
             mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
             kl = self._kl_to_prior(regimes)
-            loss = nll + self._eff_beta() * kl
+            loss = self._nll_per_asset(nll) + self._eff_beta() * kl
             self.log("train/nll", nll, on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/nll_per_asset", loss.detach(), on_step=True, on_epoch=True, prog_bar=False)
             self.log("train/mse_diag", mse_diag, on_step=True, on_epoch=True, prog_bar=False)
             self.log("train/kl", kl, on_step=True, on_epoch=True, prog_bar=True)
             if self.lam_corr > 0:
                 # Lane 1A: correlation loss on rsampled scenarios (nu detached inside)
-                r_samp = self.sde_model.emission_sample_corr(self._last_zs)
+                r_samp = self.sde_model.emission_sample_corr(self._last_zs, regimes, lv)
                 lcorr = self.correlation_loss(r_samp, regimes)
                 wcorr = self._eff_lam_corr() * lcorr
                 loss = loss + wcorr
                 self.log("train/corr_raw", lcorr.detach(), on_step=True, on_epoch=True, prog_bar=True)
                 self.log("train/corr_w", wcorr.detach(), on_step=True, on_epoch=True, prog_bar=True)
+            if self._eff_lambda_styl() > 0:
+                # Stylized facts must be optimised explicitly: a joint likelihood
+                # is nearly indifferent to 4% squared-return autocorrelation and
+                # to the tails that make pooled kurtosis ~12.
+                # Defect 2: optimise the sampler generation actually uses. The
+                # sequential draw feeds the realised return back into the vol
+                # state, which is the only path by which ACF(r^2) can be learnt.
+                if self.stylized_sampler == "seq":
+                    r_styl = self.sde_model.emission_sample_seq(self._last_zs, regimes, lv)
+                else:
+                    r_styl = self.sde_model.emission_sample(self._last_zs, regimes, lv)
+                lstyl = stylized_facts_loss(x, r_styl)
+                wstyl = self._eff_lambda_styl() * lstyl
+                loss = loss + wstyl
+                self.log("train/styl", lstyl.detach(), on_step=True, on_epoch=True, prog_bar=True)
+                self.log("train/styl_w", wstyl.detach(), on_step=True, on_epoch=True, prog_bar=False)
+            if self.lam_emission_corr > 0:
+                # Correlation target on the emission covariance itself: this is
+                # what makes crisis draws move together, and it was unreachable
+                # because the NLL branch ignored lam_emission_corr.
+                lemiss = emission_correlation_loss(
+                    self.sde_model, self._last_zs, regimes, self._load_regime_corr(x.device),
+                    log_vol=lv,
+                )
+                wemiss = self.lam_emission_corr * lemiss
+                loss = loss + wemiss
+                self.log("train/emission_corr_raw", lemiss.detach(), on_step=True, on_epoch=True, prog_bar=True)
+                self.log("train/emission_corr_w", wemiss.detach(), on_step=True, on_epoch=True, prog_bar=True)
+            if self.lam_graph > 0:
+                lgraph = graph_consistency_loss(A_learned, A_emp)
+                loss = loss + self.lam_graph * lgraph
+                self.log("train/graph", lgraph.detach(), on_step=True, on_epoch=True, prog_bar=True)
             self.log("train/total", loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
 
@@ -338,6 +412,23 @@ class VORTEXModel(pl.LightningModule):
         for key, value in components.items():
             self.log(f"train/{key}", value, on_step=True, on_epoch=True, prog_bar=True)
 
+        # Gradient norm logging + anomaly detection (first 5 epochs)
+        if self.trainer is not None and self.global_step % 50 == 0:
+            total_norm = 0.0
+            for p in self.parameters():
+                if p.grad is not None:
+                    total_norm += p.grad.data.norm(2).item() ** 2
+            total_norm = total_norm ** 0.5
+            self.log("train/grad_norm", total_norm, on_step=True, on_epoch=False, prog_bar=True)
+            
+            # Check for NaN/Inf gradients
+            for name, param in self.named_parameters():
+                if param.grad is not None:
+                    if torch.isnan(param.grad).any():
+                        self.log(f"train/grad_nan/{name}", 1.0, on_step=True)
+                    if torch.isinf(param.grad).any():
+                        self.log(f"train/grad_inf/{name}", 1.0, on_step=True)
+
         return loss
 
     def generate_from_prior(self, adj, node_feats, regimes):
@@ -365,10 +456,11 @@ class VORTEXModel(pl.LightningModule):
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
 
         if self._use_nll:
+            lv = self.sde_model.log_vol(x)
             if self.vol_dyn:
-                nll = self.sde_model.emission_nll_vol(self._last_zs, x)
+                nll = self.sde_model.emission_nll_vol(self._last_zs, x, regimes, lv)
             else:
-                nll = self.sde_model.emission_nll(self._last_zs, x)
+                nll = self.sde_model.emission_nll(self._last_zs, x, regimes, lv)
             mse_diag = torch.nn.functional.mse_loss(r_hat, x).detach()
             self.log("val/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
             self.log("val/mse_diag", mse_diag, on_step=False, on_epoch=True, prog_bar=False)
@@ -379,6 +471,27 @@ class VORTEXModel(pl.LightningModule):
                 self.log("val/kl", self.gaussian_kl(mu_q, logvar_q, self.prior_mu[rv],
                                                     self.prior_logvar[rv]),
                          on_step=False, on_epoch=True, prog_bar=True)
+                emiss = torch.tensor(0.0, device=x.device)
+                if self.lam_emission_corr > 0:
+                    emiss = emission_correlation_loss(self.sde_model, self._last_zs, regimes,
+                                                      self._load_regime_corr(x.device),
+                                                      log_vol=lv)
+                self.log("val/emission_corr", emiss, on_step=False, on_epoch=True, prog_bar=True)
+                # Defect 2: val/fidelity is the checkpoint metric, so it must be
+                # the generation sampler, not a cheaper surrogate.
+                if self.stylized_sampler == "seq":
+                    r_val = self.sde_model.emission_sample_seq(self._last_zs, regimes, lv)
+                else:
+                    r_val = self.sde_model.emission_sample(self._last_zs, regimes, lv)
+                styl = stylized_facts_loss(x, r_val)
+                self.log("val/styl", styl, on_step=False, on_epoch=True, prog_bar=True)
+                # The objective that matters for generation, and the metric to
+                # checkpoint on: it does not depend on how well the encoder fits
+                # the training windows.
+                self.log("val/fidelity", emiss + styl, on_step=False, on_epoch=True,
+                         prog_bar=True)
+            if batch_idx == 0 and self.current_epoch % 5 == 0:
+                self._log_gate_metrics(x, regimes, adj, node_feats)
             return nll
 
         # Compute total loss
@@ -397,6 +510,8 @@ class VORTEXModel(pl.LightningModule):
             lam_corr=self._eff_lam_corr(),
             lambda_styl=self._eff_lambda_styl(),
             regime_corr=self._load_regime_corr(x.device),
+            sde_model=self.sde_model,
+            zs=self._last_zs,
         )
 
         # Log all components
@@ -413,7 +528,80 @@ class VORTEXModel(pl.LightningModule):
         self.log("val/total_incl", loss + self.lam_var * lvar + self._eff_beta() * kl_val,
                  on_step=False, on_epoch=True, prog_bar=False)
 
+        # Masterplan gate metrics (every 5 epochs, batch_idx=0 to avoid duplicate compute)
+        if batch_idx == 0 and self.current_epoch % 5 == 0:
+            self._log_gate_metrics(x, regimes, adj, node_feats)
+
         return loss
+
+    @staticmethod
+    def _gate_metrics(real: torch.Tensor, gen: torch.Tensor, regimes: torch.Tensor) -> dict:
+        """Real, side-by-side gate statistics (gen vs the same real windows).
+
+        These used to be placeholders (`0.5`, `1.0`, a hardcoded 0.3 target),
+        which is why the training log reported perfect-looking gates while the
+        evaluation failed every one of them.
+        """
+        from eval.contagion import cvar_regime_ratio, evaluate_contagion
+        from eval.statistical import _acf_lag1
+
+        r = real.detach().cpu().numpy().astype(np.float64)
+        g = gen.detach().cpu().numpy().astype(np.float64)
+        reg = regimes.detach().cpu().numpy().astype(np.int64)
+
+        def kurt(x):
+            flat = x.reshape(-1)
+            flat = (flat - flat.mean()) / (flat.std() + 1e-8)
+            return float((flat ** 4).mean() - 3.0)
+
+        def pooled_corr(x):
+            f = x.reshape(-1, x.shape[-1])
+            f = f - f.mean(0, keepdims=True)
+            cov = f.T @ f / max(1, len(f) - 1)
+            sd = np.sqrt(np.diag(cov)).clip(1e-12)
+            return cov / sd[:, None] / sd[None, :]
+
+        out = {
+            "kurt_gen": kurt(g), "kurt_real": kurt(r),
+            "acf_r2_gen": _acf_lag1(g), "acf_r2_real": _acf_lag1(r),
+            "corr_fro": float(np.linalg.norm(pooled_corr(r) - pooled_corr(g), "fro")),
+        }
+        rc, gc = evaluate_contagion(r, reg), evaluate_contagion(g, reg)
+        out["crisis_boost_gen"] = gc["crisis_corr_boost"]
+        out["crisis_boost_real"] = rc["crisis_corr_boost"]
+        rv, gv = cvar_regime_ratio(r, reg), cvar_regime_ratio(g, reg)
+        out["cvar_ratio_gen"] = gv["cvar_ratio"]
+        out["cvar_ratio_real"] = rv["cvar_ratio"]
+        return out
+
+    def _log_gate_metrics(self, x, regimes, adj, node_feats) -> None:
+        """Generate from the regime prior and log the real gates.
+
+        Uses `sample_regime_scenarios`, i.e. the same entry point the evaluator
+        uses, so the logged gates describe the honest generator rather than a
+        reconstruction of the batch.
+        """
+        if (regimes == 0).sum() == 0 or (regimes == 1).sum() == 0:
+            return  # both regimes are needed for the contagion/CVaR statistics
+        with torch.no_grad():
+            gen = self.sample_regime_scenarios(regimes)
+        metrics = self._gate_metrics(x, gen, regimes)
+        prog = {
+            "kurt_gen": "val/kurtosis",
+            "acf_r2_gen": "val/acf_r2",
+            "corr_fro": "val/corr_fro",
+            "crisis_boost_gen": "val/crisis_boost",
+            "cvar_ratio_gen": "val/cvar_ratio",
+        }
+        for key, value in metrics.items():
+            name = prog.get(key, f"val/{key}")
+            self.log(name, float(value), on_step=False, on_epoch=True,
+                     prog_bar=name in prog.values())
+        for key, real_key in (("kurt_real", "val/kurtosis_real"),
+                              ("acf_r2_real", "val/acf_r2_real"),
+                              ("crisis_boost_real", "val/crisis_boost_real"),
+                              ("cvar_ratio_real", "val/cvar_ratio_real")):
+            self.log(real_key, float(metrics[key]), on_step=False, on_epoch=True, prog_bar=False)
 
     def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step (mirrors validation, logs under test/)."""
@@ -423,6 +611,16 @@ class VORTEXModel(pl.LightningModule):
         A_emp = batch["adj_empirical"]
         regimes = batch["regimes"]
         r_hat, A_learned, z_proj = self(x, adj, node_feats)
+        if self._use_nll:
+            lv = self.sde_model.log_vol(x)
+            if self.vol_dyn:
+                nll = self.sde_model.emission_nll_vol(self._last_zs, x, regimes, lv)
+            else:
+                nll = self.sde_model.emission_nll(self._last_zs, x, regimes, lv)
+            self.log("test/nll", nll, on_step=False, on_epoch=True, prog_bar=True)
+            self.log("test/mse_diag", torch.nn.functional.mse_loss(r_hat, x),
+                     on_step=False, on_epoch=True, prog_bar=False)
+            return nll
         loss, components = total_loss(
             r_real=x,
             r_hat=r_hat,
@@ -438,6 +636,8 @@ class VORTEXModel(pl.LightningModule):
             lam_corr=self._eff_lam_corr(),
             lambda_styl=self._eff_lambda_styl(),
             regime_corr=self._load_regime_corr(x.device),
+            sde_model=self.sde_model,
+            zs=self._last_zs,
         )
         for key, value in components.items():
             key_val = key.replace("loss/", "")
@@ -445,9 +645,29 @@ class VORTEXModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        """Configure Adam optimizer with cosine annealing schedule."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        """Adam with a faster group for the dynamics scalars and a full-run cosine.
+
+        rho/kappa reach the likelihood through a 60-step recursion, so their
+        gradients are tiny next to the emission heads. They get their own group
+        (the same trick as the CG-NSDE v2 generator's 2e-2 dynamics lr).
+        """
+        fast_names = {"sde_model.rho_raw", "sde_model.kappa_raw", "sde_model.raw_nu",
+                      "sde_model.vol_coupling",
+                      "sde_model.regime_emb.weight", "prior_mu", "prior_logvar",
+                      "regime_graph_emb", "regime_log_vol", "regime_log_vol_std"}
+        fast, slow = [], []
+        for name, param in self.named_parameters():
+            (fast if name in fast_names else slow).append(param)
+        optimizer = torch.optim.Adam(
+            [
+                {"params": slow, "lr": self.lr, "weight_decay": self.weight_decay},
+                {"params": fast, "lr": self.lr * 10.0, "weight_decay": 0.0},
+            ],
+            lr=self.lr,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.scheduler_epochs
+        )
         
         return {
             "optimizer": optimizer,
@@ -494,14 +714,102 @@ class VORTEXModel(pl.LightningModule):
             for i in range(n_scenarios):
                 r_mean, zs_i = self.sde_model(x, graph_emb)
                 if self._use_nll:
+                    lv = self.sde_model.log_vol(x)
                     if self.vol_dyn:
-                        scenarios.append(self.sde_model.emission_sample_seq(zs_i)[i % batch_size])
+                        scenarios.append(self.sde_model.emission_sample_seq(zs_i, regimes, lv)[i % batch_size])
                     else:
-                        scenarios.append(self.sde_model.emission_sample(zs_i)[i % batch_size])
+                        scenarios.append(self.sde_model.emission_sample(zs_i, regimes, lv)[i % batch_size])
                 else:
                     scenarios.append(r_mean[i % batch_size])  # (T, N)
 
         return torch.stack(scenarios)
+
+    @torch.no_grad()
+    def fit_generation_priors(self, batches, device=None) -> None:
+        """Fit the generative prior per regime from the training windows.
+
+        Empirical Bayes: the prior p(z0 | regime) is set to the moments of the
+        aggregate posterior q(z0 | x) over that regime's windows, and the graph
+        context and volatility level to their per-regime means. Sampling from
+        these reproduces what the decoder was trained on, without any access to
+        the window being generated.
+        """
+        was_training = self.training
+        self.eval()
+        device = device or next(self.parameters()).device
+        mus = {0: [], 1: []}
+        graphs = {0: [], 1: []}
+        vols = {0: [], 1: []}
+        for batch in batches:
+            x = batch["returns"].to(device)
+            adj = batch["adj_matrix"].to(device)
+            node_feats = batch["node_features"].to(device)
+            regimes = batch["regimes"].to(device).long().clamp(0, 1)
+            mu, _, _ = self.sde_model.encode_stats(x)
+            if self.use_gat:
+                embs, _ = self.gat(node_feats, adj)
+            else:
+                embs = self.gat_fallback(node_feats)
+            graph = embs.mean(dim=1)
+            vol = self.sde_model.log_vol(x)
+            for r in (0, 1):
+                sel = regimes == r
+                if sel.any():
+                    mus[r].append(mu[sel].cpu())
+                    graphs[r].append(graph[sel].cpu())
+                    vols[r].append(vol[sel].cpu())
+
+        with torch.no_grad():
+            for r in (0, 1):
+                if not mus[r]:
+                    print(f"Warning: no regime-{r} windows; prior left at its initial value")
+                    continue
+                m = torch.cat(mus[r])
+                self.prior_mu.data[r] = m.mean(0).to(self.prior_mu.device)
+                var = m.var(0, unbiased=False).clamp_min(1e-4)
+                self.prior_logvar.data[r] = var.log().to(self.prior_logvar.device)
+                self.regime_graph_emb.data[r] = torch.cat(graphs[r]).mean(0).to(self.regime_graph_emb.device)
+                self.regime_log_vol.data[r] = torch.cat(vols[r]).mean().to(self.regime_log_vol.device)
+                self.regime_log_vol_std.data[r] = torch.cat(vols[r]).std(unbiased=False).clamp_min(
+                    1e-3).to(self.regime_log_vol_std.device)
+                print(f"Prior regime {r}: {len(m)} windows, "
+                      f"log_vol {self.regime_log_vol[r].item():+.3f} "
+                      f"(std {self.regime_log_vol_std[r].item():.3f}), "
+                      f"prior std {var.sqrt().mean().item():.3f}")
+        self.train(was_training)
+
+    @torch.no_grad()
+    def sample_regime_scenarios(self, regimes, device=None, chunk: int = 128) -> torch.Tensor:
+        """Generate one scenario per requested regime, using only that regime.
+
+        This is the generative entry point: no returns, adjacency, node features
+        or posterior of the target window are available here.
+        """
+        self.eval()
+        device = device or next(self.parameters()).device
+        r_all = torch.as_tensor(regimes, dtype=torch.long, device=device).reshape(-1).clamp(0, 1)
+        outs = []
+        for start in range(0, len(r_all), chunk):
+            r = r_all[start:start + chunk]
+            z0 = self.prior_mu[r] + torch.randn(
+                len(r), self.sde_model.latent_dim, device=device
+            ) * torch.exp(0.5 * self.prior_logvar[r])
+            graph_emb = self.regime_graph_emb[r]
+            # Per-window volatility level, drawn from the regime's own log-vol
+            # distribution: real windows vary in volatility, so the generator must
+            # too, otherwise every draw sits at the regime mean and is trivially
+            # separable from real data.
+            log_vol = self.regime_log_vol[r] + self.regime_log_vol_std[r] * torch.randn(
+                len(r), device=device)
+            _, zs = self.sde_model.decode_from_z0(graph_emb, z0)
+            if self._use_nll:
+                if self.vol_dyn:
+                    outs.append(self.sde_model.emission_sample_seq(zs, r, log_vol))
+                else:
+                    outs.append(self.sde_model.emission_sample(zs, r, log_vol))
+            else:
+                outs.append(self.sde_model.decoder(zs))
+        return torch.cat(outs, dim=0)
 
     @torch.no_grad()
     def sample_prior_scenarios(
@@ -509,11 +817,15 @@ class VORTEXModel(pl.LightningModule):
         adj: torch.Tensor,
         node_feats: torch.Tensor,
         regimes: torch.Tensor,
+        x: torch.Tensor | None = None,
+        z0_source: str = "aggregate_posterior",
     ) -> torch.Tensor:
-        """Generate one scenario per input row with z0 from the regime prior.
+        """Generate one scenario per input row, conditioned on the row's regime.
 
-        Graph context comes from the real row (same-period conditioning);
-        the initial state comes from p(z0 | regime). Returns (B, T, N).
+        Graph context comes from the real row (same-period conditioning). z0 is
+        drawn from either the learned regime prior p(z0 | regime) or the
+        aggregate posterior q(z0 | x), which is the distribution the decoder
+        was actually trained on. Returns (B, T, N).
         """
         self.eval()
         if self.use_gat:
@@ -522,12 +834,20 @@ class VORTEXModel(pl.LightningModule):
             node_embs = self.gat_fallback(node_feats)
         graph_emb = node_embs.mean(dim=1)
         r = regimes.long().clamp(0, 1)
-        eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
-        z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
+        if z0_source == "aggregate_posterior" and x is not None:
+            mu, logvar, _ = self.sde_model.encode_stats(x)
+            z0 = self.sde_model.sample_z0(mu, logvar)
+        elif z0_source == "posterior" and x is not None:
+            mu, logvar, _ = self.sde_model.encode_stats(x)
+            z0 = mu
+        else:
+            eps = torch.randn(graph_emb.shape[0], self.sde_model.latent_dim, device=graph_emb.device)
+            z0 = self.prior_mu[r] + eps * torch.exp(0.5 * self.prior_logvar[r])
         r_mean, zs = self.sde_model.decode_from_z0(graph_emb, z0)
         if self._use_nll:
             # 7.3: generation SAMPLES the emission, never the mean
+            lv = self.sde_model.log_vol(x) if x is not None else None
             if self.vol_dyn:
-                return self.sde_model.emission_sample_seq(zs)
-            return self.sde_model.emission_sample(zs)
+                return self.sde_model.emission_sample_seq(zs, regimes, lv)
+            return self.sde_model.emission_sample(zs, regimes, lv)
         return r_mean

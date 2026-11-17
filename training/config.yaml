@@ -22,32 +22,88 @@ cgnsde:
   tau: 0.07
   lr: 0.001
   sde_hidden_dim: 128
-  max_epochs: 200
-  batch_size: 4
+  max_epochs: 150
+  batch_size: 16
+  accumulate_grad_batches: 2
   test_size: 0.2
   validation_size: 0.15
   seed: 42
-  gradient_clip: 1.0
+  gradient_clip_val: 1.0
   num_workers: 0
   crisis_percentile: 85
-  patience: 200
+  patience: 40
   accelerator: cuda
   devices: 1
-  monitor_metric: val/total
+  # Checkpoint on generation fidelity (emission correlation error + stylized-fact
+  # error). Monitoring val/nll selected the epoch where the *encoder* had not yet
+  # memorised the training windows, which is not what generation needs.
+  monitor_metric: val/fidelity
+  # Batch composition. The train split is ~15% crisis; 0.25 guarantees >=4
+  # crisis windows per batch of 16. 0 = every training window is visited each
+  # epoch (the old sampler stopped at the minority class: 664 of 2234 windows).
+  crisis_fraction: 0.25
+  max_batches_per_epoch: 0
   loss_weights:
     lam_rec: 1.0
     lam_graph: 0.5
     lam_con: 0.2
     lam_na: 0.0
-  lambda_styl: 0.5
+  # Weights are relative to an NLL expressed per asset (~1.3), so a weight of
+  # 1.0 is a real contribution. With the raw joint NLL (~65) every term here
+  # was decoration.
+  lambda_styl: 1.0
   warmup_epochs: 20
-  sde_sigma_max: 0.5
+  sde_sigma_max: 1.0
   weight_decay: 0.0005
-  lam_corr: 100.0
-  lam_emission_corr: 200.0
+  lam_corr: 2.0
+  lam_emission_corr: 20.0
   vol_dyn: true
   emission: smt
   rank_K: 8
-  beta_max: 1.0
+  beta_max: 0.05
+  # Defect 2: the stylized-facts term must optimise the sampler that generation
+  # actually uses. "seq" = emission_sample_seq (step-by-step with the volatility
+  # recursion, so ACF(r^2) and tails receive gradient). "single" = the legacy
+  # one-shot joint draw, kept for A/B comparison only.
+  stylized_sampler: "seq"
   prior_warmup: 20
-  corr_ramp: 5
+  corr_ramp: 30
+
+  # W&B Sweep configuration for hyperparameter optimization
+  wandb_sweep:
+    enabled: false  # Set to true to enable sweep
+    count: 50
+    config:
+      method: bayes
+      metric:
+        name: val/total
+        goal: minimize
+      parameters:
+        learning_rate:
+          distribution: log_uniform_values
+          min: 1e-4
+          max: 3e-3
+        lam_corr:
+          distribution: log_uniform_values
+          min: 0.1
+          max: 10.0
+        lam_emission_corr:
+          distribution: log_uniform_values
+          min: 0.1
+          max: 10.0
+        sde_sigma_max:
+          values: [0.5, 1.0, 2.0, 3.0]
+        rank_K:
+          values: [0, 4, 8, 16]
+        emission:
+          values: ["point", "hetero", "t", "smt"]
+        batch_size:
+          values: [4, 8, 16]
+        accumulate_grad_batches:
+          values: [4, 8, 16]
+        lambda_styl:
+          values: [0.1, 0.5, 1.0]
+      early_terminate:
+        type: hyperband
+        min_iter: 10
+        eta: 3

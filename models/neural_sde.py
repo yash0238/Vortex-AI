@@ -26,6 +26,7 @@ class GraphConditionedSDE(torchsde.SDEIto):
         latent_dim: Dimension of the latent state X_t.
         graph_emb_dim: Dimension of the graph context G_t (pooled GAT output).
         hidden_dim: Width of the MLP hidden layers for drift/diffusion networks.
+        sigma_max: Maximum diffusion coefficient (bounds g output).
 
     The drift and diffusion networks receive the concatenated input
     [X_t, G_t, t] and produce (B, latent_dim) outputs for the SDE solver.
@@ -35,7 +36,7 @@ class GraphConditionedSDE(torchsde.SDEIto):
     sde_type = "ito"
 
     def __init__(self, latent_dim: int = 64, graph_emb_dim: int = 64,
-                 hidden_dim: int = 128) -> None:
+                 hidden_dim: int = 128, sigma_max: float = 1.0) -> None:
         super().__init__(noise_type="diagonal")
         self.latent_dim = latent_dim
         self.graph_emb_dim = graph_emb_dim
@@ -47,17 +48,33 @@ class GraphConditionedSDE(torchsde.SDEIto):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, latent_dim),
+            nn.Tanh(),  # Bound drift to [-1, 1] for stability
         )
 
         self.diffusion_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, latent_dim),
-            nn.Sigmoid(),  # 7.2: (0, 1), scaled by sigma_max in g()
+            nn.Sigmoid(),  # (0, 1), scaled by sigma_max in g()
         )
 
         self.graph_context: torch.Tensor | None = None
-        self.sigma_max: float = 3.0  # 7.2: diffusion bound in z-space
+        self.sigma_max: float = sigma_max  # 7.2: diffusion bound in z-space
+
+        # Initialize networks for stable training
+        self._init_weights()
+
+    def _init_weights(self):
+        """Initialize drift/diffusion networks for stable SDE training."""
+        for net in [self.drift_net, self.diffusion_net]:
+            for m in net.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight, gain=0.5)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+        # Ensure final drift layer outputs near zero initially
+        nn.init.uniform_(self.drift_net[-2].weight, -0.01, 0.01)
+        nn.init.zeros_(self.drift_net[-2].bias)
 
     def set_graph_context(self, graph_emb: torch.Tensor) -> None:
         """Inject graph embedding from GAT mean pooling.
@@ -166,14 +183,16 @@ class LatentSDEModel(nn.Module):
 
     def __init__(self, n_stocks: int = 50, latent_dim: int = 64,
                  T: int = 60, sde_hidden_dim: int = 128,
-                 graph_emb_dim: int | None = None, sigma_max: float = 3.0,
-                 emission: str = "point", rank_K: int = 0) -> None:
+                 graph_emb_dim: int | None = None, sigma_max: float = 1.0,
+                 emission: str = "point", rank_K: int = 0,
+                 n_regimes: int = 2) -> None:
         super().__init__()
         self.T = T
         self.latent_dim = latent_dim
         self.n_stocks = n_stocks
         self.emission = emission
         self.rank_K = rank_K
+        self.n_regimes = n_regimes
         if graph_emb_dim is None:  # 2.9: was hardcoded to latent_dim
             graph_emb_dim = latent_dim
         self.graph_emb_dim = graph_emb_dim
@@ -186,42 +205,55 @@ class LatentSDEModel(nn.Module):
             latent_dim=latent_dim,
             graph_emb_dim=graph_emb_dim,
             hidden_dim=sde_hidden_dim,
+            sigma_max=sigma_max,
         )
-        self.sde.sigma_max = sigma_max
 
         self.decoder = nn.Linear(latent_dim, n_stocks)
-        # Lane 1B vol dynamics (default OFF): market-level vol state scales emission variance
-        self.rho_raw = nn.Parameter(torch.tensor(2.197))  # sigmoid -> 0.9
-        self.kappa_raw = nn.Parameter(torch.tensor(-2.197))  # sigmoid -> 0.1 in [0,1]
-        if emission == "hetero":
-            self.emi_m = nn.Linear(latent_dim, n_stocks)
-            self.emi_d = nn.Linear(latent_dim, n_stocks)
+        # Regime must reach the emission covariance, not only the latent prior:
+        # a crisis does not merely start elsewhere, it moves together.
+        self.regime_emb = nn.Embedding(n_regimes, latent_dim)
+        nn.init.normal_(self.regime_emb.weight, std=0.2)
+        # NB: no separate regime variance parameter. Regime volatility enters
+        # exactly once, through the data-fitted log-volatility (regime_log_vol *
+        # vol_coupling). Two multiplicative regime scales double-counted it and
+        # pushed the CVaR ratio to 1.96x against a real 1.25x.
+        # Volatility conditioning: the emission scale follows the volatility it
+        # is conditioned on. Without it the generator emits one average scale,
+        # which is trivially separable from real data and leaves pooled
+        # kurtosis at ~5 instead of the real ~12 (a mixture effect).
+        self.vol_coupling = nn.Parameter(torch.tensor(1.0))
+        head_in = latent_dim * 2  # latent path + broadcast regime code
+        # Volatility dynamics (EGARCH-type). Initialised from the data, not from
+        # zero: with kappa=0.1 the emitted paths have ACF(r^2) ~ 0 against a real
+        # 0.038, and a single scalar gradient through 60 steps barely moves it.
+        self.rho_raw = nn.Parameter(torch.tensor(2.197))    # sigmoid -> 0.90
+        self.kappa_raw = nn.Parameter(torch.tensor(0.0))    # sigmoid -> 0.50
+        if emission in ("hetero", "t", "mt", "smt"):
+            self.emi_m = nn.Linear(head_in, n_stocks)
+            self.emi_d = nn.Linear(head_in, n_stocks)
+            nn.init.normal_(self.emi_m.weight, std=0.01)
+            nn.init.zeros_(self.emi_m.bias)
             nn.init.constant_(self.emi_d.bias, 0.54)  # softplus(0.54) ~= 1.0
-            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K) if rank_K > 0 else None
-        elif emission == "t":
-            self.emi_m = nn.Linear(latent_dim, n_stocks)
-            self.emi_d = nn.Linear(latent_dim, n_stocks)
-            nn.init.constant_(self.emi_d.bias, 0.54)
-            self.emi_B = None
-            self.raw_nu = nn.Parameter(torch.tensor(3.47))  # nu = 4.5 + softplus(.) init ~8
-        elif emission == "mt":
-            self.emi_m = nn.Linear(latent_dim, n_stocks)
-            self.emi_d = nn.Linear(latent_dim, n_stocks)
-            nn.init.constant_(self.emi_d.bias, 0.54)
-            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K)
-            nn.init.normal_(self.emi_B.weight, std=0.05)
-            nn.init.zeros_(self.emi_B.bias)
-            self.raw_nu = nn.Parameter(torch.tensor(3.47))
-        elif emission == "smt":
-            self.emi_m = nn.Linear(latent_dim, n_stocks)
-            self.emi_d = nn.Linear(latent_dim, n_stocks)
-            nn.init.constant_(self.emi_d.bias, 0.54)
-            self.emi_B = nn.Linear(latent_dim, n_stocks * rank_K)
-            nn.init.normal_(self.emi_B.weight, std=0.05)
-            nn.init.zeros_(self.emi_B.bias)
-            self.raw_nu = nn.Parameter(torch.tensor(3.47))
+            self.emi_B = nn.Linear(head_in, n_stocks * rank_K) if rank_K > 0 else None
+            if self.emi_B is not None:
+                nn.init.normal_(self.emi_B.weight, std=0.05)
+                nn.init.zeros_(self.emi_B.bias)
+            self.raw_nu = nn.Parameter(torch.tensor(3.47)) if emission in ("t", "mt", "smt") else None
         else:
             self.emi_m = self.emi_d = self.emi_B = None
+            self.raw_nu = None
+
+        # Initialize encoder and decoder
+        nn.init.xavier_uniform_(self.encoder.weight_ih_l0, gain=0.5)
+        nn.init.xavier_uniform_(self.encoder.weight_hh_l0, gain=0.5)
+        nn.init.zeros_(self.encoder.bias_ih_l0)
+        nn.init.zeros_(self.encoder.bias_hh_l0)
+        nn.init.xavier_uniform_(self.decoder.weight, gain=0.5)
+        nn.init.zeros_(self.decoder.bias)
+        nn.init.xavier_uniform_(self.to_mu.weight, gain=0.5)
+        nn.init.zeros_(self.to_mu.bias)
+        nn.init.xavier_uniform_(self.to_logvar.weight, gain=0.5)
+        nn.init.zeros_(self.to_logvar.bias)
 
     def encode_stats(
         self, x: torch.Tensor
@@ -255,23 +287,73 @@ class LatentSDEModel(nn.Module):
         return self.decoder(zs), zs
 
     def _nu(self, like: torch.Tensor) -> torch.Tensor:
-        return 4.5 + torch.nn.functional.softplus(self.raw_nu.to(like.device))
+        if self.raw_nu is None:  # Gaussian emissions have no degrees of freedom
+            return torch.tensor(1e3, device=like.device, dtype=like.dtype)
+        # CAP nu at 8.0 (softplus <= 3.5): likelihood maximisation raises nu
+        # toward the Gaussian limit, which flattened generated tails to kurtosis
+        # ~7.5 against a real ~11.7. The tail parameter is allowed to go heavier
+        # (nu as low as 4.5) but never thin enough to wash out fat tails.
+        return 4.5 + torch.nn.functional.softplus(self.raw_nu.to(like.device)).clamp(max=3.5)
 
     def _rho_kappa(self, like: torch.Tensor):
         rho = torch.sigmoid(self.rho_raw.to(like.device))
-        kappa = torch.sigmoid(self.kappa_raw.to(like.device))
+        # FLOOR kappa at 0.6: the likelihood collapsed kappa towards 0, emitting
+        # ACF(r^2) ~ 0 against a real 0.039 (no volatility clustering). The EGARCH
+        # feedback is only allowed to strengthen, never to vanish.
+        kappa = torch.sigmoid(self.kappa_raw.to(like.device)).clamp(min=0.6)
         return rho, kappa
 
-    def _base_mdB(self, zs: torch.Tensor):
-        """Base heads: m, d (variance), B or None."""
-        m = 0.5 * torch.tanh(self.emi_m(zs))
-        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
+    def _regime_code(self, zs: torch.Tensor, regime: torch.Tensor | None) -> torch.Tensor:
+        """Broadcast a learned per-regime code over the time axis (B, T, latent)."""
+        if regime is None:
+            return torch.zeros_like(zs)
+        r = regime.long().reshape(-1).clamp(0, self.n_regimes - 1)
+        return self.regime_emb(r).unsqueeze(1).expand(-1, zs.shape[1], -1)
+
+    @staticmethod
+    def log_vol(x: torch.Tensor) -> torch.Tensor:
+        """Log volatility level of each window, centred on a standard normal.
+
+        `x` is (B, T, N) in z-space, where E|r| = sqrt(2/pi) ~= 0.7979. The
+        returned (B,) vector is ~0 for a typical window and ~log(3) for a
+        window three times as volatile as usual.
+        """
+        level = x.abs().mean(dim=(1, 2)).clamp(min=1e-6)
+        return torch.log(level / 0.7979)
+
+    def _base_mdB(self, zs: torch.Tensor, regime: torch.Tensor | None = None,
+                  log_vol: torch.Tensor | None = None):
+        """Base heads: m, d (variance), B or None — regime and volatility conditional."""
+        if self.emi_m is None:
+            raise RuntimeError(f"emission='{self.emission}' has no emission heads")
+        h = torch.cat([zs, self._regime_code(zs, regime)], dim=-1)
+        m = 0.5 * torch.tanh(self.emi_m(h))
+        d = torch.nn.functional.softplus(self.emi_d(h)) + 0.01
         Bf = None
         if self.emi_B is not None and self.rank_K > 0:
-            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+            Bf = 0.5 * torch.tanh(self.emi_B(h)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+        if log_vol is not None:
+            # exp(2 * c * log_vol) on the variance, exp(c * log_vol) on the
+            # loading matrix: the covariance scales exactly like the window.
+            c = self.vol_coupling * log_vol.reshape(-1, 1, 1)
+            d = d * torch.exp(2.0 * c)
+            if Bf is not None:
+                Bf = Bf * torch.exp(c).unsqueeze(-1)
         return m, d, Bf
 
-    def emission_dist_vol(self, zs: torch.Tensor, x_real: torch.Tensor):
+    def emission_correlation_from_latent(self, zs: torch.Tensor,
+                                         regime: torch.Tensor | None = None,
+                                         log_vol: torch.Tensor | None = None) -> torch.Tensor:
+        """Implied correlation (B, T, N, N) of the emission at this latent path."""
+        _, d, Bf = self._base_mdB(zs, regime, log_vol)
+        cov = torch.diag_embed(d) if Bf is None else (
+            torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d))
+        sd = torch.sqrt(torch.diagonal(cov, dim1=-2, dim2=-1)).clamp(min=1e-8)
+        return cov / sd.unsqueeze(-1) / sd.unsqueeze(-2)
+
+    def emission_dist_vol(self, zs: torch.Tensor, x_real: torch.Tensor,
+                          regime: torch.Tensor | None = None,
+                          log_vol: torch.Tensor | None = None):
         """Teacher-forced vol scaling. Returns (dist, v_last, rho, kappa).
 
         e_t = (r_t - m_t)/sqrt(d_t) from BASE heads; v_1 = 0;
@@ -279,7 +361,7 @@ class LatentSDEModel(nn.Module):
         Sigma scaled by exp(2*kappa*v_t) (B by exp(kappa*v_t)) so corr structure is kept.
         """
         from torch.distributions import Independent, StudentT
-        m, d, Bf = self._base_mdB(zs)
+        m, d, Bf = self._base_mdB(zs, regime, log_vol)
         rho, kappa = self._rho_kappa(zs)
         e = (x_real - m) / torch.sqrt(d)
         shock = e.pow(2).mean(dim=-1) - 1.0  # (B, T)
@@ -289,83 +371,95 @@ class LatentSDEModel(nn.Module):
         for t in range(1, T):
             v = (rho * v + (1 - rho) * shock[:, t - 1]).clamp(-1.0, 2.0)
             mult[:, t] = torch.exp(2 * kappa * v)
-        if self.emission == "mt":
-            return _SharedMixMultivariateT(m, Bf * torch.sqrt(mult).view(-1, mult.shape[1], 1, 1),
-                                           d * mult.unsqueeze(-1), self._nu(zs)), v, rho, kappa
         nu = self._nu(zs)
-        scale = (d * mult) * torch.sqrt((nu - 2.0) / nu)
+        Bm = None if Bf is None else Bf * torch.sqrt(mult).view(-1, mult.shape[1], 1, 1)
+        dm = d * mult.unsqueeze(-1)
+        if self.emission in ("mt", "smt") and Bm is not None:
+            return _SharedMixMultivariateT(m, Bm, dm, nu), v, rho, kappa
+        scale = dm * torch.sqrt((nu - 2.0) / nu)
         return Independent(StudentT(df=nu, loc=m, scale=scale), 1), v, rho, kappa
 
-    def emission_sample_seq(self, zs: torch.Tensor) -> torch.Tensor:
+    def emission_sample_seq(self, zs: torch.Tensor,
+                            regime: torch.Tensor | None = None,
+                            log_vol: torch.Tensor | None = None) -> torch.Tensor:
         """Sequential generation with vol feedback (uses sampled r_{t-1})."""
         from torch.distributions import Independent, StudentT
-        m, d, Bf = self._base_mdB(zs)
+        m, d, Bf = self._base_mdB(zs, regime, log_vol)
         rho, kappa = self._rho_kappa(zs)
         Bsz, T, N = m.shape
         v = torch.zeros(Bsz, device=zs.device, dtype=zs.dtype)
         outs = []
         for t in range(T):
             mult = torch.exp(2 * kappa * v)
-            if self.emission == "mt":
-                dist = _SharedMixMultivariateT(m[:, t], Bf[:, t] * torch.sqrt(mult).view(-1, 1, 1),
-                                               d[:, t] * mult.unsqueeze(-1), self._nu(zs))
+            if self.emission in ("mt", "smt") and Bf is not None:
+                dist = _SharedMixMultivariateT(
+                    m[:, t],
+                    Bf[:, t] * torch.sqrt(mult).view(-1, 1, 1),
+                    d[:, t] * mult.unsqueeze(-1),
+                    self._nu(zs),
+                )
             else:
                 nu = self._nu(zs)
                 dist = Independent(StudentT(df=nu, loc=m[:, t],
-                                            scale=(d[:, t] * mult) * torch.sqrt((nu - 2.0) / nu)), 1)
+                                            scale=(d[:, t] * mult.unsqueeze(-1))
+                                            * torch.sqrt((nu - 2.0) / nu)), 1)
             r = dist.rsample()
             outs.append(r)
             e = (r - m[:, t]) / torch.sqrt(d[:, t])
             v = (rho * v + (1 - rho) * (e.pow(2).mean(dim=-1) - 1.0)).clamp(-1.0, 2.0)
         return torch.stack(outs, dim=1)
 
-    def emission_nll_vol(self, zs: torch.Tensor, x: torch.Tensor):
-        dist, _, _, _ = self.emission_dist_vol(zs, x)
+    def emission_nll_vol(self, zs: torch.Tensor, x: torch.Tensor,
+                         regime: torch.Tensor | None = None,
+                         log_vol: torch.Tensor | None = None):
+        dist, _, _, _ = self.emission_dist_vol(zs, x, regime, log_vol)
         return -dist.log_prob(x).mean()
 
-    def emission_dist(self, zs: torch.Tensor):
+    def emission_dist(self, zs: torch.Tensor, regime: torch.Tensor | None = None,
+                      log_vol: torch.Tensor | None = None):
         """7.3: per-step heteroscedastic emission. zs (B, T, latent) -> dist over (B, T, N)."""
         from torch.distributions import Independent, LowRankMultivariateNormal, Normal, StudentT
-        m = 0.5 * torch.tanh(self.emi_m(zs))
-        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
-        if self.emission == "t":
-            nu = self._nu(zs)
-            scale = d * torch.sqrt((nu - 2.0) / nu)  # Var = d^2 preserved
-            return Independent(StudentT(df=nu, loc=m, scale=scale), 1)
-        if self.emission == "mt":
-            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+        m, d, Bf = self._base_mdB(zs, regime, log_vol)
+        if self.emission in ("t", "mt", "smt"):
+            if Bf is None:  # rank 0: no factor structure, independent student-t
+                nu = self._nu(zs)
+                return Independent(StudentT(df=nu, loc=m,
+                                            scale=torch.sqrt(d) * torch.sqrt((nu - 2.0) / nu)), 1)
             return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
-        if self.emission == "smt":
-            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
-            return _SharedMixMultivariateT(m, Bf, d, self._nu(zs))
-        if self.rank_K > 0 and self.emi_B is not None:
-            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
-            return LowRankMultivariateNormal(m, Bf, d)
+        if self.rank_K > 0 and Bf is not None:
+            return LowRankMultivariateNormal(m, Bf, torch.sqrt(d))
         return Independent(Normal(m, torch.sqrt(d)), 1)
 
-    def emission_nll(self, zs: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def emission_nll(self, zs: torch.Tensor, x: torch.Tensor,
+                     regime: torch.Tensor | None = None,
+                     log_vol: torch.Tensor | None = None) -> torch.Tensor:
         """Mean -log_prob over batch, time (and stocks via the joint event)."""
-        return -self.emission_dist(zs).log_prob(x).mean()
+        return -self.emission_dist(zs, regime, log_vol).log_prob(x).mean()
 
-    def emission_sample(self, zs: torch.Tensor) -> torch.Tensor:
-        return self.emission_dist(zs).rsample()
+    def emission_sample(self, zs: torch.Tensor,
+                        regime: torch.Tensor | None = None,
+                        log_vol: torch.Tensor | None = None) -> torch.Tensor:
+        return self.emission_dist(zs, regime, log_vol).rsample()
 
-    def emission_sample_corr(self, zs: torch.Tensor) -> torch.Tensor:
+    def emission_sample_corr(self, zs: torch.Tensor,
+                             regime: torch.Tensor | None = None,
+                             log_vol: torch.Tensor | None = None) -> torch.Tensor:
         """Lane 1A: rsampled scenarios with nu detached (correlation loss only)."""
-        if self.emission in ("mt", "smt"):
-            m, d, Bf = self._base_mdB(zs)
+        if self.emission in ("mt", "smt") and self.rank_K > 0:
+            m, d, Bf = self._base_mdB(zs, regime, log_vol)
             nu = self._nu(zs).detach()
             w = torch.distributions.Chi2(nu.expand(zs.shape[0], zs.shape[1])).rsample()
             L = torch.linalg.cholesky(torch.matmul(Bf, Bf.transpose(-1, -2)) + torch.diag_embed(d))
             z = torch.randn_like(m)
             return m + torch.sqrt((nu - 2.0) / nu).unsqueeze(-1) * (L @ z.unsqueeze(-1)).squeeze(-1) / torch.sqrt(w / nu).unsqueeze(-1)
-        return self.emission_sample(zs)
+        return self.emission_sample(zs, regime, log_vol)
 
-    def emission_sigma(self, zs: torch.Tensor) -> torch.Tensor:
+    def emission_sigma(self, zs: torch.Tensor,
+                       regime: torch.Tensor | None = None,
+                       log_vol: torch.Tensor | None = None) -> torch.Tensor:
         """Per-step marginal std (B, T, N) for probes."""
-        d = torch.nn.functional.softplus(self.emi_d(zs)) + 0.01
-        if self.rank_K > 0 and self.emi_B is not None:
-            Bf = 0.5 * torch.tanh(self.emi_B(zs)).view(zs.shape[0], zs.shape[1], self.n_stocks, self.rank_K)
+        _, d, Bf = self._base_mdB(zs, regime, log_vol)
+        if Bf is not None:
             return torch.sqrt(d + (Bf.pow(2)).sum(-1))
         return torch.sqrt(d)
 
