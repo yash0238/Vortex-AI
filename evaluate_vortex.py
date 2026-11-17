@@ -10,6 +10,7 @@ Runs all evaluation metrics from masterplan Part F:
 Usage:
     python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt
     python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt --n_scenarios 500
+    python evaluate_vortex.py --checkpoint models/checkpoints/best_vortex.ckpt --split val
 """
 
 from __future__ import annotations
@@ -31,52 +32,41 @@ from eval.contagion import evaluate_contagion, cvar_regime_ratio, granger_causal
 
 def generate_scenarios(
     model: VORTEXModel,
-    dataloader: DataLoader,
-    n_scenarios: int = 100,
+    regimes: np.ndarray,
     device: str = "cuda",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Generate synthetic scenarios using trained model.
-    
+    Generate one synthetic scenario per requested regime, using regime only.
+
     Returns:
-        real_returns: (N, T, n_stocks) real returns
         gen_returns: (N, T, n_stocks) generated returns
-        regimes: (N,) regime labels
-        adj_learned: (N, n_stocks, n_stocks) learned adjacency
+        regimes: (N,) the regime each scenario was generated for
     """
     model.eval()
     model.to(device)
-    
-    real_list = []
-    gen_list = []
-    regime_list = []
-    
+    regime_t = torch.as_tensor(np.asarray(regimes), dtype=torch.long, device=device)
+    gen = model.sample_regime_scenarios(regime_t, device=device)
+    return gen.cpu().numpy(), np.asarray(regimes)
+
+
+def load_generation_priors(model: VORTEXModel, path: Path) -> bool:
+    """Install the per-regime generative prior saved by train_vortex.py."""
+    if not path.exists():
+        return False
+    z = np.load(path)
     with torch.no_grad():
-        for batch in dataloader:
-            if len(real_list) >= n_scenarios:
-                break
-            
-            # Move batch to device
-            x = batch["returns"].to(device)
-            adj = batch["adj_matrix"].to(device)
-            node_feats = batch["node_features"].to(device)
-            regimes = batch["regimes"].to(device)
-            
-            # Generate synthetic data using regime-conditional prior sampling
-            # (actual SDE generation from z0 ~ p(z0 | regime), not reconstruction)
-            gen = model.sample_prior_scenarios(adj, node_feats, regimes)
-            
-            # Store
-            real_list.append(x.cpu().numpy())
-            gen_list.append(gen.cpu().numpy())
-            regime_list.append(regimes.cpu().numpy())
-    
-    # Concatenate
-    real_returns = np.concatenate(real_list, axis=0)[:n_scenarios]
-    gen_returns = np.concatenate(gen_list, axis=0)[:n_scenarios]
-    regimes = np.concatenate(regime_list, axis=0)[:n_scenarios]
-    
-    return real_returns, gen_returns, regimes
+        model.prior_mu.copy_(torch.as_tensor(z["prior_mu"], dtype=model.prior_mu.dtype))
+        model.prior_logvar.copy_(torch.as_tensor(z["prior_logvar"], dtype=model.prior_logvar.dtype))
+        model.regime_graph_emb.copy_(torch.as_tensor(z["regime_graph_emb"], dtype=model.regime_graph_emb.dtype))
+        model.regime_log_vol.copy_(torch.as_tensor(z["regime_log_vol"], dtype=model.regime_log_vol.dtype))
+        if "regime_log_vol_std" in z and hasattr(model, "regime_log_vol_std"):
+            model.regime_log_vol_std.copy_(torch.as_tensor(
+                z["regime_log_vol_std"], dtype=model.regime_log_vol_std.dtype))
+    print(f"Generation priors loaded from {path}")
+    for r in (0, 1):
+        print(f"  regime {r}: log_vol {model.regime_log_vol[r].item():+.3f}, "
+              f"prior std {model.prior_logvar[r].exp().sqrt().mean().item():.3f}")
+    return True
 
 
 def run_evaluation(args: argparse.Namespace) -> Dict:
@@ -92,29 +82,67 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     model = VORTEXModel.load_from_checkpoint(args.checkpoint, strict=False)
     model.eval()
     
-    # Load test dataset
-    print("Loading test dataset...")
+    # Load the requested split. Evaluation must run on a held-out split: the old
+    # script loaded data/raw directly and scored the first N windows of the
+    # whole panel, i.e. training-period data.
+    split_name = args.split
+    split_key = f"{split_name}_idx"
+    print(f"Loading held-out {split_name} split...")
     dataset = VortexDataset(Path("data/raw"))
-    
-    # Create test dataloader
-    test_loader = DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=0,  # 0 required on Windows (spawn/pickle truncation)
-    )
-    
-    # Generate scenarios
-    print(f"\nGenerating {args.n_scenarios} synthetic scenarios...")
-    real_returns, gen_returns, regimes = generate_scenarios(
-        model, test_loader, args.n_scenarios, args.device
-    )
-    
+    split_path = Path("data/raw/split.npz")
+    if split_path.exists():
+        sp = np.load(split_path, allow_pickle=True)
+        if split_key not in sp:
+            raise KeyError(f"split.npz has no {split_key!r} (keys: {list(sp.keys())})")
+        eval_idx = np.asarray(sp[split_key])
+        scheme = str(sp["scheme"][0])
+        print(f"{split_name} split: {scheme} | {len(eval_idx)} windows")
+        eval_windows = dataset.windows[eval_idx]
+        eval_regimes = dataset.regimes[eval_idx]
+        print(f"{split_name} crisis rate: {eval_regimes.mean():.1%}")
+        eval_dataset = torch.utils.data.Subset(dataset, eval_idx)
+    else:
+        print("Warning: split.npz missing; scoring the first windows of the full panel")
+        scheme = "full-panel"
+        eval_dataset = dataset
+        eval_windows = dataset.windows
+        eval_regimes = dataset.regimes
+
+    n_scenarios = args.n_scenarios or len(eval_dataset)
+    n_scenarios = min(n_scenarios, len(eval_dataset))
+    # Regime labelling matches crisisbench.protocol.LABEL_RULE: the labels are
+    # derived from the window's own returns (via window_regimes_v2.npy in the
+    # dataset) and applied identically to real and generated windows. The
+    # generator is asked for the same regime composition as the real evaluation
+    # windows, and nothing else. Labels below are the regime that was requested.
+    requested = np.asarray(eval_regimes[:n_scenarios], dtype=np.int64)
+    real_returns = np.asarray(eval_windows[:n_scenarios], dtype=np.float32)
+
+    priors_path = Path(args.priors) if args.priors else Path("models/checkpoints/generation_priors.npz")
+    if not load_generation_priors(model, priors_path):
+        print("WARNING: generation priors not found; the prior is whatever the checkpoint holds.")
+        print("         Run train_vortex.py to produce models/checkpoints/generation_priors.npz.")
+
+    print(f"\nGenerating {n_scenarios} synthetic scenarios from regime only...")
+    gen_returns, regimes = generate_scenarios(model, requested, args.device)
+
     print(f"Real returns shape: {real_returns.shape}")
     print(f"Generated returns shape: {gen_returns.shape}")
-    print(f"Regimes: Normal={np.sum(regimes==0)}, Crisis={np.sum(regimes==1)}")
-    
-    results = {}
+    print(f"Requested regimes: Normal={np.sum(regimes==0)}, Crisis={np.sum(regimes==1)}")
+    print("Note: labels are the requested regime (stress-testing use case), not derived from the draws.")
+
+    # Real reference on the exact same windows: the gates compare against the
+    # real value, because the absolute targets exceed what real data shows.
+    from eval.contagion import real_regime_reference
+    real_ref = real_regime_reference(real_returns, regimes)
+    results = {"real_reference": real_ref,
+               "generation": {"conditioning": "regime only",
+                              "labels": "requested regime",
+                              "n_scenarios": int(n_scenarios)},
+               "split": {"name": split_name,
+                         "scheme": scheme,
+                         "n_windows": int(len(regimes)),
+                         "crisis_rate": float(np.mean(regimes == 1))}}
     
     # 1. Statistical Fidelity Tests
     print("\n" + "-"*80)
@@ -124,13 +152,15 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     stylized_facts = evaluate_stylized_facts(real_returns, gen_returns)
     results["statistical_fidelity"] = stylized_facts
     
-    print(f"Kurtosis (real): {stylized_facts['kurtosis_real']:.3f}")
+    print(f"Kurtosis (real): {stylized_facts['kurtosis_real']:.3f}  interval {stylized_facts['kurtosis_interval']}")
     print(f"Kurtosis (gen):  {stylized_facts['kurtosis_gen']:.3f}")
     print(f"Kurtosis pass:   {stylized_facts['kurtosis_pass']}")
     print(f"\nACF squared (real): {stylized_facts['acf_sq_real']:.4f}")
     print(f"ACF squared (gen):  {stylized_facts['acf_sq_gen']:.4f}")
-    print(f"ACF pass:           {stylized_facts['acf_sq_pass']}")
-    print(f"\nCorrelation error: {stylized_facts['corr_error']:.3f}")
+    print(f"ACF pass:           {stylized_facts['acf_sq_pass']} (tol {stylized_facts['acf_sq_tolerance']:.4f})")
+    print(f"\nCorrelation error: {stylized_facts['corr_error']:.3f} "
+          f"(real-vs-real ceiling {stylized_facts['corr_error_ceiling']:.3f}, "
+          f"limit {stylized_facts['corr_error_limit']:.3f})")
     print(f"Correlation pass:  {stylized_facts['corr_error_pass']}")
     print(f"\n[All tests pass: {stylized_facts['all_tests_pass']}]")
     
@@ -149,17 +179,25 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     print("2. Discriminative Score Test")
     print("-"*80)
     
-    disc_results = discriminative_score(real_returns, gen_returns, n_samples=min(500, args.n_scenarios))
+    disc_results = discriminative_score(real_returns, gen_returns, n_samples=min(500, n_scenarios))
     results["discriminative"] = disc_results
-    
+
+    # Reference: two halves of the real panel scored against each other. This is
+    # the floor of the metric on this slice, not 0.5 by assumption.
+    h = len(real_returns) // 2
+    disc_ref = discriminative_score(real_returns[:h], real_returns[h:], n_samples=min(300, h)) \
+        if h >= 20 else {"discriminative_score": float("nan")}
+    results["discriminative_reference"] = disc_ref
+
     print(f"Discriminative score: {disc_results['discriminative_score']:.3f} ± {disc_results['discriminative_std']:.3f}")
+    print(f"Real-vs-real floor:   {disc_ref['discriminative_score']:.3f}")
     print(f"Target: <0.60 (closer to 0.5 is better)")
     print(f"Pass: {disc_results['discriminative_pass']}")
     print(f"Indistinguishability: {disc_results['indistinguishability']:.3f} (1.0 = perfect)")
     
     # Predictive score
     print("\nPredictive Score Test...")
-    pred_results = predictive_score(real_returns, gen_returns, n_samples=min(500, args.n_scenarios))
+    pred_results = predictive_score(real_returns, gen_returns, n_samples=min(500, n_scenarios))
     results["predictive"] = pred_results
     print(f"Predictive R²: {pred_results['predictive_r2']:.4f}")
     print(f"Predictive MSE: {pred_results['predictive_mse']:.6f}")
@@ -169,13 +207,17 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     print("3. Contagion Propagation Test")
     print("-"*80)
     
-    contagion_results = evaluate_contagion(gen_returns, regimes)
+    contagion_results = evaluate_contagion(gen_returns, regimes,
+                                           real_result=real_ref["contagion"])
     results["contagion"] = contagion_results
     
-    print(f"Normal correlation:  {contagion_results['corr_normal']:.4f}")
-    print(f"Crisis correlation:  {contagion_results['corr_crisis']:.4f}")
+    print(f"Normal correlation:  {contagion_results['corr_normal']:.4f} "
+          f"(real {real_ref['contagion']['corr_normal']:.4f})")
+    print(f"Crisis correlation:  {contagion_results['corr_crisis']:.4f} "
+          f"(real {real_ref['contagion']['corr_crisis']:.4f})")
     print(f"Crisis boost:        {contagion_results['crisis_corr_boost']:.2%}")
-    print(f"Target: >50% boost")
+    print(f"Real boost:          {contagion_results['crisis_corr_boost_real']:.2%}")
+    print(f"Gate: {contagion_results['gate']}")
     print(f"Pass: {contagion_results['contagion_pass']}")
     
     # CVaR ratio
@@ -183,13 +225,16 @@ def run_evaluation(args: argparse.Namespace) -> Dict:
     print("4. CVaR Regime Ratio")
     print("-"*80)
     
-    cvar_results = cvar_regime_ratio(gen_returns, regimes)
+    cvar_results = cvar_regime_ratio(gen_returns, regimes, real_result=real_ref["cvar"])
     results["cvar"] = cvar_results
     
-    print(f"CVaR (normal): {cvar_results['cvar_normal']:.6f}")
-    print(f"CVaR (crisis): {cvar_results['cvar_crisis']:.6f}")
+    print(f"CVaR (normal): {cvar_results['cvar_normal']:.6f} "
+          f"(real {real_ref['cvar']['cvar_normal']:.6f})")
+    print(f"CVaR (crisis): {cvar_results['cvar_crisis']:.6f} "
+          f"(real {real_ref['cvar']['cvar_crisis']:.6f})")
     print(f"CVaR ratio:    {cvar_results['cvar_ratio']:.2f}x")
-    print(f"Target: >3x")
+    print(f"Real ratio:    {cvar_results['cvar_ratio_real']:.2f}x")
+    print(f"Gate: {cvar_results['gate']}")
     print(f"Pass: {cvar_results['cvar_pass']}")
     
     # 5. Granger Causality (optional, can be slow)
@@ -262,13 +307,22 @@ def parse_args() -> argparse.Namespace:
     
     parser.add_argument("--checkpoint", type=str, required=True,
                        help="Path to model checkpoint")
-    parser.add_argument("--n_scenarios", type=int, default=100,
-                       help="Number of scenarios to generate")
+    parser.add_argument("--split", type=str, default="test",
+                       choices=["train", "val", "test"],
+                       help="Data split to evaluate (val = 2018-19 pre-2020 windows, "
+                            "test = 2022+ holdout)")
+    parser.add_argument("--n_scenarios", type=int, default=None,
+                       help="Number of scenarios to generate (default: the whole test split)")
     parser.add_argument("--batch_size", type=int, default=32,
                        help="Batch size for generation")
     parser.add_argument("--device", type=str, default="cuda",
                        choices=["cuda", "cpu", "mps"],
                        help="Device to use")
+    parser.add_argument("--priors", type=str, default=None,
+                       help="Path to generation_priors.npz (default models/checkpoints/)")
+    parser.add_argument("--z0_source", type=str, default="aggregate_posterior",
+                       choices=["aggregate_posterior", "posterior", "regime_prior"],
+                       help="Where the initial latent state is drawn from")
     parser.add_argument("--output", type=str, default="results/evaluation_results.json",
                        help="Path to save results JSON")
     parser.add_argument("--test_granger", action="store_true",

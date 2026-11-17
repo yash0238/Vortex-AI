@@ -31,8 +31,12 @@ from .data import load_panel
 
 OUT = RESULTS / "06_risk"
 RANK_LEVEL, RANK_PF = 0.975, "equal_weight"
-COLORS = {"hist_sim": "var(--s-static)", "garch_fhs_bench": "var(--s-dyn)", "cgnsde2": "var(--s-ours)",
-          "regime_gaussian": "var(--s-regime)", "timegan": "var(--s-neural)", "iid_gaussian": "var(--s-resample)"}
+COLORS = {
+    "hist_sim": "var(--s-static)", "garch_fhs_bench": "var(--s-dyn)", "cgnsde2": "var(--s-ours)",
+    "cgnsde": "var(--s-ours)", "regime_gaussian": "var(--s-regime)", "timegan": "var(--s-neural)",
+    "timegan_fs": "var(--s-neural)", "quantgan_fs": "var(--s-neural)", "diffusion_fs": "var(--s-neural)",
+    "diffusion": "var(--s-neural)", "iid_gaussian": "var(--s-resample)",
+}
 
 
 def pool_for(gen: str, year: int):
@@ -94,7 +98,8 @@ def main() -> None:
                     daily[name] = R.fz0_loss(r, V[:, k], E[:, k], a)
         if pf == "equal_weight":
             k99 = int(np.argmax(levels))
-            show = [m for m in ("hist_sim", "garch_fhs_bench", "cgnsde2", "regime_gaussian", "timegan", "iid_gaussian") if m in fc]
+            show = [m for m in ("hist_sim", "garch_fhs_bench", "cgnsde2", "regime_gaussian",
+                                "timegan_fs", "diffusion_fs", "timegan", "iid_gaussian") if m in fc]
             series = dict(dates=[str(d.date()) for d in panel.dates[idx]], ret=np.round(100 * r, 3).tolist(),
                           methods={m: dict(name=fc[m][3], color=COLORS.get(m), var99=np.round(-100 * fc[m][0][:, k99], 3).tolist())
                                    for m in show})
@@ -137,12 +142,14 @@ def main() -> None:
     (TABLES / "T5_metric_validity.md").write_text(t5.to_markdown(index=False, floatfmt=".3g"), encoding="utf-8")
     c, b = t5[t5.key == "family_C"].iloc[0], t5[t5.key == "family_B"].iloc[0]
     h3 = bool(c.tau > 0.5 and c.tau > b.tau and c.lo > b.hi)
+    fz0_means = {g: float(m) for g, m in zip(gens, L.mean(0))}
     body = dict(tau_C=float(c.tau), ci_C=[float(c.lo), float(c.hi)], tau_B=float(b.tau), ci_B=[float(b.lo), float(b.hi)],
                 rank_basis=f"mean FZ0, level {RANK_LEVEL}, {RANK_PF}", generators=gens, H3_holds=h3,
+                fz0_mean=fz0_means,
                 fz0_rank={g: int(x) for g, x in zip(gens, pd.Series(L.mean(0)).rank(method="min"))})
     write_gate("GATE_G3", "PASS" if h3 else "FAIL", body,
                "Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; positive = lower benchmark "
-               "error goes with lower FZ0 loss.")
+               f"error goes with lower FZ0 loss (joint 2000-replicate block-date x seed bootstrap over {len(gens)} generators).")
     (OUT / "G3.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
     print(t5[t5.kind == "family"].to_string(index=False))
     print("G3:", "PASS" if h3 else "FAIL")
