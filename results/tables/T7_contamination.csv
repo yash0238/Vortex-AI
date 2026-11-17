@@ -1,55 +1,55 @@
 panel,metric,real_clean,real_contaminated,pair_flips,pairs,example
-one bad tick (-76%),std_ratio,1.0,1.0,3,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),std_ratio,1.0,1.0,2,21,DCC-GARCH-t vs GARCH-t FHS
 one bad tick (-76%),kurt_med,6.0808232825774535,6.0808232825774535,0,21,
-one bad tick (-76%),acf1_ret,-3.443915286751241e-05,0.0005760086052127309,4,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),acf1_ret,-3.443915286751241e-05,0.0005760086052127309,5,21,DCC-GARCH-t vs GARCH-t FHS
 one bad tick (-76%),acf1_sq,0.1419245219786268,0.13762341339673295,0,21,
 one bad tick (-76%),acf5_sq_mean,0.11204039792633565,0.10974934672344294,0,21,
-one bad tick (-76%),skew_ew,-1.193567597198694,-1.1960724908217322,1,21,DCC-GARCH-t vs Static t-PPCA
-one bad tick (-76%),corr_fro,2.5941158268468354,2.613978342552861,0,21,
-one bad tick (-76%),corr_mae,0.05025036041513564,0.04999455248531397,0,21,
-one bad tick (-76%),eig_dist,0.3329355947074629,0.3332338736255207,0,21,
-one bad tick (-76%),pc1_share,0.29226505294553545,0.2911098135904564,0,21,
-one bad tick (-76%),crisis_freq,0.15011682242990654,0.15011682242990654,2,21,Gaussian HMM vs Regime Gaussian
+one bad tick (-76%),skew_ew,-1.193567597198694,-1.1960724908217322,1,21,DCC-GARCH-t vs i.i.d. Gaussian
+one bad tick (-76%),corr_fro,2.5941158268468354,2.613978342552861,1,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),corr_mae,0.05025036041513564,0.04999455248531397,1,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),eig_dist,0.3329355947074629,0.3332338736255207,2,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),pc1_share,0.29226505294553545,0.2911098135904564,1,21,DCC-GARCH-t vs GARCH-t FHS
+one bad tick (-76%),crisis_freq,0.15011682242990654,0.15011682242990654,3,21,Gaussian HMM vs Regime Gaussian
 one bad tick (-76%),boost_pct,29.329191016684288,30.86387203314193,1,21,i.i.d. Gaussian vs Static t-PPCA
 one bad tick (-76%),tail_coexc,0.20552047342760293,0.2055800954295309,2,21,GARCH-t FHS vs Static t-PPCA
 one bad tick (-76%),cvar_ratio,2.200466032028226,2.2668837844000094,0,21,
 one bad tick (-76%),pc1_share_gap,0.07377322308557355,0.07760312086651255,1,21,i.i.d. Gaussian vs Static t-PPCA
 one bad tick (-76%),connect_gap,0.1135910228032503,0.11951153115736758,0,21,
-one bad tick (-76%),disc_feat,0.5739,0.5826,0,21,
-one bad tick (-76%),disc_raw,0.49939999999999996,0.48810000000000003,1,21,i.i.d. Gaussian vs Static t-PPCA
-1% bad ticks,std_ratio,1.0,1.0,6,21,GARCH-t FHS vs Stationary bootstrap
+one bad tick (-76%),disc_feat,0.5764,0.5826,3,21,Gaussian HMM vs Regime Gaussian
+one bad tick (-76%),disc_raw,0.499,0.48810000000000003,1,21,i.i.d. Gaussian vs Static t-PPCA
+1% bad ticks,std_ratio,1.0,1.0,5,21,Gaussian HMM vs i.i.d. Gaussian
 1% bad ticks,kurt_med,6.0808232825774535,78.74629691044001,0,21,
-1% bad ticks,acf1_ret,-3.443915286751241e-05,0.00040012072060897636,7,21,DCC-GARCH-t vs Gaussian HMM
+1% bad ticks,acf1_ret,-3.443915286751241e-05,0.00040012072060897636,8,21,DCC-GARCH-t vs Gaussian HMM
 1% bad ticks,acf1_sq,0.1419245219786268,0.005038472301752855,4,21,Gaussian HMM vs Regime Gaussian
 1% bad ticks,acf5_sq_mean,0.11204039792633565,0.0013487324508266317,8,21,DCC-GARCH-t vs GARCH-t FHS
-1% bad ticks,skew_ew,-1.193567597198694,-0.6911057920931494,2,21,DCC-GARCH-t vs Static t-PPCA
-1% bad ticks,corr_fro,2.5941158268468354,1.0560434753122916,5,21,DCC-GARCH-t vs GARCH-t FHS
-1% bad ticks,corr_mae,0.05025036041513564,0.017110312730897394,8,21,DCC-GARCH-t vs GARCH-t FHS
-1% bad ticks,eig_dist,0.3329355947074629,0.10151844459407261,5,21,DCC-GARCH-t vs GARCH-t FHS
-1% bad ticks,pc1_share,0.29226505294553545,0.06365702332298298,6,21,DCC-GARCH-t vs GARCH-t FHS
-1% bad ticks,crisis_freq,0.15011682242990654,0.15011682242990654,13,21,DCC-GARCH-t vs GARCH-t FHS
+1% bad ticks,skew_ew,-1.193567597198694,-0.6911057920931494,2,21,DCC-GARCH-t vs i.i.d. Gaussian
+1% bad ticks,corr_fro,2.5941158268468354,1.0560434753122916,4,21,DCC-GARCH-t vs Static t-PPCA
+1% bad ticks,corr_mae,0.05025036041513564,0.017110312730897394,7,21,DCC-GARCH-t vs Static t-PPCA
+1% bad ticks,eig_dist,0.3329355947074629,0.10151844459407261,3,21,DCC-GARCH-t vs Static t-PPCA
+1% bad ticks,pc1_share,0.29226505294553545,0.06365702332298298,5,21,DCC-GARCH-t vs Static t-PPCA
+1% bad ticks,crisis_freq,0.15011682242990654,0.15011682242990654,12,21,DCC-GARCH-t vs GARCH-t FHS
 1% bad ticks,boost_pct,29.329191016684288,11.679009207592353,7,21,DCC-GARCH-t vs Gaussian HMM
 1% bad ticks,tail_coexc,0.20552047342760293,0.1903374278415058,11,21,DCC-GARCH-t vs GARCH-t FHS
 1% bad ticks,cvar_ratio,2.200466032028226,1.833809440250954,7,21,DCC-GARCH-t vs GARCH-t FHS
 1% bad ticks,pc1_share_gap,0.07377322308557355,0.022414626474992205,6,21,DCC-GARCH-t vs Gaussian HMM
 1% bad ticks,connect_gap,0.1135910228032503,0.02145124160014998,4,21,DCC-GARCH-t vs Gaussian HMM
-1% bad ticks,disc_feat,0.5739,0.6255000000000001,2,21,Gaussian HMM vs Regime Gaussian
-1% bad ticks,disc_raw,0.49939999999999996,0.5011,11,21,DCC-GARCH-t vs GARCH-t FHS
-one unadjusted split,std_ratio,1.0,1.0,2,21,DCC-GARCH-t vs GARCH-t FHS
+1% bad ticks,disc_feat,0.5764,0.6255000000000001,1,21,Gaussian HMM vs Static t-PPCA
+1% bad ticks,disc_raw,0.499,0.5011,11,21,DCC-GARCH-t vs GARCH-t FHS
+one unadjusted split,std_ratio,1.0,1.0,1,21,DCC-GARCH-t vs GARCH-t FHS
 one unadjusted split,kurt_med,6.0808232825774535,6.0808232825774535,0,21,
-one unadjusted split,acf1_ret,-3.443915286751241e-05,7.924867615934895e-05,2,21,DCC-GARCH-t vs Static t-PPCA
+one unadjusted split,acf1_ret,-3.443915286751241e-05,7.924867615934895e-05,3,21,DCC-GARCH-t vs i.i.d. Gaussian
 one unadjusted split,acf1_sq,0.1419245219786268,0.138543109904664,0,21,
 one unadjusted split,acf5_sq_mean,0.11204039792633565,0.10820231359937606,0,21,
-one unadjusted split,skew_ew,-1.193567597198694,-1.192066492084805,1,21,DCC-GARCH-t vs Static t-PPCA
-one unadjusted split,corr_fro,2.5941158268468354,2.594910093256848,0,21,
-one unadjusted split,corr_mae,0.05025036041513564,0.04951627643279824,0,21,
-one unadjusted split,eig_dist,0.3329355947074629,0.32894923496357364,0,21,
-one unadjusted split,pc1_share,0.29226505294553545,0.2899221240142287,0,21,
-one unadjusted split,crisis_freq,0.15011682242990654,0.15011682242990654,2,21,GARCH-t FHS vs i.i.d. Gaussian
+one unadjusted split,skew_ew,-1.193567597198694,-1.192066492084805,1,21,DCC-GARCH-t vs i.i.d. Gaussian
+one unadjusted split,corr_fro,2.5941158268468354,2.594910093256848,1,21,DCC-GARCH-t vs GARCH-t FHS
+one unadjusted split,corr_mae,0.05025036041513564,0.04951627643279824,1,21,DCC-GARCH-t vs GARCH-t FHS
+one unadjusted split,eig_dist,0.3329355947074629,0.32894923496357364,2,21,DCC-GARCH-t vs GARCH-t FHS
+one unadjusted split,pc1_share,0.29226505294553545,0.2899221240142287,1,21,DCC-GARCH-t vs GARCH-t FHS
+one unadjusted split,crisis_freq,0.15011682242990654,0.15011682242990654,3,21,GARCH-t FHS vs i.i.d. Gaussian
 one unadjusted split,boost_pct,29.329191016684288,28.534216137642762,1,21,i.i.d. Gaussian vs Static t-PPCA
 one unadjusted split,tail_coexc,0.20552047342760293,0.2055258936095964,1,21,GARCH-t FHS vs Static t-PPCA
 one unadjusted split,cvar_ratio,2.200466032028226,2.194869943175874,0,21,
 one unadjusted split,pc1_share_gap,0.07377322308557355,0.07147834837177497,1,21,i.i.d. Gaussian vs Static t-PPCA
 one unadjusted split,connect_gap,0.1135910228032503,0.11244870616021593,0,21,
-one unadjusted split,disc_feat,0.5739,0.5690999999999999,1,21,Regime Gaussian vs Static t-PPCA
-one unadjusted split,disc_raw,0.49939999999999996,0.49119999999999997,0,21,
+one unadjusted split,disc_feat,0.5764,0.5690999999999999,2,21,Gaussian HMM vs Regime Gaussian
+one unadjusted split,disc_raw,0.499,0.49119999999999997,0,21,

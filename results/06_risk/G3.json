@@ -1,0 +1,35 @@
+{
+  "tau_C": 0.7999999999999999,
+  "ci_C": [
+    0.6,
+    0.9999999999999999
+  ],
+  "tau_B": -0.19999999999999998,
+  "ci_B": [
+    -0.6,
+    0.19999999999999998
+  ],
+  "rank_basis": "mean FZ0, level 0.975, equal_weight",
+  "generators": [
+    "iid_gaussian",
+    "t_ppca",
+    "stationary_bootstrap",
+    "garch_fhs",
+    "regime_gaussian"
+  ],
+  "H3_holds": true,
+  "fz0_mean": {
+    "iid_gaussian": -2.853875081948891,
+    "t_ppca": -2.9313788615296574,
+    "stationary_bootstrap": -3.111843661405884,
+    "garch_fhs": -3.166610319526153,
+    "regime_gaussian": -3.051545334470434
+  },
+  "fz0_rank": {
+    "iid_gaussian": 5,
+    "t_ppca": 4,
+    "stationary_bootstrap": 2,
+    "garch_fhs": 1,
+    "regime_gaussian": 3
+  }
+}

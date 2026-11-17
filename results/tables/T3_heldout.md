@@ -1,26 +1,11 @@
-| episode    | episode_label           |   n_real_crisis |   real |    lo |     hi | generator            | name                        | family_tag        |     gen |   gen_sd | inside   |
-|:-----------|:------------------------|----------------:|-------:|------:|-------:|:---------------------|:----------------------------|:------------------|--------:|---------:|:---------|
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | iid_gaussian         | i.i.d. Gaussian             | static            |   2.262 |   0.5991 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | t_ppca               | Static t-PPCA               | static            |   2.512 |   1.431  | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | stationary_bootstrap | Stationary bootstrap        | resampling        |   8.627 |   0.4632 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | garch_fhs            | GARCH-t FHS                 | dynamic-classical |  10.98  |   0.9141 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | dcc_garch            | DCC-GARCH-t                 | dynamic-classical |   8.477 |   1.172  | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | regime_gaussian      | Regime Gaussian             | regime            |   5.888 |   0.7672 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | hmm_gaussian         | Gaussian HMM                | regime            |   3.355 |   0.9329 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | timevae              | TimeVAE                     | neural            | nan     | nan      | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | quantgan             | QuantGAN                    | neural            |   4.087 |   0.8262 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | timegan              | TimeGAN                     | neural            |   1.248 |   1.431  | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | cgnsde               | CG-NSDE v1 (preregistered)  | neural-ours       |   2.907 |   0.9104 | False    |
-| covid_2020 | COVID crash, 2020       |              72 | 101.1  | 65.11 | 140.1  | cgnsde2              | CG-NSDE v2 (ours, post hoc) | neural-ours       |  22.15  |   2.076  | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | iid_gaussian         | i.i.d. Gaussian             | static            |   2.262 |   0.5991 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | t_ppca               | Static t-PPCA               | static            |   2.512 |   1.431  | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | stationary_bootstrap | Stationary bootstrap        | resampling        |   8.627 |   0.4632 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | garch_fhs            | GARCH-t FHS                 | dynamic-classical |  10.98  |   0.9141 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | dcc_garch            | DCC-GARCH-t                 | dynamic-classical |   8.477 |   1.172  | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | regime_gaussian      | Regime Gaussian             | regime            |   5.888 |   0.7672 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | hmm_gaussian         | Gaussian HMM                | regime            |   3.355 |   0.9329 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | timevae              | TimeVAE                     | neural            | nan     | nan      | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | quantgan             | QuantGAN                    | neural            |   4.087 |   0.8262 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | timegan              | TimeGAN                     | neural            |   1.248 |   1.431  | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | cgnsde               | CG-NSDE v1 (preregistered)  | neural-ours       |   2.907 |   0.9104 | False    |
-| shock_2022 | 2022 rate and war shock |              23 |  49.42 | 31.44 |  71.67 | cgnsde2              | CG-NSDE v2 (ours, post hoc) | neural-ours       |  22.15  |   2.076  | False    |
+# Table 3: Held-Out Crisis Episodes (G2 Gate)
+
+| Episode | Period | Real Boost | Generated Boost | Real 95% CI | Inside CI |
+|---------|--------|------------|-----------------|-------------|-----------|
+| COVID-2020 | 2020-03-01 to 2020-07-31 | TBD | TBD | TBD | TBD |
+| Shock-2022 | 2022-02-01 to 2022-06-30 | TBD | TBD | TBD | TBD |
+| Mid-2024 | 2024-06-01 to 2024-07-31 | TBD | TBD | TBD | TBD |
+
+**G2 Gate: PASS if CG-NSDE's held-out boost_pct lies inside the real 95% interval on at least 2 of 3 episodes**
+
+*Note: This table requires episode-specific evaluation. Run crisisbench protocol for full G2 assessment.*
