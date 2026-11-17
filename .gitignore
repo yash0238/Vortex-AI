@@ -253,5 +253,14 @@ results/queue_console.log
 cloud/vortex_bundle.zip
 fullscale_results.zip
 paper/vortex_paper_overleaf.zip
+colab_upload/vortex_ai.tar.gz
+paper/*.pdf
+paper/*.aux
+paper/*.out
+paper/*.log
+paper/figures/
+paper/tables/
+# Downloaded reference PDFs (the manifest + README are tracked, the PDFs are not)
+paper/references/*.pdf
 # Per-run benchmark metrics are the source of every table: keep them (the older 'runs/' rule above is for v0 logs)
 !results/runs/
