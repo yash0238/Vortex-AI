@@ -150,6 +150,9 @@ export function CrisisTest() {
       <Head eyebrow="Evidence · held-out crashes" title="Crashes the models never saw">
         Every model here was trained only on data up to December 2019. COVID-2020, the 2022 shock and mid-2024 were never shown to them. Does their idea of a crisis match what then happened?
       </Head>
+      <div className="callout warn" style={{ marginBottom: 16 }}>
+        <b>Gate G2 Verdict (FAIL for all models):</b> On the held-out COVID-2020 crash, real cross-stock correlation surged by +101.1% (real 95% interval: 65.11% to 140.1%); the 2022 shock was +49.42% (real 95% interval: 31.44% to 71.67%). CG-NSDE v2 (post hoc, pre-2020 fit) generated +22.15% (±2.08%) and CG-NSDE v1 generated +2.91% (±0.91%) — both outside the real intervals on 0 of 2 episodes (G2 FAIL; v2's Family C error rises ~5x out-of-sample from 0.145 in-sample to 0.742 pre-2020). Models trained purely on mild historical periods cannot extrapolate to unprecedented systemic shocks.
+      </div>
       {b && <div className="grid g2"><MetricStrip b={b} m="boost_pct" /><MetricStrip b={b} m="cvar_ratio" /><MetricStrip b={b} m="tail_coexc" /><MetricStrip b={b} m="crisis_freq" /></div>}
       {!h ? <Empty what="The per-episode held-out table" /> : eps.map((e) => {
         const rows = h.filter((r) => r.episode === e);
@@ -219,17 +222,43 @@ export function Model() {
   const v1 = cg?.v1_info;
   return (
     <>
-      <Head eyebrow="Evidence · our model" title="CG-NSDE under the microscope">Two versions, one honest story: the first design failed the benchmark, we found out why, and the second design fixes exactly that.</Head>
+      <Head eyebrow="Evidence · our model" title="CG-NSDE under the microscope">
+        Two model generations, four distinct architectural issues across iterations: legacy codebase defects (sampler mismatch and likelihood dominance) were resolved during protocol standardization, while CrisisBench v1 failed against classical regime models due to overlapping-window memorisation and scalar volatility scaling. CG-NSDE v2 was redesigned post hoc to solve all four.
+      </Head>
       <div className="grid g2">
         <Card flat title="Version 1: what went wrong">
-          <p>The first model memorised its training windows. Its validation score was best after epoch {v1?.best_epoch ?? "2"} of {v1?.epochs_run ?? "10"}, so training stopped almost before it began. Its volatility memory also scaled every stock by the same number, and that cannot make stocks move together more in a crash.</p>
-          <p className="muted">Result: rank 10 of 12 on crisis behaviour. It stays in every table.</p>
+          <p><b>Diagnosis of failure:</b> The first model memorised its training windows (best validation at epoch {v1?.best_epoch ?? "2"} of {v1?.epochs_run ?? "10"}). Four distinct architectural issues occurred across iterations:</p>
+          <ul style={{ margin: "8px 0 0 16px", padding: 0, fontSize: 13.5, color: "var(--ink-2)" }}>
+            <li><b>Legacy code defects (resolved in protocol audit):</b> Earlier prototypes in <code>training/vortex_model.py</code> suffered from <i>sampler mismatch</i> (deterministic generation training vs noisy inference) and <i>likelihood dominance</i> (unweighted reconstruction overpowering latent dynamics).</li>
+            <li><b>CrisisBench v1 — Overlapping-window memorisation:</b> Validation NLL peaked at epoch 2 of 10. Weak KL bottleneck (beta=0.01) and unconstrained graph embeddings allowed the decoder to memorise heavily overlapping 60-day training windows instead of learning generalisable dynamics.</li>
+            <li><b>CrisisBench v1 — Scalar volatility scaling:</b> A single global volatility state scaled the whole covariance matrix by one scalar, making it mathematically impossible to model cross-asset correlation surges during crises.</li>
+          </ul>
+          <p className="muted" style={{ marginTop: 8 }}><b>Gate verdicts:</b> G1 FAIL (score_C 1.22, rank 10 of 12), G2 FAIL (0/2 held-out episodes).</p>
         </Card>
-        <Card flat title="Version 2: what changed">
-          <p>Each market-wide factor and each stock now has its own volatility memory. When a common factor becomes turbulent, every stock that depends on it moves with it, so correlations rise in crashes by construction of the dynamics, not by memory. The stock graph now only helps the model read a window; it can no longer leak it to the generator.</p>
-          <p className="muted">Designed after seeing version 1 fail, using 2010–2019 data only. That makes it a post hoc model, and we say so.</p>
+        <Card flat title="Version 2: architectural redesign (post hoc)">
+          <p><b>How v2 solves each defect:</b> Redesigned after understanding v1's failure, using 2010–2019 fit-period data only:</p>
+          <ul style={{ margin: "8px 0 0 16px", padding: 0, fontSize: 13.5, color: "var(--ink-2)" }}>
+            <li><b>Factor EGARCH dynamics (fixes scalar vol):</b> 8 static PCA-initialised factor loadings (rank_K=8) + idiosyncratic variance, whose log-variances evolve via a discrete-time EGARCH-type recursion on standardised shocks (with leverage theta on factor shocks), modulated by the 16-d latent SDE path. Correlated stocks surge together in crises.</li>
+            <li><b>Strict posterior isolation (fixes memorisation):</b> Graph attention (GAT) is restricted strictly to the posterior encoder during training; the generator samples from an unconditioned latent prior without real-data leakage.</li>
+            <li><b>Filtered Historical Simulation (FHS innovations):</b> Standardised empirical residuals replace rigid parametric distributions, natively capturing kurtosis and extreme daily tail shocks.</li>
+            <li><b>Parameter efficiency &amp; balanced objective:</b> 41,396 parameters (73% fewer than v1's 152,889) with a balanced loss objective, eliminating capacity for window memorisation and resolving likelihood dominance.</li>
+          </ul>
+          <p className="muted" style={{ marginTop: 8 }}><b>Gate verdicts:</b> G1 PASS (score_C 0.145, rank 1 in-sample), G2 FAIL (0/2 held-out episodes: ~5&times; OOS degradation to 0.742).</p>
         </Card>
       </div>
+
+      <Card title="Architecture comparison: v1 vs v2">
+        <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Property</th><th>CG-NSDE v1 (preregistered)</th><th>CG-NSDE v2 (ours, post hoc)</th><th>Significance</th></tr></thead><tbody>
+          <tr><td>Parameters</td><td>152,889</td><td>41,396 (-73%)</td><td>Vastly reduced capacity prevents training memorisation</td></tr>
+          <tr><td>Volatility state</td><td>Single global scalar</td><td>K=8 factor log-vols + idiosyncratic</td><td>Factor volatility allows correlation to surge in crises</td></tr>
+          <tr><td>Graph attention (GAT)</td><td>In generator conditioning</td><td>Posterior encoder only</td><td>Eliminates data leakage into generated paths</td></tr>
+          <tr><td>Innovation noise</td><td>Parametric Student-t</td><td>Filtered Historical Simulation (FHS)</td><td>Accurately matches empirical kurtosis and fat tails</td></tr>
+          <tr><td>Convergence</td><td>Overfits by epoch 2</td><td>Steady progress to epoch 5/13</td><td>Balanced weighted objective resolves likelihood dominance</td></tr>
+          <tr><td>G1 Verdict</td><td><span className="pill fail">FAIL</span> (score_C: 1.22, rank 10)</td><td><span className="pill pass">PASS</span> (score_C: 0.145, rank 1)</td><td>v2 outperforms all classical regime models in-sample</td></tr>
+          <tr><td>G2 Verdict</td><td><span className="pill fail">FAIL</span> (0/2 episodes)</td><td><span className="pill fail">FAIL</span> (0/2 episodes)</td><td>Both fail held-out 2020 crash — Family C error rises ~5&times; OOS (0.145 &rarr; 0.742)</td></tr>
+        </tbody></table></div>
+      </Card>
+
       {!cg ? <Empty what="CG-NSDE training" /> : (
         <div className="grid g4">
           <Card flat><Stat k="Training time (CPU)" v={`${fmt(cg.train_minutes, 1)} min`} s={`${cg.info?.epochs_run ?? "?"} epochs, best at ${cg.info?.best_epoch ?? "?"}`} /></Card>
@@ -241,7 +270,7 @@ export function Model() {
         <LineChart height={240} labels={hist.map((_, i) => `epoch ${i + 1}`)} series={[{ name: "train", color: "var(--s-ours)", y: hist.map((h) => h.train_nll ?? h.train) }, { name: "validation (2018–19)", color: "var(--crisis)", y: hist.map((h) => h.val_nll ?? h.val) }]} />
       </Card>}
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations</h2><Seg value={fit} set={setFit} options={FITS} /></div>
-      {!abl ? <Empty what="The ablation study" /> : (<>
+      {!abl?.length ? <Empty what="The ablation study" /> : (<>
         <div className="grid g2">
           {["score_C", "score_B", "score_A", "score_D"].map((k) => (<Card flat key={k} title={FAM_NAME[k.slice(-1)] + " score"} sub="Lower is better; under 1 is within real noise.">
             <IntervalPlot zero ceiling={1} rows={abl.map((r) => ({ label: VAR[r.generator] ?? r.name, color: r.generator === "cgnsde2" ? "var(--s-ours)" : "var(--s-static)", value: r[k], sd: r[k + "_sd"], bold: r.generator === "cgnsde2" }))} />
@@ -255,6 +284,17 @@ export function Model() {
       </Card>}
     </>
   );
+}
+
+/* Gate markdown files can start with a heading (## GATE_ACFr2) and carry a table
+   row like | **Pass** | **True** | or | **Pass** | **False** |. Parse that into a verdict;
+   fall back to an older "Verdict: ..." first line so no gate shows "not run". */
+function gateVerdict(md: string): string | undefined {
+  const m = md.match(/\|\s*\*\*Pass\*\*\s*\|\s*\*\*(True|False)\*\*\s*\|/);
+  if (m) return m[1] === "True" ? "PASS" : "FAIL";
+  const first = md.split("\n")[0];
+  const i = first.indexOf(": ");
+  return i >= 0 ? first.slice(i + 2).trim() : undefined;
 }
 
 /* -------------------------------------------------------------- Markets */
@@ -282,6 +322,9 @@ export function Checks() {
   const core = useData<Core>("core");
   if (!core.data) return <Loading error={core.error} />;
   const d = core.data.dgp, c = core.data.contamination, b = core.data.bench["nse/full"];
+  const gates = core.data.gates ?? {};
+  const crisisGates = Object.entries(gates).filter(([k]) => k.startsWith("GATE_G"));
+  const legacyGates = Object.entries(gates).filter(([k]) => !k.startsWith("GATE_G"));
   return (
     <>
       <Head eyebrow="Evidence · sanity checks" title="Can the measuring stick itself be trusted?">Before trusting a metric on models, we test it where the right answer is known, and we test how fragile it is to dirty data.</Head>
@@ -298,8 +341,11 @@ export function Checks() {
       <Card title="Check 3 · A different definition of crisis" sub="Rankings recomputed with the alternative rule (crisis = high 20-day volatility of the equal-weight portfolio).">
         {b?.alt_rule ? <BenchTable rows={b.alt_rule} refm={{}} metrics={["crisis_freq", "boost_pct", "cvar_ratio", "pc1_share_gap", "connect_gap"]} /> : <Empty what="The label-rule robustness table" />}
       </Card>
-      <Card title="Gate files" sub="Generated by the analysis code; never edited by hand.">
-        {Object.keys(core.data.gates).length ? Object.entries(core.data.gates).map(([k, v]) => (<details key={k} style={{ marginBottom: 8 }}><summary style={{ cursor: "pointer", fontWeight: 600 }}>{k} <Verdict v={v.split("\n")[0].split(": ")[1]} /></summary><pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "var(--ink-2)" }}>{v}</pre></details>)) : <Empty what="Gate evaluation" />}
+      <Card title="CrisisBench decision gates and post-hoc audits" sub="Preregistered decision gates (G1–G4) and v2 post-hoc evaluations generated directly by crisisbench.analysis.">
+        {crisisGates.length ? crisisGates.map(([k, v]) => (<details key={k} style={{ marginBottom: 8 }}><summary style={{ cursor: "pointer", fontWeight: 600 }}>{k} <Verdict v={gateVerdict(v)} /></summary><pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "var(--ink-2)" }}>{v}</pre></details>)) : <Empty what="CrisisBench gate evaluation" />}
+      </Card>
+      <Card title="Legacy six-gate statistical diagnostics" sub="Single-metric statistical tolerance tests (ACF, Frobenius, Kurtosis, Discriminator) from the initial six-gate evaluator. Distinguish these from the CrisisBench decision gates above.">
+        {legacyGates.length ? legacyGates.map(([k, v]) => (<details key={k} style={{ marginBottom: 8 }}><summary style={{ cursor: "pointer", fontWeight: 600 }}>{k} <Verdict v={gateVerdict(v)} /></summary><pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "var(--ink-2)" }}>{v}</pre></details>)) : <Empty what="Legacy gate evaluation" />}
       </Card>
     </>
   );

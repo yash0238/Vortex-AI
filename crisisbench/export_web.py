@@ -180,9 +180,12 @@ def cgnsde_block() -> dict | None:
         return None
     d = json.loads(p.read_text())
     p1 = RESULTS / "runs" / "nse" / "cgnsde" / "full" / "seed0" / "metrics.json"
-    v1 = json.loads(p1.read_text()).get("info") if p1.exists() else None
+    d1 = json.loads(p1.read_text()) if p1.exists() else {}
+    v1 = d1.get("info")
     if v1:
         v1 = {k: v for k, v in v1.items() if k != "history"}
+        if "train_minutes" in d1:
+            v1["train_minutes"] = d1["train_minutes"]
     extra = _json(RESULTS / "07_model" / "cgnsde_explain.json")
     return dict(info=d.get("info"), hparams=d.get("hparams"), train_minutes=d.get("train_minutes"),
                 conditional=d.get("conditional"), explain=extra, v1_info=v1)

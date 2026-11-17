@@ -2,7 +2,196 @@
 
 A new Claude session must read ONLY this file to resume. Do not read the PDFs, the legacy docs (README,
 PRESENTATION, CLAUDE_HANDOFF, CONVERGENCE_PLAN ...) or any earlier conversation: everything needed is here.
-Keep the Status section current. Last update: 2026-11-14.
+Keep the Status section current. Last update: 2026-11-17 (v0 pipeline repair).
+
+## 2026-11-17: why the Kaggle run scored 0/4, and what was fixed
+
+The 2026-11-16 Kaggle run (3.6 h, 51 epochs, early-stopped, best checkpoint = epoch 0) failed all four
+evaluation gates. Root causes, all now fixed with regression tests in `tests/test_regressions.py` (16 tests,
+`python -m pytest tests/test_regressions.py tests/test_smoke.py`):
+
+1. `emission: smt` was NOT a likelihood emission. `_use_nll` was `emission in ("hetero","t","mt")`, so the
+   multivariate-t heads (`emi_m`, `emi_d`, `emi_B`) were **never trained** (checkpoint check: `emi_m.bias` still
+   all zeros, `raw_nu` still 3.47 = init) and `sample_prior_scenarios` returned the **decoder mean**.
+   Consequence: kurtosis 3.2 (Gaussian), generated std 0.30 vs real 0.93, discriminative score 1.000, crisis
+   boost 0.14%, CVaR ratio 0.87x. (`training/vortex_model.py`)
+2. With `vol_dyn: true`, `emission_dist_vol`/`emission_sample_seq` sent `smt` down the **independent** Student-t
+   branch, discarding the rank-8 factor structure, so cross-asset correlation was ~0 in the first place.
+3. `--vol_dyn` was `store_true` with `default=False` and the merge loop copied every non-None CLI value, so
+   `vol_dyn: true` in `config.yaml` was silently turned **off** (visible in the run's `hparams.yaml`).
+   All overrides now default to `None`; `parse_args(argv)`.
+4. The same merge let the legacy top-level `batch_size: 32` shadow `cgnsde.batch_size`. Extracted
+   `merge_config()`: precedence is legacy top-level < `cgnsde.loss_weights` < `cgnsde.*` < CLI.
+5. The NLL branch ignored `lam_emission_corr` and `lam_graph`, so the correlation targets never reached
+   training (`val/emission_correlation` was 0.0 for the whole run).
+6. Three validation "gate" metrics were **hardcoded placeholders** (`_compute_crisis_boost` returned 0.5,
+   `_compute_cvar_ratio` returned 1.0, `_compute_corr_frobenius` compared to a fixed 0.3 target). Replaced by
+   `_gate_metrics`, which computes gen vs real on the same windows.
+7. `monitor_metric: val/total` = reconstruction MSE, which got **worse** every epoch (0.948 -> 1.154) while the
+   SDE injected noise the decoder could not invert; early stopping therefore restored epoch 0. NLL models now
+   monitor `val/nll`.
+8. Sampler: `n_batches = min(crisis//k, normal//k)` stopped at the minority class, so one epoch used **664 of
+   2234** training windows. Now an epoch visits every window and keeps >=4 crisis per batch of 16.
+9. Data artifacts: `windows.npy` carries one **padded leading window** (first timestep all zeros) while
+   `window_regimes_v2.npy` starts at the second window, and `window_node_features.npy` is shifted 1 window vs
+   returns. The loader truncated the *tail*, so every sample paired `returns[i]` with `features[i+1]` and
+   `regime[i+1]`. Now: drop padded leading windows, then align features by content (channel 0 is the return).
+10. Evaluation: `evaluate_vortex.py` loaded `data/raw` and scored the first N windows of the **training** panel.
+    It now scores `split.npz`'s held-out `test_idx` and reports a real reference on the same windows.
+11. `_acf_lag1` flattened `(N,T,S)` before taking lag-1, mixing stocks into every lag term; it now averages the
+    per-series time-axis ACF. Real ACF(r^2) is 0.036-0.042, not 0.11.
+12. `eval/statistical.evaluate_stylized_facts` had three stacked `return` blocks (dead code); the reachable
+    one gated on an absolute Frobenius < 3.0.
+13. Architecture: the regime only reached `z0`. `LatentSDEModel` now has `regime_emb` + `regime_log_scale` and
+    every emission head takes `[zs, regime_code]`, so a crisis can actually move assets together. New
+    `emission_correlation_from_latent()`, used by `emission_correlation_loss`.
+
+### Gate recalibration (honesty: the old targets exceeded reality)
+Measured on the held-out 2022+ split (`data/raw/split.npz`, 738 windows, 4.6% crisis):
+
+| gate | old target | real value | new rule |
+| --- | --- | --- | --- |
+| kurtosis | `> 3.0` | 12.1 (interval 5.6-52.0) | inside the real block-bootstrap interval |
+| ACF(r^2) | `> 0.05` | **0.036** | within max(0.02, 35%) of real |
+| corr Frobenius | `< 3.0` | real-vs-real **6.15** | <= 1.5x the real split-half ceiling |
+| crisis boost | `> 50%` | **36.7%** | within max(15pp, 50%) of real, same ordering |
+| CVaR ratio | `> 3x` | **1.25x** | within max(0.2, 35%) of real |
+
+Discriminative score keeps the standard `< 0.60`; the real-vs-real floor on this split is 0.473.
+
+### Data facts found while fixing this
+- `windows.npy` has 50 columns but `data/panels/nse` has 47 assets. `LTI.NS` (index 29) and `TATAMOTORS.NS`
+  (index 42) are **constant zero** in `nifty50_close.csv` (both were renamed in the NIFTY-50 index), so
+  `np.corrcoef` returns NaN for them. Targets are now `nan_to_num`'d with a unit diagonal; their correlation
+  rows are zero. Any future metric must tolerate these two columns.
+- Train/val/test crisis rates: 14.9% / 10.6% / 4.6% (2234 / 489 / 738 windows).
+- Regime correlation targets from the train split: crisis mean|offdiag| 0.369, normal 0.196.
+
+### How to run now
+- Code: `.\.venv\Scripts\python.exe -m pytest tests/test_regressions.py tests/test_smoke.py -q` (16 pass).
+- Kaggle: `.\kaggle\run.ps1 code` then `.\kaggle\run.ps1 smoke` (2 epochs, now also runs the evaluator) then
+  `.\kaggle\run.ps1 train`, `.\kaggle\run.ps1 fetch`.
+- Config: `batch_size: 16`, `accumulate_grad_batches: 2` (effective 32), `crisis_fraction: 0.25`,
+  `max_batches_per_epoch: 0` (159 batches/epoch, full coverage), `lam_emission_corr: 20.0`, `emission: smt`,
+  `vol_dyn: true`, `monitor_metric: val/nll`, `patience: 30`.
+- Evaluation samples `z0` from the aggregate posterior (`--z0_source aggregate_posterior`) by default; the
+  regime prior stays available as `regime_prior`.
+
+### Measured so far
+- Kaggle kernel v13 (2 epochs only, i.e. essentially untrained) already scores **2/4** where the broken run
+  scored 0/4 after 51 epochs:
+  corr Frobenius 5.12 (real-vs-real ceiling 6.15, pass), crisis boost 22.9% vs real 36.7% (pass),
+  CVaR 1.32x vs real 1.13x (pass). Still failing: kurtosis 5.58 vs real 11.66 [8.6, 15.5], ACF(r^2) -0.006 vs
+  0.039, discriminative 0.999 vs real-vs-real floor 0.483 (generated std 1.24 vs real 0.85 -> trivially separable).
+  Those three are exactly the statistics that need training to calibrate.
+- **Epoch time: ~115 s** (159 batches x 16, T4 x1). 200 epochs is about 6.4 h, inside the 12 h session limit.
+- `sde_sigma_max` A/B at 10 epochs (v15, 1.0 vs 0.3): no material difference (kurt 5.36/5.19, corr 4.38/4.26,
+  boost 42.0%/34.9%, disc 0.998/0.999). Kept 1.0.
+- Discriminative-gate sensitivity (what the gate actually measures): real vs real 0.510, real x1.10 0.545,
+  real x1.30 0.615, real vs same-covariance Gaussian 0.525, real vs time-shuffled-within-window 0.495.
+  So the gate is a **scale/covariance test**: it does not require fat tails or vol clustering, but a >~20%
+  scale error fails it. This is why the emitted scale must track the conditioning window.
+- Emission capability sweep (no training, real test reference acf 0.038 / kurt 12.08):
+  rho 0.90 / kappa 0.10 / nu 8 -> acf -0.010, kurt 4.46; kappa 0.30 -> -0.005 / 4.76;
+  **kappa 0.50 / nu 8 -> +0.019 / 10.42** (both gates pass); nu 5.1 pushes kurt to 14-17 but ACF stays <= 0.
+  The old init was kappa 0.1, i.e. structurally unable to produce the real clustering.
+- Cross-window volatility heterogeneity alone explains only kurtosis 3.0 -> 3.4, so the real kurtosis is
+  mostly *within-window* tail/clustering structure, not a mixture of calm and violent windows.
+
+### v16 full run (200 epochs budget): STOPPED BY EVIDENCE, architecture problem
+Ran 34 epochs, then EarlyStopping (best = epoch 3). The result is **0/4**, but the important finding is *why*:
+
+| epoch | train NLL | val NLL |
+| --- | --- | --- |
+| 0 | 59.27 | 62.48 |
+| 5 | 48.61 | 62.26 |
+| 10 | 46.20 | 63.14 |
+| 20 | ~46.8 | 63.94 |
+| 33 | 45.78 | **65.00** |
+
+Train likelihood improves by 14 nats, validation likelihood gets *worse* every epoch. The model is not
+underfitting, it is **memorising** and failing to generalise to the held-out 2022+ period.
+
+Cause (provable from the code, and the same defect STATE.md recorded for CG-NSDE v1):
+`VortexDataset._build_node_features` returns `window_node_features[idx].mean(dim=0)`, and channel 0 of that
+tensor is the window's **own** returns, channel 1 its own |r|, channel 2 its own volume; `adj_matrices[idx]` is
+the window's own Pearson correlation. `sample_prior_scenarios` then feeds those into the GAT and uses the
+*posterior of that same window* as z0. So at evaluation the generator is told, per asset, the average return
+and volatility of the very window it is supposed to generate. Generation is reconstruction.
+
+Consequences: the seeming wins at 2 and 10 epochs (corr Frobenius 5.1 vs a 6.16 real-vs-real ceiling) were the
+leak, not the model; on data it cannot copy, the output regresses to a near-unconditional draw (std 1.24 vs
+0.85, kurtosis 5.5 vs 11.7, ACF ~0, discriminative 1.000). Any gate measured this way is measuring copying.
+
+Therefore: no further hyperparameter tuning is justified until the conditioning question is settled. Options
+and their costs are in the session report; do not start another long run before choosing one.
+
+### v17 (running): regime-only generation
+Decision (user): the generator may only be given the **regime** it should simulate. Implemented:
+- `VORTEXModel.sample_regime_scenarios(regimes)` is the single generative entry point. It takes no returns,
+  adjacency, node features or posterior. A regression test asserts the signature cannot accept them.
+- `VORTEXModel.fit_generation_priors(train_loader)` (empirical Bayes) sets, per regime: `prior_mu` /
+  `prior_logvar` = moments of the aggregate posterior q(z0|x); `regime_graph_emb` = mean GAT embedding;
+  `regime_log_vol` = mean log-volatility. Saved to `models/checkpoints/generation_priors.npz` after training
+  and loaded by `evaluate_vortex.py`.
+- `evaluate_vortex.py` asks for the same regime composition as the real test windows and nothing else.
+  Result files record `generation: {conditioning: "regime only", labels: "requested regime"}`, so the claim is
+  explicit: when asked to simulate a crisis, does the draw look like a crisis (more correlated, heavier left
+  tail)? Labels are NOT derived from the draws.
+- Validation logging now uses the same honest entry point and is skipped on batches containing only one regime
+  (it used to log a misleading `crisis_boost = -1.0`).
+- `evaluate_vortex.py` also loads `best_model_path.txt` when present, so it scores the best checkpoint rather
+  than `last.ckpt`.
+
+Consequence to expect: with generation unconditional within a regime, the emission must carry the whole
+distribution (tails via nu, correlation via the regime-conditioned factor loadings, clustering via the
+rho/kappa recursion). `kappa` is initialised at 0.5 and `rho` at 0.9, the only measured setting where the
+emission's own ACF(r^2) reaches the real 0.039 (+0.019 measured) while kurtosis lands near the real 11.7 (10.4
+measured). Those two numbers are the ones to watch in the first gate log.
+
+
+### v18 (running): balanced objective
+v17 measured, regime-only generation, honest (no leakage):
+std 0.863 vs real 0.851 (scale fixed), corr 8.25 (limit 9.23, pass), boost 24.5% vs 36.7% (pass),
+CVaR 1.80x vs 1.13x (fail), kurtosis 5.51 vs 11.66 (fail), ACF(r^2) 0.0006 vs 0.039 (fail),
+discriminative 0.999 (fail) -> 2/4.
+
+Diagnosis from the learned parameters: `kappa` fell 0.50 -> 0.16 during training, `nu` stayed at 7.8, and
+`val/emission_corr` *rose* 0.011 -> 0.068. The likelihood was actively choosing no clustering, thin tails and a
+worse correlation fit, because the raw NLL is a 50-dimensional joint log-density (~65) while the stylized-fact,
+correlation and graph terms are O(0.01-0.5): the loss was 99% likelihood and every fidelity term was decoration.
+
+Fixes in v18:
+- `_nll_per_asset()`: the likelihood enters the loss divided by the asset count (~1.3 instead of ~65), so a
+  weight of 1.0 on a fidelity term is a real contribution. `train/total` went from ~67 to ~3.5.
+- `lambda_styl` is now actually applied in the NLL branch, on **sampled** scenarios drawn with
+  `emission_sample` (nu NOT detached, unlike the correlation sampler), so the tail parameter and the emission's
+  temporal variance both get gradients from the stylized-fact loss.
+- `beta_max` 1.0 -> 0.05 (the KL was large relative to the new NLL scale).
+- `monitor_metric: val/fidelity` = emission-correlation error + stylized-fact error, computed every validation
+  batch. `val/nll` selected the epoch before the encoder memorised the training windows, which is irrelevant to
+  generation (generation uses the fitted regime prior, not the encoder).
+- `max_epochs` 150, `patience` 40.
+
+
+### Design changes made before v16 (all still in the code, all unit-tested)
+- `vol_coupling` parameter: the emission variance/loadings are multiplied by
+  `exp(2c * log_vol)` / `exp(c * log_vol)` where `log_vol = log(mean|r| / 0.7979)`
+  (0.7979 = E|z| for a standard normal). c is learned, initialised at 1.0. In v17 `log_vol` comes from the
+  fitted per-regime prior (`regime_log_vol`), not from the target window.
+- `kappa_raw` initialised to kappa 0.5 (was 0.1); `rho` stays 0.9.
+- Dedicated optimizer group at 10x lr for the dynamics scalars (`rho_raw`, `kappa_raw`, `raw_nu`,
+  `vol_coupling`, `regime_log_scale`, `regime_emb`, `prior_mu`, `prior_logvar`), because their gradients pass
+  through a 60-step recursion.
+- `CosineAnnealingLR(T_max=max_epochs)` via `scheduler_epochs`; previously T_max was hardcoded 100, so a
+  200-epoch run reheated the lr after epoch 100.
+
+### Known, not fixed (out of scope of this repair)
+- `tests/test_cgnsde.py::test_variants_run_one_epoch` fails (variant-history assertion) and
+  `tests/test_classical_garch.py` / `tests/test_risk.py` need `arch`, which is not installed. Both belong to
+  the separate `crisisbench` pipeline and were failing before this change.
+- `training/config.yaml` still carries the legacy LSTM top-level keys; `merge_config` makes the `cgnsde` block
+  win, so they are inert for CG-NSDE but should be removed eventually.
 
 ## How to work on this project (cost rules, set by the user)
 - The user is on a usage-limited plan. Keep the session SMALL: read files only when you must edit them, batch
@@ -240,3 +429,45 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
 - [ ] verify neural baselines; cgnsde test fix; independent review
 - [ ] full queue; risk backtest; DGP validation; final analysis + export
 - [ ] browser check of dashboard; API server; paper + zip; README
+
+---
+
+## Update 2026-11-18: Phase 1 & 2 Complete, Phase 7B Docs, Kaggle Shards In-Flight
+
+### 1. Phase 1 (Task 4: Sampler Alignment) Completed
+- Added `test_emission_sample_seq_receives_gradients_when_seq_sampler` to `tests/test_sampler_alignment.py`. Confirmed non-zero autograd gradients flow through `emission_sample_seq` during `training_step` when `stylized_sampler="seq"`.
+- Produced `reports/task-4-report.md` evaluating Arm A (`single`) vs Arm B (`seq`) on validation split (`episode-blocks-val2018-19-test2022plus-purge60`, 200 scenarios):
+  - Kurtosis reduced from 16.54 to 11.08 (vs 9.43 real).
+  - ACF(r²) reduced from 0.0908 to 0.0733 (vs 0.0358 real).
+  - Both arms pass 0/4 gate tests after 2 epochs due to persistent return over-dispersion.
+
+### 2. Phase 2 (Task 5: Likelihood Dominance Verification) Completed
+- Created `tests/test_likelihood_dominance.py` covering:
+  1. `_nll_per_asset` divides raw NLL by `n_stocks` (`training/vortex_model.py:231-240`).
+  2. `beta_max: 0.05` in `training/config.yaml:63` and linear warmup scaling.
+  3. `kappa` floor at 0.6 via `.clamp(min=0.6)` in `models/neural_sde.py:303`.
+- Produced `reports/task-5-report.md` detailing the v17 diagnosis (where raw NLL ~65 nats constituted >99% of loss and drove $\kappa \to 0.16$) and verifying the v18 objective balance.
+- Full automated test suite passes: 47/47 tests clean across `test_sampler_alignment.py`, `test_likelihood_dominance.py`, `test_regressions.py`, and `test_smoke.py`.
+
+### 3. Phase 7B Documentation Completed
+- Created `docs/HONEST_SUMMARY.md`: definitive summary of what can and cannot be claimed, exact gate verdicts with numbers:
+  - G1 (regime-aware ≫ static): v1 FAIL (regime Gaussian 0.54, HMM 0.70 vs v1 1.22 ± 0.28); v2 PASS (0.15 ± 0.01 full, 0.74 ± 0.02 pre2020).
+  - G2 (held-out crisis boost): FAIL for both v1 and v2 (0/2 episodes: COVID-2020 real 101.1% vs v2 22.15%, v1 2.91%; shock-2022 real 49.42% vs v2 22.15%, v1 2.91%).
+  - G3 (VaR/ES backtest validates ranking): PASS ($\tau(\text{Family C}, \text{risk}) = 0.80$ > 0.5; $\tau(\text{Family B}, \text{risk}) = -0.20$).
+  - G4 (cross-market replication of $\tau(B,C) < 0.3$ on $\ge 1$ market): PASS via South Korea alone ($\tau(B,C) = 0.29 < 0.3$ [0.21, 0.29]), whereas US ($\tau(B,C) = 0.60 > 0.3$ [0.56, 0.64]) does not satisfy $\tau < 0.3$ (partial replication).
+  - H1 ("correlation is not crisis" / decoupling $\tau(B,C) < 0.3$): NOT SUPPORTED on NSE ($\tau(B,C) = 0.45$ in-sample, 0.35 held-out).
+  - KILL condition: NOT TRIGGERED.
+  - H5 (contamination robustness): SUPPORTED.
+- Rewrote `README.md` to reflect the benchmark framing (CrisisBench) with CG-NSDE v2 as a post-hoc reference model, exact gate verdicts, and Kaggle cloud workflow.
+
+### 4. Kaggle Cloud Compute Status (`kaggle-runner`)
+- Strict ZERO local training policy enforced.
+- 6 concurrent Kaggle kernel shards actively running on GPU/CPU clusters (`KAGGLE_CONFIG_DIR=c:\Users\myind\Downloads`):
+  - `brxkeaaryan/vortex-crisisbench-gpu-shard-1` (2x T4 GPU): 22 GAN queue runs on CUDA + 28 fullscale jobs (`diffusion_fs`, `quantgan_fs`).
+  - `brxkeaaryan/vortex-ai-fullscale-baselines` (T4 GPU): 42 fullscale jobs (`diffusion_fs`, `quantgan_fs`, `timegan_fs`).
+  - `brxkeaaryan/vortex-crisisbench-cpu-shard-1` (CPU 4 workers): 70 queue jobs.
+  - `brxkeaaryan/vortex-crisisbench-cpu-shard-2` (CPU 4 workers): 18 CG-NSDE v2 jobs (API weights backfill, `v2_main`, `v2_risk`, 12 `v2_markets`).
+  - `brxkeaaryan/vortex-crisisbench-cpu-shard-3` (CPU 4 workers): 20 `v2_ablation` jobs (Part 1).
+  - `brxkeaaryan/vortex-crisisbench-cpu-shard-4` (CPU 4 workers): 19 `v2_ablation` jobs (Part 2).
+- Completed experiments: NSE main (110/110), v2 main (10/10), v2 risk refits (4/4), T4 risk backtest (1,238 test windows), G3 validation ($\tau = 0.80$), sampler alignment A/B tests.
+

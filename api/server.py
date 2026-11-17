@@ -1,4 +1,4 @@
-"""Small API for the dashboard's Scenario Lab: live generation from the trained CG-NSDE.
+"""Small API for the dashboard's Scenario Lab: live generation from the trained CG-NSDE v2.
 
     .venv\\Scripts\\python.exe -m uvicorn api.server:app --port 8000
 
@@ -33,7 +33,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 class GenerateRequest(BaseModel):
     n: int = Field(400, ge=50, le=2000)
-    seed: int = 0
+    seed: int = Field(0, ge=0)
     fit: str = Field("full", pattern="^(full|pre2020)$")
 
 
@@ -43,7 +43,7 @@ def _model(fit: str):
     try:
         gen = CGNSDE.load(path)
     except FileNotFoundError as e:
-        raise HTTPException(503, f"No trained CG-NSDE checkpoint at {path}. Run the benchmark queue first.") from e
+        raise HTTPException(503, f"No trained CG-NSDE v2 checkpoint at {path}. Run the benchmark queue first.") from e
     fd, _, _ = make_fit_data("nse", fit)
     return gen, fd.rule
 
@@ -51,7 +51,8 @@ def _model(fit: str):
 @app.get("/api/health")
 def health() -> dict:
     have = {f: any((ARTIFACTS / "models" / "nse" / "cgnsde2" / f).glob("seed0*")) for f in ("full", "pre2020")}
-    return dict(status="ok", checkpoints=have)
+    any_ckpt = any(have.values())
+    return dict(status="ok", model_loaded=any_ckpt, generator_checkpoint_available=any_ckpt, checkpoints=have)
 
 
 @app.post("/api/generate")
@@ -59,7 +60,7 @@ def generate(req: GenerateRequest) -> dict:
     gen, rule = _model(req.fit)
     W = gen.sample(req.n, np.random.default_rng(req.seed))
     out = summarise_windows(np.asarray(W, dtype=np.float64), rule)
-    out["source"] = f"CG-NSDE, fit '{req.fit}', seed {req.seed}"
+    out["source"] = f"CG-NSDE v2, fit '{req.fit}', seed {req.seed}"
     return out
 
 
