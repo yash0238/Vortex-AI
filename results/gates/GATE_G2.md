@@ -8,8 +8,8 @@ CG-NSDE v1 (fit on data to 2019) boost_pct against each held-out episode's real 
 
 | Episode | Real Crisis Windows | Real Boost [95% Block-Boot CI] | CG-NSDE v1 (preregistered) (mean ± SD) | 95% Seed CI | Seeds Passing [95% Binom CI] | All Seeds Pass | Verdict |
 |---|---|---|---|---|---|---|---|
-| COVID crash, 2020 (`covid_2020`) | 72 | 101.1% [65.1, 140.1] | 2.91% ± 0.91% | [2.16, 3.54] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
-| 2022 rate and war shock (`shock_2022`) | 23 | 49.4% [31.4, 71.7] | 2.91% ± 0.91% | [2.16, 3.54] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
+| COVID crash, 2020 (`covid_2020`) | 72 | 101.1% [65.1, 140.1] | 2.88% ± 0.91% | [2.16, 3.53] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
+| 2022 rate and war shock (`shock_2022`) | 23 | 49.4% [31.4, 71.7] | 2.88% ± 0.91% | [2.16, 3.53] | 0/5 [0.00, 0.52] | `False` | **FAIL** |
 
 **Excluded episodes (< 5 real crisis windows):** `mid_2024` (2024-06-01..2024-07-31)
 
@@ -49,12 +49,12 @@ CG-NSDE v1 (fit on data to 2019) boost_pct against each held-out episode's real 
         65.11156459949652,
         140.11759763301075
       ],
-      "gen_mean": 2.9074016604659807,
-      "gen_sd": 0.9103677589939411,
-      "gen_formatted": "2.91 \u00b1 0.91",
+      "gen_mean": 2.884714432790325,
+      "gen_sd": 0.9113376366384384,
+      "gen_formatted": "2.88 \u00b1 0.91",
       "gen_ci_95": [
         2.1610958843619086,
-        3.535661878663833
+        3.5292243177794136
       ],
       "seeds_passed": 0,
       "n_seeds": 5,
@@ -74,12 +74,12 @@ CG-NSDE v1 (fit on data to 2019) boost_pct against each held-out episode's real 
         31.439158788363287,
         71.6744546144538
       ],
-      "gen_mean": 2.9074016604659807,
-      "gen_sd": 0.9103677589939411,
-      "gen_formatted": "2.91 \u00b1 0.91",
+      "gen_mean": 2.884714432790325,
+      "gen_sd": 0.9113376366384384,
+      "gen_formatted": "2.88 \u00b1 0.91",
       "gen_ci_95": [
         2.1610958843619086,
-        3.535661878663833
+        3.5292243177794136
       ],
       "seeds_passed": 0,
       "n_seeds": 5,

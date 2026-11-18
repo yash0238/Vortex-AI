@@ -1,12 +1,54 @@
 {
-  "H1": "Kendall tau between the family-B ranking and the family-C ranking of generators is below 0.3.",
-  "H2": "At least one non-neural regime model (regime-conditional Gaussian or HMM) has a family-C score within one seed standard deviation of CG-NSDE (or better).",
-  "H3": "Kendall tau between family-C rank and VaR/ES backtest rank exceeds 0.5 and exceeds the tau of family B, with non-overlapping bootstrap intervals.",
-  "H4": "The sign of (tau_B_vs_C < 0.3) replicates on at least one of the other two markets.",
-  "H5": "Injecting a single bad tick flips the order of at least one generator pair on at least one metric.",
-  "G1": "PASS if every regime-aware generator beats every static generator on the family-C score AND no regime-conditional Gaussian/HMM matches CG-NSDE (H2 false).",
-  "G2": "PASS if CG-NSDE's held-out boost_pct lies inside the real 95% interval on at least 2 of 3 episodes.",
-  "G3": "PASS if H3 holds.",
-  "G4": "PASS if H4 holds.",
-  "KILL": "If static generators also rank well on family C across seeds (H1 fails on every market), drop the benchmark framing."
+  "H1": {
+    "verdict": "not supported",
+    "evidence": "NSE in-sample tau(B,C) = 0.45 [0.35, 0.56] over 11 models; held-out tau(B,C) = 0.35 [0.05, 0.42]"
+  },
+  "H2": {
+    "verdict": "supported",
+    "evidence": "Regime Gaussian crisis score 0.54 vs CG-NSDE 1.22 \u00b1 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 \u00b1 0.28"
+  },
+  "G1": {
+    "verdict": "FAIL",
+    "evidence": "H2 true: Regime Gaussian crisis score 0.54 vs CG-NSDE 1.22 \u00b1 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 \u00b1 0.28"
+  },
+  "H3": {
+    "verdict": "supported",
+    "evidence": "tau(crisis family, backtest rank) = 0.67 [0.45, 0.82]; tau(correlation family, backtest rank) = 0.16 [-0.16, 0.38]"
+  },
+  "G3": {
+    "verdict": "PASS",
+    "evidence": "H3 holds: tau(family C, risk) = 0.67, tau(family B, risk) = 0.16"
+  },
+  "H4": {
+    "verdict": "not supported",
+    "evidence": "US: tau(B,C) = 0.60 [0.56, 0.64]; KR: tau(B,C) = 0.53 [0.49, 0.53]"
+  },
+  "G4": {
+    "verdict": "FAIL",
+    "evidence": "H4 fails: tau(B,C) >= 0.3 on every other market"
+  },
+  "KILL": {
+    "verdict": "triggered",
+    "evidence": "tau(B,C) >= 0.3 on every market"
+  },
+  "H5": {
+    "verdict": "supported",
+    "evidence": "pair-order flips after one injected bad tick: see the contamination table"
+  },
+  "G2": {
+    "verdict": "FAIL",
+    "evidence": "CG-NSDE v1 boost inside the real episode interval on 0 of 2 episodes"
+  },
+  "H2 (v2, post hoc)": {
+    "verdict": "not supported",
+    "evidence": "Regime Gaussian crisis score 0.54 vs CG-NSDE v2 0.15 \u00b1 0.01; Gaussian HMM crisis score 0.70 vs CG-NSDE v2 0.15 \u00b1 0.01"
+  },
+  "G1 (v2, post hoc)": {
+    "verdict": "PASS",
+    "evidence": "H2 false: Regime Gaussian crisis score 0.54 vs CG-NSDE v2 0.15 \u00b1 0.01; Gaussian HMM crisis score 0.70 vs CG-NSDE v2 0.15 \u00b1 0.01"
+  },
+  "G2 (v2, post hoc)": {
+    "verdict": "FAIL",
+    "evidence": "CG-NSDE v2 boost inside the real episode interval on 0 of 2 episodes"
+  }
 }

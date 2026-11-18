@@ -129,7 +129,7 @@ POST HOC: same gate evaluated for CG-NSDE v2. Market nse, fit 'pre2020'.
   ],
   "H1_seed_date_ci": [
     -0.01818181818181818,
-    0.45454545454545453
+    0.4736363636363628
   ],
   "H1_holds": false
 }

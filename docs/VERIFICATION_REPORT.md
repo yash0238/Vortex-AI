@@ -154,12 +154,35 @@ errors on any page. `app/src/pages/Evidence.tsx` already describes v2 explicitly
 an empty state because v2_ablation is 0/39. Phase 7's "Model page describes v2" item
 is therefore satisfied; only the full multi-page visual review remains a judgment call.
 
+## Verification log - Phase 4 final (queue completed)
+
+The restarted queue finished all critical stages: v2_main 10/10, v2_risk 4/4,
+v2_markets 19/19, v2_ablation 39/39, nse_main 110/110, nse_risk 44/44; only
+markets (161/176) and nse_ext (27/33) have skipped cells left.
+
+Ran the full final pipeline: `analysis` (exit 0) -> `run_risk` (exit 0) ->
+`analysis` (exit 0) -> `export_web` (exit 0) -> `paper_build` (exit 0).
+`paper_build` now emits 265 macros, 8 figures, 11 tables and a 0.24 MB Overleaf
+zip; no ablation artifacts are skipped any more. `T2_ablation_nse_full.csv`
+contains all 13 v2 variants. All RESULT-DEPENDENT / NEED-MACRO markers in
+main.tex are resolved (count = 0).
+
+Found and fixed another real defect during `run_risk`: its first run crashed with
+`ValueError: ES must be strictly positive`. Diagnosis with a throwaway script showed
+the TimeVAE generator collapsed — every one of its five risk pools holds ~20,000
+identical returns (std ~1e-7), so the empirical ES of the worst tail is negative.
+Rather than clip ES into positivity (which would fabricate a forecast), `run_risk`
+now excludes such degenerate generators from the backtest and discloses the
+exclusion in `results/06_risk/excluded_generators.json` and in the GATE_G3 body.
+After the fix: G3 PASS with tau_C = 0.67 [0.45, 0.82] over 11 generators.
+
 ## Recommended next actions (in order)
 
-1. Run the experiment queue to completion (`crisisbench.queue --stage all --workers 5`);
-   this gates ablations, markets, nse_ext and the risk pools.
-2. User: run `cloud/vortex_fullscale.ipynb` on a Kaggle/Colab GPU, return
-   `fullscale_results.zip`, unzip at project root.
-3. Re-run analysis -> run_risk -> analysis -> export_web -> paper_build.
-4. Resolve all RESULT-DEPENDENT / NEED-MACRO markers from final numbers.
-5. Browser-verify every dashboard page; add T6_multiseed.md and all-seed gate rules.
+1. User: run `cloud/vortex_fullscale.ipynb` on a Kaggle/Colab GPU, return
+   `fullscale_results.zip` and unzip at the project root. This is the only
+   remaining external dependency (full-scale GPU neural baselines).
+2. If any `markets` / `nse_ext` cells are finite (not skipped), finish those
+   stages and re-run analysis -> run_risk -> analysis -> export_web -> paper_build.
+3. Browser-verify the regenerated dashboard data (export_web rewrote core.json).
+4. Fix or formally retire the collapsed TimeVAE generator so it can rejoin the
+   backtest; until then its exclusion is disclosed in the G3 gate body.

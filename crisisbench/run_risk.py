@@ -25,7 +25,8 @@ import pandas as pd
 
 from . import protocol as P
 from . import risk as R
-from .analysis import MAIN, PRETTY, RESULTS, TABLES, FAMILIES, ALL_METRICS, kendall, load_meta, load_runs, write_gate
+from .analysis import (ALL_METRICS, FAMILIES, MAIN, PRETTY, RESULTS, TABLES,
+                       _kendall_batch, kendall, load_meta, load_runs, write_gate)
 from .bench import ARTIFACTS
 from .data import load_panel
 
@@ -56,6 +57,7 @@ def main() -> None:
          "dirichlet_seed7": np.random.default_rng(7).dirichlet(np.ones(panel.n_assets))}
     info = load_meta()
     rows, daily, series = [], {}, None
+    degenerate: dict[str, dict] = {}
     for pf, wt in w.items():
         r_all = panel.returns @ wt
         r = r_all[idx]
@@ -83,8 +85,18 @@ def main() -> None:
                 for i, j in enumerate(np.where(m)[0]):
                     NB[j] = nb[i]
                 used.append(fit)
-            if ok:
+            if ok and np.isfinite(E).all() and (E > 0).all():
                 fc[g] = (V, E, np.array(NB), PRETTY[g], "generator", info.get(g, {}).get("family_tag", ""))
+            elif ok:
+                # A collapsed generator can emit a pool whose worst returns are all
+                # positive, making ES <= 0.  That is not a valid VaR/ES forecast, so
+                # exclude it from the backtest and disclose the exclusion instead of
+                # silently clipping ES into positivity.
+                reason = ("non-positive or non-finite ES from the risk pool "
+                          "(degenerate generator output)")
+                degenerate[g] = dict(reason=reason, min_es=float(np.nanmin(E)),
+                                     fits=sorted(set(used)))
+                print(f"[run_risk] excluding {g} from backtest: {reason}; min ES = {np.nanmin(E):.6g}")
         for name, (V, E, NB, label, kind, fam) in fc.items():
             for k, lv in enumerate(levels):
                 a = 1 - lv
@@ -108,6 +120,9 @@ def main() -> None:
     t4.to_csv(TABLES / "T4_risk.csv", index=False)
     (TABLES / "T4_risk.md").write_text(t4.to_markdown(index=False, floatfmt=".4g"), encoding="utf-8")
     (OUT / "series.json").write_text(json.dumps(series), encoding="utf-8")
+    if degenerate:
+        (OUT / "excluded_generators.json").write_text(json.dumps(degenerate, indent=2), encoding="utf-8")
+        print(f"[run_risk] disclosed {len(degenerate)} excluded generator(s): {sorted(degenerate)}")
 
     # ------------------------------------------------ T5 metric validity
     gens = [g for g in MAIN if g in daily]
@@ -126,13 +141,15 @@ def main() -> None:
         if any(g not in seedval[k] for g in gens):
             continue
         point = kendall([seedval[k][g].mean() for g in gens], L.mean(0))
-        reps = []
-        for _ in range(2000):
+        MS = np.empty((2000, len(gens)), dtype=float)
+        LM = np.empty((2000, len(gens)), dtype=float)
+        for b_idx in range(2000):
             st = rng.integers(0, len(L), nb)
             ii = ((st[:, None] + np.arange(20)[None, :]) % len(L)).ravel()[:len(L)]
-            ms = [seedval[k][g][rng.integers(0, len(seedval[k][g]), len(seedval[k][g]))].mean() for g in gens]
-            reps.append(kendall(ms, L[ii].mean(0)))
-        reps = np.array(reps)[np.isfinite(reps)]
+            MS[b_idx] = [seedval[k][g][rng.integers(0, len(seedval[k][g]), len(seedval[k][g]))].mean() for g in gens]
+            LM[b_idx] = L[ii].mean(0)
+        reps = _kendall_batch(MS, LM)
+        reps = reps[np.isfinite(reps)]
         fam = k.startswith("family_")
         out.append(dict(key=k, label=("Family " + k[-1] + " score") if fam else k, kind="family" if fam else "metric",
                         tau=point, lo=float(np.quantile(reps, 0.025)), hi=float(np.quantile(reps, 0.975)),
@@ -145,6 +162,7 @@ def main() -> None:
     fz0_means = {g: float(m) for g, m in zip(gens, L.mean(0))}
     body = dict(tau_C=float(c.tau), ci_C=[float(c.lo), float(c.hi)], tau_B=float(b.tau), ci_B=[float(b.lo), float(b.hi)],
                 rank_basis=f"mean FZ0, level {RANK_LEVEL}, {RANK_PF}", generators=gens, H3_holds=h3,
+                excluded_generators=degenerate,
                 fz0_mean=fz0_means,
                 fz0_rank={g: int(x) for g, x in zip(gens, pd.Series(L.mean(0)).rank(method="min"))})
     write_gate("GATE_G3", "PASS" if h3 else "FAIL", body,

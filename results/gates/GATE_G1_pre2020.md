@@ -12,7 +12,7 @@ Evaluated on market nse, fit 'pre2020', 12 generators.
 | Static t-PPCA | 1.076 ± 0.014 | [1.067, 1.088] | 5 |
 | Regime Gaussian | 0.986 ± 0.008 | [0.981, 0.992] | 5 |
 | Gaussian HMM | 1.004 ± 0.019 | [0.989, 1.018] | 5 |
-| CG-NSDE v1 (preregistered) | 1.214 ± 0.029 | [1.191, 1.237] | 5 |
+| CG-NSDE v1 (preregistered) | 1.215 ± 0.029 | [1.192, 1.237] | 5 |
 
 **Multi-seed gate consistency:** 0/5 seeds pass (proportion = 0.00, 95% Clopper-Pearson binomial CI [0.000, 0.522], all seeds pass = `False`).
 
@@ -25,18 +25,18 @@ Evaluated on market nse, fit 'pre2020', 12 generators.
       "score_C": 0.986370079724135,
       "score_C_sd": 0.008042855985992185,
       "score_C_formatted": "0.986 \u00b1 0.008",
-      "cgnsde": 1.214266999648333,
-      "cgnsde_sd": 0.029135813974466428,
-      "cgnsde_formatted": "1.214 \u00b1 0.029",
+      "cgnsde": 1.2147302762450614,
+      "cgnsde_sd": 0.028697250422742984,
+      "cgnsde_formatted": "1.215 \u00b1 0.029",
       "matches": true
     },
     "hmm_gaussian": {
       "score_C": 1.0041107721591644,
       "score_C_sd": 0.01943286548973483,
       "score_C_formatted": "1.004 \u00b1 0.019",
-      "cgnsde": 1.214266999648333,
-      "cgnsde_sd": 0.029135813974466428,
-      "cgnsde_formatted": "1.214 \u00b1 0.029",
+      "cgnsde": 1.2147302762450614,
+      "cgnsde_sd": 0.028697250422742984,
+      "cgnsde_formatted": "1.215 \u00b1 0.029",
       "matches": true
     }
   },
@@ -87,11 +87,11 @@ Evaluated on market nse, fit 'pre2020', 12 generators.
     },
     "cgnsde": {
       "name": "CG-NSDE v1 (preregistered)",
-      "mean": 1.214266999648333,
-      "sd": 0.029135813974466428,
-      "formatted": "1.214 \u00b1 0.029",
+      "mean": 1.2147302762450614,
+      "sd": 0.028697250422742984,
+      "formatted": "1.215 \u00b1 0.029",
       "ci_95": [
-        1.1914091889003173,
+        1.1923357420937737,
         1.2371248103963488
       ],
       "seeds": 5
@@ -129,7 +129,7 @@ Evaluated on market nse, fit 'pre2020', 12 generators.
   ],
   "H1_seed_date_ci": [
     -0.01818181818181818,
-    0.45454545454545453
+    0.4736363636363628
   ],
   "H1_holds": false
 }

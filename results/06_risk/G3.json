@@ -1,13 +1,13 @@
 {
-  "tau_C": 0.7999999999999999,
+  "tau_C": 0.6727272727272727,
   "ci_C": [
-    0.6,
-    0.9999999999999999
+    0.45363636363636367,
+    0.8181818181818182
   ],
-  "tau_B": -0.19999999999999998,
+  "tau_B": 0.16363636363636364,
   "ci_B": [
-    -0.6,
-    0.19999999999999998
+    -0.16363636363636364,
+    0.38181818181818183
   ],
   "rank_basis": "mean FZ0, level 0.975, equal_weight",
   "generators": [
@@ -15,21 +15,52 @@
     "t_ppca",
     "stationary_bootstrap",
     "garch_fhs",
-    "regime_gaussian"
+    "dcc_garch",
+    "regime_gaussian",
+    "hmm_gaussian",
+    "quantgan",
+    "timegan",
+    "cgnsde",
+    "cgnsde2"
   ],
   "H3_holds": true,
+  "excluded_generators": {
+    "timevae": {
+      "reason": "non-positive or non-finite ES from the risk pool (degenerate generator output)",
+      "min_es": -0.0008846026030369103,
+      "fits": [
+        "pre2020",
+        "upto2020",
+        "upto2021",
+        "upto2022",
+        "upto2023"
+      ]
+    }
+  },
   "fz0_mean": {
     "iid_gaussian": -2.853875081948891,
     "t_ppca": -2.9313788615296574,
     "stationary_bootstrap": -3.111843661405884,
     "garch_fhs": -3.166610319526153,
-    "regime_gaussian": -3.051545334470434
+    "dcc_garch": -3.1955906615768117,
+    "regime_gaussian": -3.051545334470434,
+    "hmm_gaussian": -3.0552675472065625,
+    "quantgan": -2.855328204951261,
+    "timegan": -2.9977946769323736,
+    "cgnsde": -3.0509589749630712,
+    "cgnsde2": -3.3149949343644205
   },
   "fz0_rank": {
-    "iid_gaussian": 5,
-    "t_ppca": 4,
-    "stationary_bootstrap": 2,
-    "garch_fhs": 1,
-    "regime_gaussian": 3
+    "iid_gaussian": 11,
+    "t_ppca": 9,
+    "stationary_bootstrap": 4,
+    "garch_fhs": 3,
+    "dcc_garch": 2,
+    "regime_gaussian": 6,
+    "hmm_gaussian": 5,
+    "quantgan": 10,
+    "timegan": 8,
+    "cgnsde": 7,
+    "cgnsde2": 1
   }
 }
