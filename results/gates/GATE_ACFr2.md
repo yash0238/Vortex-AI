@@ -3,6 +3,6 @@
 | Metric | Value |
 |--------|-------|
 | Real ACF(r²) | 0.0316 |
-| Generated ACF(r²) | 0.8863 |
+| Generated ACF(r²) | 0.8857 |
 | Tolerance | 0.0200 |
 | **Pass** | **False** |

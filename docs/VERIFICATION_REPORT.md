@@ -176,6 +176,19 @@ now excludes such degenerate generators from the backtest and discloses the
 exclusion in `results/06_risk/excluded_generators.json` and in the GATE_G3 body.
 After the fix: G3 PASS with tau_C = 0.67 [0.45, 0.82] over 11 generators.
 
+## Verification log - queue shell finished
+
+The background queue shell completed with `finished: 149 ok, 5 failed`. All five
+failures were `nse/hmm_gaussian` risk refits caused by a missing `hmmlearn` package
+(declared at `requirements.txt:10` but absent from the venv, same pattern as `arch`).
+Installed `hmmlearn 0.3.3` and re-ran the queue: `finished: 18 ok, 0 failed`.
+The remaining markets 164/176 and nse_ext 27/33 gaps are protocol-deviation skips
+from `results/skip_gens.txt`, not failures.
+
+Re-ran the full pipeline again after these jobs landed: analysis -> run_risk ->
+analysis -> export_web -> paper_build, all exit 0. G3 remains PASS (tau_C = 0.67),
+paper_build still emits 265 macros / 8 figures / 11 tables, marker count still 0.
+
 ## Recommended next actions (in order)
 
 1. User: run `cloud/vortex_fullscale.ipynb` on a Kaggle/Colab GPU, return

@@ -1,0 +1,12 @@
+{
+  "H1": "Kendall tau between the family-B ranking and the family-C ranking of generators is below 0.3.",
+  "H2": "At least one non-neural regime model (regime-conditional Gaussian or HMM) has a family-C score within one seed standard deviation of CG-NSDE (or better).",
+  "H3": "Kendall tau between family-C rank and VaR/ES backtest rank exceeds 0.5 and exceeds the tau of family B, with non-overlapping bootstrap intervals.",
+  "H4": "The sign of (tau_B_vs_C < 0.3) replicates on at least one of the other two markets.",
+  "H5": "Injecting a single bad tick flips the order of at least one generator pair on at least one metric.",
+  "G1": "PASS if every regime-aware generator beats every static generator on the family-C score AND no regime-conditional Gaussian/HMM matches CG-NSDE (H2 false).",
+  "G2": "PASS if CG-NSDE's held-out boost_pct lies inside the real 95% interval on at least 2 of 3 episodes.",
+  "G3": "PASS if H3 holds.",
+  "G4": "PASS if H4 holds.",
+  "KILL": "If static generators also rank well on family C across seeds (H1 fails on every market), drop the benchmark framing."
+}
