@@ -2,6 +2,6 @@
 
 | Metric | Value |
 |--------|-------|
-| Predictive R² | -0.0150 |
-| Predictive MSE | 0.329552 |
+| Predictive R² | -0.0106 |
+| Predictive MSE | 0.328143 |
 | **Pass** | **True** |

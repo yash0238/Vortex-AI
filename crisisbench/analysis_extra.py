@@ -346,21 +346,33 @@ def hypotheses(summary: dict, g2: dict | None, h5: bool | None, g2v2: dict | Non
         H["H2"] = dict(verdict="supported" if g1["H2_simple_regime_model_matches_cgnsde"] else "not supported",
                        evidence="; ".join(f"{pretty(k)} crisis score {v['score_C']:.2f} vs CG-NSDE "
                                           f"{v['cgnsde']:.2f} ± {v['cgnsde_sd']:.2f}" for k, v in g1["H2_detail"].items()))
-        H["G1"] = dict(verdict=g1["verdict"])
+        H["G1"] = dict(verdict=g1["verdict"], evidence=(
+            ("H2 true: " if g1["H2_simple_regime_model_matches_cgnsde"] else "H2 false: ")
+            + "; ".join(f"{pretty(k)} crisis score {v['score_C']:.2f} vs CG-NSDE "
+                        f"{v['cgnsde']:.2f} ± {v['cgnsde_sd']:.2f}"
+                        for k, v in g1["H2_detail"].items())))
     p = RESULTS / "06_risk" / "G3.json"
     if p.exists():
         b = json.loads(p.read_text())
         H["H3"] = dict(verdict="supported" if b["H3_holds"] else "not supported",
                        evidence=f"tau(crisis family, backtest rank) = {b['tau_C']:.2f} [{b['ci_C'][0]:.2f}, {b['ci_C'][1]:.2f}]; "
                                 f"tau(correlation family, backtest rank) = {b['tau_B']:.2f} [{b['ci_B'][0]:.2f}, {b['ci_B'][1]:.2f}]")
-        H["G3"] = dict(verdict="PASS" if b["H3_holds"] else "FAIL")
+        H["G3"] = dict(verdict="PASS" if b["H3_holds"] else "FAIL",
+                       evidence=f"H3 {'holds' if b['H3_holds'] else 'does not hold'}: "
+                                f"tau(family C, risk) = {b['tau_C']:.2f}, "
+                                f"tau(family B, risk) = {b['tau_B']:.2f}")
     other = {m: tau(m, "full") for m in ("us", "kr") if tau(m, "full")}
     if other and t_full:
         ok = any(t["tau"] < 0.3 for t in other.values())
         H["H4"] = dict(verdict="supported" if ok else "not supported",
                        evidence="; ".join(f"{m.upper()}: tau(B,C) = {show(t)}" for m, t in other.items()))
-        H["G4"] = dict(verdict="PASS" if ok else "FAIL")
-        H["KILL"] = dict(verdict="triggered" if all(t["tau"] >= 0.3 for t in [t_full, *other.values()]) else "not triggered")
+        low = [m.upper() for m, t in other.items() if t["tau"] < 0.3]
+        H["G4"] = dict(verdict="PASS" if ok else "FAIL",
+                       evidence=(f"H4 holds: tau(B,C) < 0.3 on {', '.join(low)}" if ok else
+                                 "H4 fails: tau(B,C) >= 0.3 on every other market"))
+        H["KILL"] = dict(verdict="triggered" if all(t["tau"] >= 0.3 for t in [t_full, *other.values()]) else "not triggered",
+                         evidence=(f"tau(B,C) < 0.3 on {', '.join(low)}" if low else
+                                   "tau(B,C) >= 0.3 on every market"))
     if h5 is not None:
         H["H5"] = dict(verdict="supported" if h5 else "not supported",
                        evidence="pair-order flips after one injected bad tick: see the contamination table")
@@ -375,7 +387,11 @@ def hypotheses(summary: dict, g2: dict | None, h5: bool | None, g2v2: dict | Non
             verdict="supported" if g1v2["H2_simple_regime_model_matches_cgnsde"] else "not supported",
             evidence="; ".join(f"{pretty(k)} crisis score {v['score_C']:.2f} vs CG-NSDE v2 "
                                f"{v['cgnsde']:.2f} ± {v['cgnsde_sd']:.2f}" for k, v in g1v2["H2_detail"].items()))
-        H["G1 (v2, post hoc)"] = dict(verdict=g1v2["verdict"])
+        H["G1 (v2, post hoc)"] = dict(verdict=g1v2["verdict"], evidence=(
+            ("H2 false: " if not g1v2["H2_simple_regime_model_matches_cgnsde"] else "H2 true: ")
+            + "; ".join(f"{pretty(k)} crisis score {v['score_C']:.2f} vs CG-NSDE v2 "
+                        f"{v['cgnsde']:.2f} ± {v['cgnsde_sd']:.2f}"
+                        for k, v in g1v2["H2_detail"].items())))
     if g2v2:
         n = sum(g2v2.values())
         H["G2 (v2, post hoc)"] = dict(verdict="PASS" if n >= 2 else "FAIL",

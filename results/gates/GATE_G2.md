@@ -46,7 +46,7 @@ CG-NSDE v1 (fit on data to 2019) boost_pct against each held-out episode's real 
       "n_real_crisis": 72,
       "real_boost_pct": 101.05984949639328,
       "real_ci_95": [
-        65.11156459949652,
+        65.11156459949648,
         140.11759763301075
       ],
       "gen_mean": 2.884714432790325,
@@ -69,10 +69,10 @@ CG-NSDE v1 (fit on data to 2019) boost_pct against each held-out episode's real 
       "episode_label": "2022 rate and war shock",
       "inside": false,
       "n_real_crisis": 23,
-      "real_boost_pct": 49.41569803935381,
+      "real_boost_pct": 49.41569803935384,
       "real_ci_95": [
         31.439158788363287,
-        71.6744546144538
+        71.67445461445381
       ],
       "gen_mean": 2.884714432790325,
       "gen_sd": 0.9113376366384384,

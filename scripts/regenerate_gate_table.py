@@ -356,19 +356,21 @@ def regenerate_from_checkpoint(ckpt_path: str) -> dict:
         md_content = format_gate_result(result, gate_name)
         (output_dir / f"GATE_{gate_name.replace(' ', '_').replace('²', '2').replace('(', '').replace(')', '').replace('/', '_')}.md").write_text(md_content, encoding="utf-8")
     
-    # Also write hypotheses.json
+    # Also write the legacy six-gate hypotheses and tables. These are NOT the CrisisBench
+    # artefacts: crisisbench.analysis owns results/tables/hypotheses.json, T1_nse_full.md and
+    # T3_heldout.md, so the legacy files use a _legacy suffix and never overwrite them.
     hypotheses = compute_hypotheses(results)
     tables_dir = Path("results/tables")
     tables_dir.mkdir(parents=True, exist_ok=True)
-    (tables_dir / "hypotheses.json").write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
-    
-    # Write T1_nse_full.md (statistical fidelity table)
+    (tables_dir / "hypotheses_legacy.json").write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
+
+    # Write T1_nse_full_legacy.md (statistical fidelity table)
     t1_content = format_t1_table(results)
-    (tables_dir / "T1_nse_full.md").write_text(t1_content, encoding="utf-8")
-    
-    # Write T3_heldout.md (held-out episodes table) - placeholder for now
+    (tables_dir / "T1_nse_full_legacy.md").write_text(t1_content, encoding="utf-8")
+
+    # Write T3_heldout_legacy.md (held-out episodes table) - placeholder for now
     t3_content = format_t3_table(results)
-    (tables_dir / "T3_heldout.md").write_text(t3_content, encoding="utf-8")
+    (tables_dir / "T3_heldout_legacy.md").write_text(t3_content, encoding="utf-8")
     
     print(f"Regenerated gates from {ckpt_path}")
     return gate_results

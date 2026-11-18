@@ -105,11 +105,11 @@ POST HOC: same gate evaluated for CG-NSDE v2. Market nse, fit 'full'.
     "all_seeds_pass": true,
     "pass_proportion": 1.0,
     "binomial_ci_95": [
-      0.47817624989501856,
+      0.4781762498950186,
       1.0
     ],
     "binomial_ci": [
-      0.47817624989501856,
+      0.4781762498950186,
       1.0
     ],
     "per_seed_pass": {

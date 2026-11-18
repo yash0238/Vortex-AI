@@ -1,13 +1,13 @@
 {
-  "tau_C": 0.6727272727272727,
+  "tau_C": 0.6410256410256409,
   "ci_C": [
-    0.45363636363636367,
-    0.8181818181818182
+    0.46153846153846156,
+    0.7692307692307693
   ],
-  "tau_B": 0.16363636363636364,
+  "tau_B": 0.17948717948717946,
   "ci_B": [
-    -0.16363636363636364,
-    0.38181818181818183
+    -0.02564102564102564,
+    0.46153846153846156
   ],
   "rank_basis": "mean FZ0, level 0.975, equal_weight",
   "generators": [
@@ -20,14 +20,16 @@
     "hmm_gaussian",
     "quantgan",
     "timegan",
+    "quantgan_fs",
+    "diffusion_fs",
     "cgnsde",
     "cgnsde2"
   ],
-  "H3_holds": true,
+  "H3_holds": false,
   "excluded_generators": {
     "timevae": {
       "reason": "non-positive or non-finite ES from the risk pool (degenerate generator output)",
-      "min_es": -0.0008846026030369103,
+      "min_es": -0.0008845730160828679,
       "fits": [
         "pre2020",
         "upto2020",
@@ -42,25 +44,29 @@
     "t_ppca": -2.9313788615296574,
     "stationary_bootstrap": -3.111843661405884,
     "garch_fhs": -3.166610319526153,
-    "dcc_garch": -3.1955906615768117,
+    "dcc_garch": -3.1955756281093533,
     "regime_gaussian": -3.051545334470434,
     "hmm_gaussian": -3.0552675472065625,
-    "quantgan": -2.855328204951261,
-    "timegan": -2.9977946769323736,
-    "cgnsde": -3.0509589749630712,
-    "cgnsde2": -3.3149949343644205
+    "quantgan": -2.7013574317411897,
+    "timegan": -3.0485426827281095,
+    "quantgan_fs": -3.3572222477644895,
+    "diffusion_fs": 2.556329415024642,
+    "cgnsde": -3.0667297660435007,
+    "cgnsde2": -3.3070850743714892
   },
   "fz0_rank": {
     "iid_gaussian": 11,
-    "t_ppca": 9,
-    "stationary_bootstrap": 4,
-    "garch_fhs": 3,
-    "dcc_garch": 2,
-    "regime_gaussian": 6,
-    "hmm_gaussian": 5,
-    "quantgan": 10,
-    "timegan": 8,
-    "cgnsde": 7,
-    "cgnsde2": 1
+    "t_ppca": 10,
+    "stationary_bootstrap": 5,
+    "garch_fhs": 4,
+    "dcc_garch": 3,
+    "regime_gaussian": 8,
+    "hmm_gaussian": 7,
+    "quantgan": 12,
+    "timegan": 9,
+    "quantgan_fs": 1,
+    "diffusion_fs": 13,
+    "cgnsde": 6,
+    "cgnsde2": 2
   }
 }

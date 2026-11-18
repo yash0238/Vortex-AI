@@ -4,7 +4,7 @@ Model & Corr. err. & Boost \% & CVaR ratio & Tail co-ex. & Kurt. & ACF$(r^2)$ & 
 \midrule
 Real (95\% band) & $\le$2.59 & 29.3 [7.9, 56.6] & 2.20 [1.27, 3.36] & 0.206 [0.156, 0.258] & 6.08 [3.10, 8.04] & 0.142 [0.092, 0.175] & 0.58 [0.50, 0.64] & -- & -- & -- & -- \\
 \midrule
-i.i.d. Gaussian & \textbf{0.14} & 2.8 & 1.15 & 0.132 & -0.00 & 0.000 & 1.00 & 1.59 & 0.04 & 1.03 & 3.83 \\
+i.i.d. Gaussian & \textbf{0.14} & 2.8 & 1.15 & 0.132 & 0.00 & 0.000 & 1.00 & 1.59 & 0.04 & 1.03 & 3.83 \\
 Static t-PPCA & \textbf{1.62} & 2.2 & 1.27 & \textbf{0.177} & 1.04 & 0.000 & 0.95 & 1.51 & 0.44 & 0.90 & 3.57 \\
 Stationary bootstrap & \textbf{0.20} & \textbf{21.4} & \textbf{2.19} & \textbf{0.207} & \textbf{6.24} & \textbf{0.136} & \textbf{0.41} & \underline{0.11} & 0.06 & 0.18 & \underline{0.00} \\
 GARCH-t FHS & \textbf{2.09} & \textbf{16.9} & \textbf{1.63} & \textbf{0.177} & \textbf{6.96} & \textbf{0.121} & 0.75 & 0.30 & 0.82 & 0.54 & 1.49 \\
@@ -14,6 +14,8 @@ Gaussian HMM & \textbf{0.16} & 4.8 & \textbf{1.33} & \textbf{0.194} & 0.89 & 0.0
 TimeVAE & 12.50 & n/p & n/p & 0.073 & -0.93 & 0.007 & 1.00 & 3.44 & 4.50 & 7.56 & 6.64 \\
 QuantGAN & 5.00 & 3.3 & \textbf{1.31} & 0.126 & \textbf{5.39} & 0.002 & 0.86 & 1.37 & 1.38 & 1.09 & 6.20 \\
 TimeGAN & 33.22 & n/p & n/p & 0.836 & -0.30 & 0.314 & 1.00 & 3.34 & 10.00 & 8.79 & 6.64 \\
+QuantGAN (full-scale) & \textbf{2.66} & \textbf{28.3} & \textbf{2.57} & \textbf{0.181} & 269.00 & 0.021 & 0.80 & 3.65 & 0.85 & 0.56 & 2.90 \\
+Diffusion (full-scale) & 9.26 & n/p & n/p & 0.117 & 1.35 & 0.012 & 0.99 & 3.79 & 3.75 & 8.62 & 6.76 \\
 CG-NSDE v1 (preregistered) & \textbf{2.15} & 3.9 & \textbf{1.29} & \textbf{0.199} & 1.53 & 0.010 & 0.93 & 1.71 & 0.79 & 1.22 & 5.98 \\
 CG-NSDE v2 (ours, post hoc) & \textbf{1.04} & \textbf{29.1} & \textbf{1.85} & \textbf{0.212} & \textbf{4.46} & 0.075 & \textbf{0.55} & 0.73 & 0.31 & \underline{0.15} & 0.15 \\
 \bottomrule

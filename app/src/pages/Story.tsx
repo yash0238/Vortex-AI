@@ -181,7 +181,7 @@ export function Honest() {
       <Card title="Decision gates (Preregistered protocol)">
         <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Gate</th><th style={{ textAlign: "left" }}>Rule</th><th>Verdict</th><th style={{ textAlign: "left" }}>Evidence / Context</th></tr></thead><tbody>
           {Object.entries(P.GATES as Record<string, string>).map(([k, s]) => {
-            const ev = hyp?.[k]?.evidence ?? (k === "G1" ? "CG-NSDE v1 failed: beaten by simple regime baselines (Regime Gaussian 0.54 vs v1 1.22 ± 0.28)" : k === "G3" ? "Passed via H3: tau(crisis, backtest rank) = 0.80 > 0.50" : k === "G4" ? "Passed via Korea: H4 partially replicates on KR (tau=0.29 < 0.3), while US fails H1 (tau=0.60 > 0.3)" : k === "KILL" ? "Not triggered: H1 failed on NSE, but KILL triggers only if H1 fails on every market (nse/full static score_C: iid_gaussian 1.03, t_ppca 0.90; pre2020: 1.14, 1.08)." : "–");
+            const ev = hyp?.[k]?.evidence ?? (k === "G1" ? "CG-NSDE v1 failed: beaten by simple regime baselines (Regime Gaussian 0.54 vs v1 1.22 ± 0.28)" : k === "G3" ? "Failed: tau(family C, risk) = 0.64 [0.46, 0.77] touches tau(family B, risk) = 0.18 [-0.03, 0.46] at 0.46; CIs must not overlap" : k === "G4" ? "Failed in-sample: tau(B,C) >= 0.3 on US (0.60) and KR (0.49); held-out pre-2020 decouples (< 0.3)" : k === "KILL" ? "Triggered in-sample: tau(B,C) >= 0.3 on all 3 markets (NSE: 0.45, US: 0.60, KR: 0.49)" : "–");
             return (<tr key={k}><td><b>{k}</b></td><td style={{ textAlign: "left", whiteSpace: "normal" }}>{s}</td><td><Verdict v={hyp?.[k]?.verdict} /></td><td style={{ textAlign: "left", whiteSpace: "normal", minWidth: 260 }}>{ev}</td></tr>);
           })}
         </tbody></table></div>
@@ -214,11 +214,11 @@ export function Honest() {
             <p style={{ fontSize: 13, color: "var(--ink-2)" }}>Tests whether pre-2020 training predicts unseen crashes like COVID-2020. Every generator failed. The real COVID-2020 correlation boost (+101.1% [65.11%, 140.1%]) was roughly double the overall 2020-24 held-out boost (53.1%) and ~3.5x the 2010-2024 full-sample boost (29.3%), whereas v2 reached only +22.15% and v1 +2.91%. Synthetic models severely underestimate black swans absent from training data.</p>
           </div>
           <div>
-            <h4 style={{ fontSize: 14, color: "var(--s-ours)" }}>G3 &amp; H3 (Downstream Risk) · PASS (τ = 0.80)</h4>
-            <p style={{ fontSize: 13, color: "var(--ink-2)" }}>Validates CrisisBench against bank risk desks. Models scoring well on Family C produce significantly better VaR and Expected Shortfall limits (τ = 0.80), whereas standard correlation fidelity (Family B) anti-correlates (τ = -0.20) with risk desk utility!</p>
+            <h4 style={{ fontSize: 14, color: "var(--crisis)" }}>G3 &amp; H3 (Downstream Risk) · FAIL / Not Supported (CI Overlap)</h4>
+            <p style={{ fontSize: 13, color: "var(--ink-2)" }}>Validates CrisisBench against bank risk desks across all 13 valid generators. While Family C correlates substantially higher with FZ0 joint loss (&tau; = 0.64 [0.46, 0.77]) than Family B (&tau; = 0.18 [-0.03, 0.46]), their 95% bootstrap confidence intervals touch at 0.46. Under our strict preregistered non-overlapping CI requirement (c.lo &gt; b.hi), H3 is not supported and Gate G3 fails. On 99% FZ0 loss, QuantGAN (full-scale) ranks #1 (-2.984) and CG-NSDE v2 ranks #2 (-2.863).</p>
             
-            <h4 style={{ fontSize: 14, color: "var(--s-regime)", marginTop: 12 }}>G4 (Replication) · PASS via Korea (H4 Partial)</h4>
-            <p style={{ fontSize: 13, color: "var(--ink-2)" }}>H4 tests whether crisis co-movement decouples from correlation error across markets (&tau; &lt; 0.30). US S&amp;P 500 fails H1 (&tau; = 0.60 &gt; 0.30), whereas Korea KOSPI passes (&tau; = 0.29 &lt; 0.30). Gate G4 requires replication on at least one additional market, so G4 passes solely via Korea (partial replication), rather than universal market decoupling.</p>
+            <h4 style={{ fontSize: 14, color: "var(--s-regime)", marginTop: 12 }}>G4 &amp; H4 (Replication) · In-Sample FAIL, Held-Out Replicates</h4>
+            <p style={{ fontSize: 13, color: "var(--ink-2)" }}>H4 tests whether crisis co-movement decouples from correlation error across markets (&tau; &lt; 0.30). With all 11 models evaluated, in-sample full-fit yields &tau; = 0.60 on US and &tau; = 0.49 on Korea, failing H4/G4 and triggering KILL in-sample. However, on held-out pre-2020 data, correlation decouples cleanly on both US (&tau; = 0.17 [0.00, 0.28]) and Korea (&tau; = 0.00 [-0.11, 0.39]), showing that crisis dynamics decouple under unseen stress regimes.</p>
           </div>
           <div>
             <h4 style={{ fontSize: 14, color: "var(--ink)" }}>H1 (&quot;Correlation Is Not Crisis&quot; / &tau; &lt; 0.3) · Not Supported on NSE</h4>
@@ -246,7 +246,7 @@ export function Honest() {
             <li><b>The smoothing cheat.</b> An early neural-SDE version scored well on reconstruction by outputting smooth, predictable paths (day-to-day autocorrelation 0.99 against about 0 in real data).</li>
             <li><b>One bad tick.</b> A single wrong price (a 76% one-day "fall") inflated measured fat-tailedness by two orders of magnitude and invalidated early baseline numbers. Cleaning rules are now explicit and logged.</li>
             <li><b>Labels handed to the model.</b> Earlier evaluations labelled a generated window as "crisis" because a real crisis window was used to condition it. The reported crisis boost was therefore partly built in. Labels now come only from the generated returns.</li>
-            <li><b>A name that outran the code.</b> The contrastive and graph losses were switched off in the previously reported model. They are active in the v2 code, with all 39 ablation configurations pending training execution.</li>
+            <li><b>A name that outran the code.</b> The contrastive and graph losses were switched off in the previously reported model. They are active in v2, and the full 39-run ablation study (13 variants &times; seeds) is now complete on the Model page, quantifying each component's contribution.</li>
             <li><b>Lost artefacts.</b> The earlier cleaned dataset and trained checkpoints were not preserved, so every number here was regenerated from scratch under one protocol.</li>
             <li><b>Post hoc redesign.</b> CG-NSDE v2 was designed after v1 failed, using 2010–2019 development data only, so its results are post hoc and sit in a separate table above — not in the preregistered claims. Its gates are mixed: <b>G1 v2 PASS</b> (in-sample and held-out), <b>G2 v2 FAIL</b> (still misses extreme held-out crash episodes).</li>
           </ul>

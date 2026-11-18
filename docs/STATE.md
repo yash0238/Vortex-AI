@@ -449,25 +449,32 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
 - Produced `reports/task-5-report.md` detailing the v17 diagnosis (where raw NLL ~65 nats constituted >99% of loss and drove $\kappa \to 0.16$) and verifying the v18 objective balance.
 - Full automated test suite passes: 47/47 tests clean across `test_sampler_alignment.py`, `test_likelihood_dominance.py`, `test_regressions.py`, and `test_smoke.py`.
 
-### 3. Phase 7B Documentation Completed
-- Created `docs/HONEST_SUMMARY.md`: definitive summary of what can and cannot be claimed, exact gate verdicts with numbers:
+### 3. Phase 7B Documentation Completed & Updated After 4/6 Kaggle Shard Sync
+- Created and updated `docs/HONEST_SUMMARY.md` and `README.md` with exact gate verdicts and numbers after 4 of 6 Kaggle CPU shards completed and `analysis -> run_risk -> analysis -> paper_build` re-ran:
   - G1 (regime-aware ≫ static): v1 FAIL (regime Gaussian 0.54, HMM 0.70 vs v1 1.22 ± 0.28); v2 PASS (0.15 ± 0.01 full, 0.74 ± 0.02 pre2020).
   - G2 (held-out crisis boost): FAIL for both v1 and v2 (0/2 episodes: COVID-2020 real 101.1% vs v2 22.15%, v1 2.91%; shock-2022 real 49.42% vs v2 22.15%, v1 2.91%).
-  - G3 (VaR/ES backtest validates ranking): PASS ($\tau(\text{Family C}, \text{risk}) = 0.80$ > 0.5; $\tau(\text{Family B}, \text{risk}) = -0.20$).
-  - G4 (cross-market replication of $\tau(B,C) < 0.3$ on $\ge 1$ market): PASS via South Korea alone ($\tau(B,C) = 0.29 < 0.3$ [0.21, 0.29]), whereas US ($\tau(B,C) = 0.60 > 0.3$ [0.56, 0.64]) does not satisfy $\tau < 0.3$ (partial replication).
+  - G3 (VaR/ES backtest validates ranking across 11 valid generators, `timevae` excluded/disclosed): PASS ($\tau(\text{Family C}, \text{risk}) = 0.67$ [0.45, 0.82] > 0.5 vs $\tau(\text{Family B}, \text{risk}) = 0.16$ [-0.16, 0.38]); CG-NSDE v2 ranks #1 of 11 on FZ0 (`-3.315` at 97.5%, `-2.893` at 99% equal-weight).
+  - H4 / G4 & KILL: In-sample 11-model `full` (including 3 CPU neural baselines on Korea) gives US $\tau(B,C) = 0.60$ [0.56, 0.64] and KR $\tau(B,C) = 0.49$ [0.45, 0.53], so H4 is not supported, G4 FAILS, and the in-sample KILL condition (`tau >= 0.3` on every market) is triggered; however, held-out `pre2020` $\tau(B,C)$ is $<0.3$ on both US ($0.17$) and Korea ($0.00$), and on the 8-model classical/regime subset KR is $0.29 < 0.3$.
   - H1 ("correlation is not crisis" / decoupling $\tau(B,C) < 0.3$): NOT SUPPORTED on NSE ($\tau(B,C) = 0.45$ in-sample, 0.35 held-out).
-  - KILL condition: NOT TRIGGERED.
   - H5 (contamination robustness): SUPPORTED.
-- Rewrote `README.md` to reflect the benchmark framing (CrisisBench) with CG-NSDE v2 as a post-hoc reference model, exact gate verdicts, and Kaggle cloud workflow.
+  - CG-NSDE v2 Ablations (`T2_ablation_nse_full.csv`): 39/39 complete (13 variants × 3 seeds). Removing FHS innovations (`gauss` $0.33 \pm 0.02$, `param_innov` $0.31 \pm 0.03$), factor vol (`scalar_vol` $0.31 \pm 0.05$), KL scaling (`beta01` $0.28 \pm 0.07$), contrastive loss (`no_supcon` $0.22 \pm 0.05$), leverage (`no_leverage` $0.19 \pm 0.12$), vol dynamics (`no_voldyn` $0.18 \pm 0.03$), or posterior GAT (`no_gat` $0.18 \pm 0.04$, $>3$ full-model SDs worse than full $0.145 \pm 0.010$) hurts $S_C$ by $>1$ full-model SD (`0.010`), while `no_sde` ($0.15 \pm 0.02$), `no_graph_loss` ($0.14 \pm 0.02$), and `K16` ($0.15 \pm 0.03$) are within $\le 1$ full-model SD.
 
 ### 4. Kaggle Cloud Compute Status (`kaggle-runner`)
-- Strict ZERO local training policy enforced.
-- 6 concurrent Kaggle kernel shards actively running on GPU/CPU clusters (`KAGGLE_CONFIG_DIR=c:\Users\myind\Downloads`):
-  - `brxkeaaryan/vortex-crisisbench-gpu-shard-1` (2x T4 GPU): 22 GAN queue runs on CUDA + 28 fullscale jobs (`diffusion_fs`, `quantgan_fs`).
-  - `brxkeaaryan/vortex-ai-fullscale-baselines` (T4 GPU): 42 fullscale jobs (`diffusion_fs`, `quantgan_fs`, `timegan_fs`).
-  - `brxkeaaryan/vortex-crisisbench-cpu-shard-1` (CPU 4 workers): 70 queue jobs.
-  - `brxkeaaryan/vortex-crisisbench-cpu-shard-2` (CPU 4 workers): 18 CG-NSDE v2 jobs (API weights backfill, `v2_main`, `v2_risk`, 12 `v2_markets`).
-  - `brxkeaaryan/vortex-crisisbench-cpu-shard-3` (CPU 4 workers): 20 `v2_ablation` jobs (Part 1).
-  - `brxkeaaryan/vortex-crisisbench-cpu-shard-4` (CPU 4 workers): 19 `v2_ablation` jobs (Part 2).
-- Completed experiments: NSE main (110/110), v2 main (10/10), v2 risk refits (4/4), T4 risk backtest (1,238 test windows), G3 validation ($\tau = 0.80$), sampler alignment A/B tests.
+- Strict ZERO local training policy enforced (`KAGGLE_CONFIG_DIR=c:\Users\myind\Downloads`).
+- **4 of 6 Kaggle CPU Shards COMPLETE & Synced:**
+  - ✅ `brxkeaaryan/vortex-crisisbench-cpu-shard-1` (COMPLETE): 70 queue jobs.
+  - ✅ `brxkeaaryan/vortex-crisisbench-cpu-shard-2` (COMPLETE): 18 CG-NSDE v2 jobs (`full/seed0.pt` & `pre2020/seed0.pt` checkpoints on disk for `api/server.py`, `v2_main` 10/10, `v2_risk` 4/4, `v2_markets` 19/19).
+  - ✅ `brxkeaaryan/vortex-crisisbench-cpu-shard-3` (COMPLETE): 20 `v2_ablation` jobs (Part 1).
+  - ✅ `brxkeaaryan/vortex-crisisbench-cpu-shard-4` (COMPLETE): 19 `v2_ablation` jobs (Part 2 — 39/39 complete).
+- **2 of 6 Kaggle GPU Shards Still In-Flight:**
+  - 🔄 `brxkeaaryan/vortex-crisisbench-gpu-shard-1` (2x T4 GPU, RUNNING): 22 GAN queue runs on CUDA (last 4 `kr/timegan/full` seeds) + 28 fullscale jobs (`diffusion_fs`, `quantgan_fs`).
+  - 🔄 `brxkeaaryan/vortex-ai-fullscale-baselines` (T4 GPU, RUNNING): 42 fullscale jobs (`diffusion_fs`, `quantgan_fs`, `timegan_fs`).
+- Completed stages: `nse_main` (110/110), `v2_main` (10/10), `nse_risk` (44/44), `v2_risk` (4/4), `v2_ablation` (39/39), `v2_markets` (19/19), `nse_ext` (27/33, 6 skipped, 0 remaining), `contamination` (63/63), `sim` (18/18), T4/T5 11-generator VaR/ES backtest, sampler alignment A/B tests, likelihood dominance verification.
+
+### Update 2026-11-18 (later): `gpu-shard-1` Complete (100% Queue + `quantgan_fs`/`diffusion_fs`), G3 Flipped to FAIL
+- ✅ `brxkeaaryan/vortex-crisisbench-gpu-shard-1` COMPLETE & synced (`532/532` valid `metrics.json`, **0 remaining non-skipped queue jobs across all 10 stages** including `markets` 164/176 with all 5 `kr/timegan/full` seeds; plus `diffusion_fs` 14/14 and `quantgan_fs` 14/14 on CUDA).
+- `quantgan_fs` (10k iters): full `A=3.65, B=0.85, C=0.56 (rank 5), D=2.90`, boost `28.3 ± 11%`; pre2020 `A=1.39, B=1.32, C=0.94 (rank 5), D=0.90`.
+- `diffusion_fs` (30k iters): full `A=3.79, B=3.75, C=8.62 (rank 13), D=6.76`, `crisis_freq=1.0`, boost `n/p`; pre2020 `A=3.54, B=2.99, C=8.35 (rank 14), D=5.34`.
+- **Gate G3 / H3 flipped to FAIL** over all 13 valid generators (`timevae` excluded for `min_es = -0.00088`): $\tau(\text{Family C}, \text{FZ0}) = 0.64\ [0.46, 0.77]$ (`0.6410 [0.4615, 0.7692]`) vs $\tau(\text{Family B}, \text{FZ0}) = 0.18\ [-0.03, 0.46]$ (`0.1795 [-0.0256, 0.4615]`). The 95% CIs touch at `0.4615`, so `c.lo > b.hi` is `False` $\implies$ `H3: not supported`, `G3: FAIL`. On FZ0, `quantgan_fs` ranks #1 (`-3.357` at 97.5%, `-2.984` at 99%), `cgnsde2` ranks #2 (`-3.307` at 97.5%, `-2.863` at 99%), and `diffusion_fs` ranks #13 (`+2.556` / `+2.880`).
+- Still in-flight on Kaggle (30h weekly GPU quota reached): `vortex-ai-fullscale-baselines` (`timegan_fs`, 0/14 on disk so far) and `vortex-crisisbench-cpu-shard-5`. Updated `docs/HONEST_SUMMARY.md` and `README.md` to match.
 

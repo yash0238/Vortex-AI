@@ -31,17 +31,17 @@ All verdicts are frozen against the NSE-47 survivor panel (2010–2024) and held
 |---|---|---|---|
 | **H1** | Correlation and crisis fidelity decouple ($\tau(B,C) < 0.3$) | **NOT SUPPORTED** | NSE in-sample $\tau(B,C) = 0.45$ [0.35, 0.56]; held-out $\tau(B,C) = 0.35$ [0.05, 0.42] across 11 models |
 | **G1 (v1)** | CG-NSDE v1 (preregistered) beats simple baselines | **FAIL** | CG-NSDE v1 crisis score 1.22 ± 0.28 vs Regime Gaussian 0.54 and Gaussian HMM 0.70 |
-| **G1 (v2)** | CG-NSDE v2 beats simple baselines (post-hoc) | **PASS** | CG-NSDE v2 crisis score **0.15 ± 0.01** (full fit, rank 1 of 12) and **0.74 ± 0.02** (pre-2020 fit, rank 1 of 12) |
+| **G1 (v2)** | CG-NSDE v2 beats simple baselines (post-hoc) | **PASS** | CG-NSDE v2 crisis score **0.15 ± 0.01** (full fit, rank 1 of 14) and **0.74 ± 0.02** (pre-2020 fit, rank 1 of 14) |
 | **G2 (v1 & v2)** | Held-out crisis boost inside real 95% band on $\ge 2$ of 3 episodes | **FAIL (Both)** | **0 of 2 evaluable episodes** (COVID-2020 real +101.1% vs v2 +22.15%, v1 +2.91%; 2022 Shock real +49.42% vs v2 +22.15%, v1 +2.91%) |
-| **H3 / G3** | Family C rank correlates with VaR/ES backtest rank ($\tau > 0.5$) | **PASS** | $\tau(\text{Family C}, \text{risk}) = \mathbf{0.80}$ [0.60, 1.00] > 0.5; $\tau(\text{Family B}, \text{risk}) = -0.20$ [-0.60, 0.20] |
-| **H4 / G4** | Decoupling ($\tau(B,C) < 0.3$) replicates on $\ge 1$ of US / KR | **PASS (via KR)** | South Korea $\tau(B,C) = 0.29 < 0.3$ [0.21, 0.29] passes; US $\tau(B,C) = 0.60 > 0.3$ [0.56, 0.64] does not (partial replication) |
-| **KILL** | Static generators achieve top Family C rank across markets | **NOT TRIGGERED** | Static models fail Family C (i.i.d. Gaussian rank 8, Static t-PPCA rank 7 on NSE) |
+| **H3 / G3** | Family C rank correlates with VaR/ES backtest rank ($\tau > 0.5$, non-overlapping $\tau_C > \tau_B$ CIs) | **FAIL** | $\tau(\text{Family C}, \text{risk}) = 0.64$ [0.46, 0.77] vs $\tau(\text{Family B}, \text{risk}) = 0.18$ [-0.03, 0.46] across 13 valid generators (`quantgan_fs` #1, `cgnsde2` #2 on FZ0; CIs touch at `0.4615`) |
+| **H4 / G4** | Decoupling ($\tau(B,C) < 0.3$) replicates on $\ge 1$ of US / KR (in-sample `full`) | **FAIL** | In-sample 11-model `full`: US $\tau(B,C) = 0.60$ [0.56, 0.64], South Korea $\tau(B,C) = 0.49$ [0.45, 0.53] (though held-out `pre2020` is $<0.3$ on both: US $0.17$, KR $0.00$) |
+| **KILL** | $\tau(B,C) \ge 0.3$ on every market in-sample `full` | **TRIGGERED** | Triggered on in-sample 11-model `full` ($\tau = 0.45, 0.60, 0.49 \ge 0.3$ due to joint neural baseline failures; not triggered held-out on US/KR or on classical subset) |
 | **H5** | Contamination sensitivity (1 bad tick flips ranking) | **SUPPORTED** | Metric pair-order rank flips observed under single-tick corruption (`T7_contamination.md`) |
 
 ### Key Findings
-1. **Crisis Metrics Predict Downstream Risk (G3 PASS), Though H1 Is Not Supported:** While Family B and C show moderate positive rank correlation on NSE ($\tau = 0.45$, so H1 $\tau < 0.3$ is not supported), standard correlation metrics (Frobenius norm, MAE) fail to predict downstream risk backtest performance ($\tau = -0.20$). Out-of-sample VaR/ES backtesting validates Family C ranking ($\tau = 0.80$), confirming that crisis metrics capture essential risk utility.
+1. **Family C Shows Stronger Point Alignment With Risk Than Family B, Though Formal Gates H1 / G3 / G4 / KILL Fail:** Across 13 valid generators (`timevae` excluded due to negative ES), Family C correlates higher with out-of-sample FZ0 risk loss ($\tau_C = 0.64$ [0.46, 0.77]) than Family B ($\tau_B = 0.18$ [-0.03, 0.46]), with full-scale `quantgan_fs` (#1, `-3.357` at 97.5%, `-2.984` at 99%) and **CG-NSDE v2** (#2, `-3.307` at 97.5%, `-2.863` at 99%) leading all generators. However, because the 95% CIs touch at `0.4615`, **H3 is not supported and Gate G3 FAILS** under the frozen non-overlapping CI criterion. Similarly, in-sample decoupling fails across all 11 preregistered models ($\tau = 0.45$ NSE, $0.60$ US, $0.49$ KR, triggering KILL), though held-out `pre2020` decoupling holds on US ($0.17$) and Korea ($0.00$).
 2. **Held-Out Crisis Gap:** No generative model—classical or neural—reproduced the magnitude of out-of-sample crisis correlation surges. Real crisis dependence in March 2020 was 2–5× stronger than pre-crisis training data.
-3. **v2 Post-Hoc Leadership & OOS Degradation:** CG-NSDE v2 achieves rank 1 on Family C in both in-sample (0.15) and held-out (0.74) fits, but suffers a **~5× out-of-sample performance degradation**.
+3. **v2 Post-Hoc Leadership Across 14 Generators & 39/39 Ablations:** Even after adding full-scale GPU neural baselines (`quantgan_fs` $S_C = 0.56$ full / $0.94$ pre-2020, rank 5; `diffusion_fs` $S_C = 8.62$ full / $8.35$ pre-2020), CG-NSDE v2 retains rank 1 on Family C in both in-sample ($0.15 \pm 0.01$) and held-out ($0.74 \pm 0.02$) fits (with a **~5× out-of-sample degradation**). Complete 13-variant × 3-seed ablations (`T2_ablation_nse_full.csv`) confirm FHS innovations (`gauss` $0.33 \pm 0.02$, `param_innov` $0.31 \pm 0.03$), factor volatility (`scalar_vol` $0.31 \pm 0.05$), KL scaling (`beta01` $0.28 \pm 0.07$), contrastive loss (`no_supcon` $0.22 \pm 0.05$), leverage (`no_leverage` $0.19 \pm 0.12$), volatility dynamics (`no_voldyn` $0.18 \pm 0.03$), and posterior GAT (`no_gat` $0.18 \pm 0.04$) each contribute $>1$ full-model SD (`0.010`) to Family C fidelity.
 
 ---
 
@@ -51,21 +51,19 @@ To guarantee machine stability and reproducible compute:
 - **Strict Policy:** **ZERO local model training.** All generator training runs exclusively in the cloud.
 - **Kaggle Configuration:** Managed via `KAGGLE_CONFIG_DIR=c:\Users\myind\Downloads` (using private bundle `brxkeaaryan/vortex-crisisbench-bundle`).
 
-### Completed Experiment Stages
+### Completed Experiment Stages (100% of Queue + 28/42 Full-Scale GPU Complete; `532/532` `metrics.json`)
 - **NSE Main Experiments:** ✅ **110/110 completed** (11 models × 5 seeds × 2 fits).
-- **v2 Main Experiments:** ✅ **10/10 completed** (full and pre-2020 fits, 5 seeds).
-- **v2 Risk Refits:** ✅ **4/4 completed** (yearly refits 2020–2023 for risk pools).
-- **Risk Backtesting:** ✅ **Completed** (1,238 out-of-sample days, VaR/ES FZ0 scoring).
-- **Sampler Alignment (Task 4):** ✅ **Completed** (Arm A vs Arm B A/B test evaluated on validation split).
-- **Likelihood Dominance Verification (Task 5):** ✅ **Completed** (Unit & regression test suite passing).
+- **v2 Main Experiments:** ✅ **10/10 completed** (full and pre-2020 fits, 5 seeds; both `full/seed0.pt` and `pre2020/seed0.pt` checkpoints on disk for `api/server.py`).
+- **Full-Scale GPU Neural Baselines (`crisisbench.fullscale`):** ✅ **`diffusion_fs` 14/14 + `quantgan_fs` 14/14 completed** on CUDA (`vortex-crisisbench-gpu-shard-1` COMPLETE).
+- **NSE & v2 Risk Refits:** ✅ **44/44 (`nse_risk`) + 4/4 (`v2_risk`) + 10 full-scale risk pools completed** (13 valid generators evaluated in `T4_risk.md` / `T5_metric_validity.md`, `timevae` excluded).
+- **v2 Ablations:** ✅ **39/39 completed** (13 variants × 3 seeds in `T2_ablation_nse_full.csv`).
+- **Cross-Market (`v2_markets` & `markets`):** ✅ **19/19 `v2_markets` completed**; **164/176 `markets` completed** (12 skipped, **0 remaining** — all 5 `kr/timegan/full` seeds done).
+- **Extended NSE (`nse_ext`), Contamination, & DGP Sim:** ✅ **27/33 `nse_ext` (6 skipped, 0 remaining)**, **63/63 `contamination`**, and **18/18 `sim` completed**.
+- **Sampler Alignment (Task 4) & Likelihood Dominance (Task 5):** ✅ **Completed** (47/47 unit & regression tests passing).
 
-### Active Cloud Kernel Shards (In-Flight)
-1. `brxkeaaryan/vortex-crisisbench-gpu-shard-1` (2x T4 GPU): 22 queue GAN runs on CUDA + 28 fullscale jobs (`diffusion_fs`, `quantgan_fs`).
-2. `brxkeaaryan/vortex-ai-fullscale-baselines` (T4 GPU): 42 fullscale baseline jobs (`diffusion_fs`, `quantgan_fs`, `timegan_fs`).
-3. `brxkeaaryan/vortex-crisisbench-cpu-shard-1` (CPU 4 workers): 70 queue jobs (classical, TimeVAE, CG-NSDE v1, `nse_ext`, 4 `v2_markets`).
-4. `brxkeaaryan/vortex-crisisbench-cpu-shard-2` (CPU 4 workers): 18 CG-NSDE v2 jobs (`api/server.py` weights backfill, `v2_main`, `v2_risk`, 12 `v2_markets`).
-5. `brxkeaaryan/vortex-crisisbench-cpu-shard-3` (CPU 4 workers): 20 `v2_ablation` jobs (Part 1).
-6. `brxkeaaryan/vortex-crisisbench-cpu-shard-4` (CPU 4 workers): 19 `v2_ablation` jobs (Part 2).
+### Remaining Cloud Kernel Shards In-Flight (Note: Kaggle 30h Weekly GPU Quota Reached)
+1. `brxkeaaryan/vortex-ai-fullscale-baselines` (T4 GPU, RUNNING): `timegan_fs` (`0/14` on disk so far; will deliver whatever seeds finish within active session).
+2. `brxkeaaryan/vortex-crisisbench-cpu-shard-5` (CPU, RUNNING): fallback/backfill shard.
 
 ---
 

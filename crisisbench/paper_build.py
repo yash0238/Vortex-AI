@@ -36,6 +36,14 @@ SHORT = {
     "quantgan_fs": "QuantGAN-FS", "timegan_fs": "TimeGAN-FS", "diffusion_fs": "Diff-FS",
     "cgnsde": "CG-NSDE v1", "cgnsde2": "CG-NSDE v2",
 }
+# Explicit label positions in data coordinates, chosen so that the dense
+# low-correlation cluster in the scatter figure does not print overlapping labels.
+LABEL_POS = {
+    "iid_gaussian": (0.45, 0.6), "hmm_gaussian": (0.45, 5.6), "regime_gaussian": (0.45, 10.6),
+    "t_ppca": (1.75, 1.1), "cgnsde": (2.35, 4.9), "cgnsde2": (1.20, 30.6),
+    "stationary_bootstrap": (0.42, 22.4), "garch_fhs": (2.30, 18.2), "dcc_garch": (2.20, 9.8),
+    "quantgan": (4.35, 4.4), "timevae": (5.0, 2.0), "timegan": (5.0, 2.0),
+}
 ABLATION_LABEL = {
     "cgnsde2": "Full model (CG-NSDE v2, post hoc)",
     "cgnsde2@no_gat": "-- GAT (per-node MLP)",
@@ -73,6 +81,8 @@ def t1(market: str, fit: str) -> pd.DataFrame | None:
 def num(x, nd=2) -> str:
     if x is None or (isinstance(x, float) and not np.isfinite(x)):
         return "n/p"
+    if abs(float(x)) < 0.5 * 10 ** (-nd):
+        x = 0.0  # avoid printing "-0.00"
     return f"{x:.{nd}f}"
 
 
@@ -116,7 +126,7 @@ def fig_scatter(market="nse", fit="full") -> None:
     if t is None:
         return skipped.append("fig_scatter")
     ref = reference(market, fit)["metrics"]
-    fig, ax = plt.subplots(figsize=(3.45, 2.7))
+    fig, ax = plt.subplots(figsize=(3.45, 3.0))
     ax.axhspan(ref["boost_pct"]["lo"], ref["boost_pct"]["hi"], color=BAND, lw=0, zorder=0)
     ax.axvspan(0, ref["corr_fro"]["ceiling"], color=BAND, lw=0, zorder=0, alpha=0.6)
     ax.axhline(ref["boost_pct"]["real"], color="#1c5cab", lw=0.8, zorder=1)
@@ -125,11 +135,14 @@ def fig_scatter(market="nse", fit="full") -> None:
             continue
         ax.scatter(r.corr_fro, r.boost_pct, s=26 if r.generator != "cgnsde2" else 46, color=C.get(r.family_tag, MUTED),
                    edgecolor="white", linewidth=0.8, zorder=3)
-        ax.annotate(SHORT.get(r.generator, r.generator), (r.corr_fro, r.boost_pct), xytext=(4, 3),
-                    textcoords="offset points", fontsize=6.5, color=INK)
+        ax.annotate(SHORT.get(r.generator, r.generator), (r.corr_fro, r.boost_pct),
+                    xytext=LABEL_POS.get(r.generator, (r.corr_fro + 0.1, r.boost_pct + 1.0)),
+                    textcoords="data", fontsize=6, color=INK)
     ax.set_xlabel("Correlation error $\\|C_{gen}-C_{real}\\|_F$ (lower is better)")
     ax.set_ylabel("Crisis correlation boost (%)")
-    ax.legend(handles=legend_handles(set(t.family_tag)), fontsize=6, loc="best", handletextpad=0.2)
+    ax.set_xlim(-0.15, 5.5)
+    ax.legend(handles=legend_handles(set(t.family_tag)), fontsize=5.5, ncol=3, loc="lower center",
+              bbox_to_anchor=(0.5, 1.0), handletextpad=0.2, columnspacing=0.7, borderaxespad=0.1)
     fig.tight_layout(pad=0.3)
     fig.savefig(FIG / f"f1_scatter_{market}_{fit}.pdf")
     plt.close(fig)
@@ -188,7 +201,7 @@ def fig_var() -> None:
     s = json.loads(p.read_text())
     x = pd.to_datetime(s["dates"])
     r = np.array(s["ret"])
-    fig, ax = plt.subplots(figsize=(7.1, 2.4))
+    fig, ax = plt.subplots(figsize=(7.1, 2.5))
     ax.bar(x, r, width=1.0, color="#c3c2b7", lw=0)
     cols = {"hist_sim": "#898781", "garch_fhs_bench": "#eda100", "cgnsde2": "#2a78d6", "regime_gaussian": "#1baf7a",
             "timegan": "#6250d6", "timegan_fs": "#6250d6", "quantgan_fs": "#4b38b3", "diffusion_fs": "#3b28a0",
@@ -232,7 +245,7 @@ def fig_ablation() -> None:
     if not p.exists():
         return skipped.append("fig_ablation")
     t = pd.read_csv(p)
-    fig, axes = plt.subplots(1, 2, figsize=(7.1, 2.6))
+    fig, axes = plt.subplots(1, 2, figsize=(7.1, 3.2))
     for ax, f in zip(axes, ("C", "A")):
         d = t.sort_values(f"score_{f}", ascending=False)
         y = np.arange(len(d))
@@ -241,7 +254,8 @@ def fig_ablation() -> None:
         ax.scatter(d[f"score_{f}"], y, s=22, zorder=3, edgecolor="white", linewidth=0.7,
                    color=["#2a78d6" if g == "cgnsde2" else MUTED for g in d.generator])
         ax.set_yticks(y)
-        ax.set_yticklabels([g.replace("cgnsde2@", "").replace("cgnsde2", "full model").replace("_", " ") for g in d.generator], color=INK)
+        ax.set_yticklabels([g.replace("cgnsde2@", "-- ").replace("cgnsde2", "full model (v2)").replace("_", " ") for g in d.generator],
+                           color=INK, fontsize=7)
         ax.set_xlabel(f"family {f} score")
         ax.set_xlim(left=0)
         ax.grid(axis="y", visible=False)
@@ -357,14 +371,20 @@ def tab_ablation() -> None:
     if not p.exists():
         return skipped.append("tab_ablation")
     t = pd.read_csv(p)
-    rows = [
-        [
+    rows = []
+    for g, r in zip(t.generator, t.itertuples()):
+        rows.append([
             ABLATION_LABEL.get(g, tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Full model (v2)"))),
             num(r.boost_pct, 1), num(r.cvar_ratio, 2), num(r.corr_fro, 2), num(r.kurt_med, 2),
             num(r.acf1_sq, 3), num(r.score_A), num(r.score_B), num(r.score_C),
-        ]
-        for g, r in zip(t.generator, t.itertuples())
-    ]
+        ])
+        if "@" in g:
+            vtag = _clean_macro_name("".join(w.capitalize() for w in g.split("@")[1].split("_")))
+            macro(f"scoreCAbl{vtag}", getattr(r, "score_C", np.nan))
+            macro(f"scoreCAbl{vtag}Sd", getattr(r, "score_C_sd", np.nan))
+            macro(f"scoreAAbl{vtag}", getattr(r, "score_A", np.nan))
+            macro(f"scoreAAbl{vtag}Sd", getattr(r, "score_A_sd", np.nan))
+            macro(f"boostAbl{vtag}", getattr(r, "boost_pct", np.nan))
     write_table("t2_ablation", ["Variant", "Boost \\%", "CVaR", "Corr. err.", "Kurt.", "ACF$(r^2)$", "$S_A$", "$S_B$", "$S_C$"], rows)
 
 
@@ -484,7 +504,7 @@ def numbers(summary: dict) -> None:
             macro("dgpSimZeroBoost", num(r00.rule_boost_pct, 1))
             macro("dgpSimZeroLo", num(r00.rule_lo, 1))
             macro("dgpSimZeroHi", num(r00.rule_hi, 1))
-        macro("dgpZeroFloor", "0.104")
+        macro("dgpZeroFloor", "0.1044")  # dgp.iid_floor(47)
     p_v1 = RESULTS / "runs" / "nse" / "cgnsde" / "full" / "seed0" / "metrics.json"
     if p_v1.exists():
         dv1 = json.loads(p_v1.read_text()).get("info", {})
