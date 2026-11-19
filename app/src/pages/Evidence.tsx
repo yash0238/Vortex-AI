@@ -211,9 +211,8 @@ export function Risk() {
 /* ---------------------------------------------------------------- Model */
 export function Model() {
   const core = useData<Core>("core");
-  const [fit, setFit] = useState("full");
   if (!core.data) return <Loading error={core.error} />;
-  const cg = core.data.cgnsde, b = core.data.bench[`nse/${fit}`], abl = b?.ablation;
+  const cg = core.data.cgnsde, b = core.data.bench["nse/full"], abl = b?.ablation;
   const hist: Any[] = cg?.info?.history ?? [];
   const VAR: Record<string, string> = { "cgnsde2": "Full model (v2)", "cgnsde2@no_gat": "without graph attention", "cgnsde2@no_supcon": "without contrastive loss",
     "cgnsde2@no_graph_loss": "without graph loss", "cgnsde2@no_sde": "without the SDE (frozen hidden state)", "cgnsde2@scalar_vol": "one volatility state for everything (as in v1)",
@@ -233,7 +232,7 @@ export function Model() {
             <li><b>CrisisBench v1 — Overlapping-window memorisation:</b> Validation NLL peaked at epoch 2 of 10. Weak KL bottleneck (beta=0.01) and unconstrained graph embeddings allowed the decoder to memorise heavily overlapping 60-day training windows instead of learning generalisable dynamics.</li>
             <li><b>CrisisBench v1 — Scalar volatility scaling:</b> A single global volatility state scaled the whole covariance matrix by one scalar, making it mathematically impossible to model cross-asset correlation surges during crises.</li>
           </ul>
-          <p className="muted" style={{ marginTop: 8 }}><b>Gate verdicts:</b> G1 FAIL (score_C 1.22, rank 10 of 12), G2 FAIL (0/2 held-out episodes).</p>
+          <p className="muted" style={{ marginTop: 8 }}><b>Gate verdicts:</b> G1 FAIL (score_C 1.22, rank 11 of 15), G2 FAIL (0/2 held-out episodes).</p>
         </Card>
         <Card flat title="Version 2: architectural redesign (post hoc)">
           <p><b>How v2 solves each defect:</b> Redesigned after understanding v1's failure, using 2010–2019 fit-period data only:</p>
@@ -254,7 +253,7 @@ export function Model() {
           <tr><td>Graph attention (GAT)</td><td>In generator conditioning</td><td>Posterior encoder only</td><td>Eliminates data leakage into generated paths</td></tr>
           <tr><td>Innovation noise</td><td>Parametric Student-t</td><td>Filtered Historical Simulation (FHS)</td><td>Accurately matches empirical kurtosis and fat tails</td></tr>
           <tr><td>Convergence</td><td>Overfits by epoch 2</td><td>Steady progress to epoch 5/13</td><td>Balanced weighted objective resolves likelihood dominance</td></tr>
-          <tr><td>G1 Verdict</td><td><span className="pill fail">FAIL</span> (score_C: 1.22, rank 10)</td><td><span className="pill pass">PASS</span> (score_C: 0.145, rank 1)</td><td>v2 outperforms all classical regime models in-sample</td></tr>
+          <tr><td>G1 Verdict</td><td><span className="pill fail">FAIL</span> (score_C: 1.22, rank 11)</td><td><span className="pill pass">PASS</span> (score_C: 0.145, rank 1)</td><td>v2 outperforms all classical regime models in-sample</td></tr>
           <tr><td>G2 Verdict</td><td><span className="pill fail">FAIL</span> (0/2 episodes)</td><td><span className="pill fail">FAIL</span> (0/2 episodes)</td><td>Both fail held-out 2020 crash — Family C error rises ~5&times; OOS (0.145 &rarr; 0.742)</td></tr>
         </tbody></table></div>
       </Card>
@@ -269,7 +268,7 @@ export function Model() {
       {hist.length > 0 && <Card title="Training curves" sub="Negative log-likelihood per epoch (lower is better). Training stops when the validation curve stops improving.">
         <LineChart height={240} labels={hist.map((_, i) => `epoch ${i + 1}`)} series={[{ name: "train", color: "var(--s-ours)", y: hist.map((h) => h.train_nll ?? h.train) }, { name: "validation (2018–19)", color: "var(--crisis)", y: hist.map((h) => h.val_nll ?? h.val) }]} />
       </Card>}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations</h2><Seg value={fit} set={setFit} options={FITS} /></div>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations</h2><p className="muted" style={{ marginLeft: 12, fontSize: 12 }}>All 39 runs (13 variants × 3 seeds + 5 full v2 seeds) evaluated on the full NSE-47 panel (nse/full)</p></div>
       {!abl?.length ? <Empty what="The ablation study" /> : (<>
         <div className="grid g2">
           {["score_C", "score_B", "score_A", "score_D"].map((k) => (<Card flat key={k} title={FAM_NAME[k.slice(-1)] + " score"} sub="Lower is better; under 1 is within real noise.">

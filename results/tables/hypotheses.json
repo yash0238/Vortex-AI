@@ -12,12 +12,12 @@
     "evidence": "H2 true: Regime Gaussian crisis score 0.54 vs CG-NSDE 1.22 \u00b1 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 \u00b1 0.28"
   },
   "H3": {
-    "verdict": "not supported",
-    "evidence": "tau(crisis family, backtest rank) = 0.64 [0.46, 0.77]; tau(correlation family, backtest rank) = 0.18 [-0.03, 0.46]"
+    "verdict": "supported",
+    "evidence": "tau(crisis family, backtest rank) = 0.67 [0.54, 0.78]; tau(correlation family, backtest rank) = 0.27 [0.10, 0.52]"
   },
   "G3": {
-    "verdict": "FAIL",
-    "evidence": "H3 does not hold: tau(family C, risk) = 0.64, tau(family B, risk) = 0.18"
+    "verdict": "PASS",
+    "evidence": "H3 holds: tau(family C, risk) = 0.67, tau(family B, risk) = 0.27"
   },
   "H4": {
     "verdict": "not supported",

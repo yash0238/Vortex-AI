@@ -2,7 +2,7 @@
 
 Rule (frozen in crisisbench/protocol.py): PASS if every regime-aware generator beats every static generator on the family-C score AND no regime-conditional Gaussian/HMM matches CG-NSDE (H2 false). FAIL => benchmark leads the paper.
 
-Evaluated on market nse, fit 'full', 14 generators.
+Evaluated on market nse, fit 'full', 15 generators.
 
 ### Multi-Seed Family-C Scores (Mean ± SD over Seeds)
 

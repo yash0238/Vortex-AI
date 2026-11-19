@@ -206,10 +206,15 @@ def fig_var() -> None:
     cols = {"hist_sim": "#898781", "garch_fhs_bench": "#eda100", "cgnsde2": "#2a78d6", "regime_gaussian": "#1baf7a",
             "timegan": "#6250d6", "timegan_fs": "#6250d6", "quantgan_fs": "#4b38b3", "diffusion_fs": "#3b28a0",
             "diffusion": "#6250d6", "iid_gaussian": "#e87ba4"}
-    for k, m in s["methods"].items():
+    # A collapsed generator can forecast a VaR two orders of magnitude beyond the panel and
+    # flatten every other path. Keep such series out of the plot; the caption discloses them.
+    plotted = {k: m for k, m in s["methods"].items() if abs(float(np.median(m["var99"]))) <= 50}
+    for k, m in plotted.items():
         ax.plot(x, m["var99"], lw=1.0 if k != "cgnsde2" else 1.4, color=cols.get(k, INK), label=m["name"])
     ax.set_ylabel("daily return / 99% VaR (%)")
-    ax.legend(ncol=3, fontsize=6.5, loc="lower right")
+    ax.legend(ncol=4, fontsize=6, loc="lower center", bbox_to_anchor=(0.5, 1.0), frameon=False,
+              handlelength=1.6, columnspacing=1.0)
+    fig.tight_layout(pad=0.3)
     fig.tight_layout(pad=0.3)
     fig.savefig(FIG / "f4_var.pdf")
     plt.close(fig)
@@ -249,7 +254,6 @@ def fig_ablation() -> None:
     for ax, f in zip(axes, ("C", "A")):
         d = t.sort_values(f"score_{f}", ascending=False)
         y = np.arange(len(d))
-        ax.axvspan(0, 1, color=BAND, lw=0, zorder=0)
         ax.errorbar(d[f"score_{f}"], y, xerr=d[f"score_{f}_sd"].fillna(0), fmt="none", ecolor=MUTED, elinewidth=1)
         ax.scatter(d[f"score_{f}"], y, s=22, zorder=3, edgecolor="white", linewidth=0.7,
                    color=["#2a78d6" if g == "cgnsde2" else MUTED for g in d.generator])
@@ -257,7 +261,7 @@ def fig_ablation() -> None:
         ax.set_yticklabels([g.replace("cgnsde2@", "-- ").replace("cgnsde2", "full model (v2)").replace("_", " ") for g in d.generator],
                            color=INK, fontsize=7)
         ax.set_xlabel(f"family {f} score")
-        ax.set_xlim(left=0)
+        ax.set_xlim(0, float((d[f"score_{f}"] + d[f"score_{f}_sd"].fillna(0)).max()) * 1.10)
         ax.grid(axis="y", visible=False)
     fig.tight_layout(pad=0.4)
     fig.savefig(FIG / "f6_ablation.pdf")
@@ -276,7 +280,12 @@ def tab_main(market="nse", fit="full", name=None) -> None:
     real = ["Real (95\\% band)"]
     for k, _, nd in cols:
         r = ref[k]
-        real.append(f"$\\le${r['ceiling']:.{nd}f}" if r["kind"] == "dist" else f"{r['real']:.{nd}f} [{r['lo']:.{nd}f}, {r['hi']:.{nd}f}]")
+        if r["kind"] == "dist":
+            real.append(f"$\\le${num(r['ceiling'], nd)}")
+        elif not all(np.isfinite(float(r[q])) for q in ("real", "lo", "hi")):
+            real.append("n/p")
+        else:
+            real.append(f"{num(r['real'], nd)} [{num(r['lo'], nd)}, {num(r['hi'], nd)}]")
     rows = [real + ["--"] * 4, ["\\midrule"]]
     for _, r in t.iterrows():
         cells = [tex_escape(PRETTY.get(r.generator, r.generator))]
@@ -285,8 +294,9 @@ def tab_main(market="nse", fit="full", name=None) -> None:
             s = num(v, nd)
             cells.append(f"\\textbf{{{s}}}" if r.get(k + "_inside", 0) >= 0.5 else s)
         for f in "ABCD":
-            best = r[f"rank_{f}"] == 1
-            s = f"{r[f'score_{f}']:.2f}"
+            v = r[f"score_{f}"]
+            best = r[f"rank_{f}"] == 1 and np.isfinite(float(v))
+            s = num(v)
             cells.append(f"\\underline{{{s}}}" if best else s)
         rows.append(cells)
     write_table(name or f"t1_{market}_{fit}", head, rows)

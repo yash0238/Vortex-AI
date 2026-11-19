@@ -5,8 +5,8 @@ Item & Verdict & Evidence \\
 H1 & not supported & NSE in-sample tau(B,C) = 0.45 [0.35, 0.56] over 11 models; held-out tau(B,C) = 0.35 [0.05, 0.42] \\
 H2 & supported & Regime Gaussian crisis score 0.54 vs CG-NSDE 1.22 $\pm$ 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 $\pm$ 0.28 \\
 G1 & FAIL & H2 true: Regime Gaussian crisis score 0.54 vs CG-NSDE 1.22 $\pm$ 0.28; Gaussian HMM crisis score 0.70 vs CG-NSDE 1.22 $\pm$ 0.28 \\
-H3 & not supported & tau(crisis family, backtest rank) = 0.64 [0.46, 0.77]; tau(correlation family, backtest rank) = 0.18 [-0.03, 0.46] \\
-G3 & FAIL & H3 does not hold: tau(family C, risk) = 0.64, tau(family B, risk) = 0.18 \\
+H3 & supported & tau(crisis family, backtest rank) = 0.67 [0.54, 0.78]; tau(correlation family, backtest rank) = 0.27 [0.10, 0.52] \\
+G3 & PASS & H3 holds: tau(family C, risk) = 0.67, tau(family B, risk) = 0.27 \\
 H4 & not supported & US: tau(B,C) = 0.60 [0.56, 0.64]; KR: tau(B,C) = 0.49 [0.45, 0.53] \\
 G4 & FAIL & H4 fails: tau(B,C) >= 0.3 on every other market \\
 KILL & triggered & tau(B,C) >= 0.3 on every market \\

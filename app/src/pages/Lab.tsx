@@ -61,7 +61,7 @@ export function Lab() {
         Pick a model. Left: what its calm windows look like. Right: its crisis windows. Compare with real history underneath. A good model's crisis panel should look like the real crisis panel: wider, lower, and with stocks more tightly linked.
       </Head>
       <div className="callout info" style={{ marginBottom: 16 }}>
-        <b>How the Lab works:</b> Precomputed 60-day paths and quantile fans are displayed below for the 6 classical generators across both fit regimes. Comprehensive benchmark evaluations for CG-NSDE v1 and CG-NSDE v2 (post hoc) are available in the <b>Benchmark</b> and <b>Model</b> pages. Live generation from the trained neural SDE is supported via FastAPI with both <b>in-sample (full)</b> and <b>pre-2020</b> checkpoints active on disk.
+        <b>How the Lab works:</b> Precomputed 60-day paths and quantile fans are displayed below for all 15 benchmark generators across both fit regimes. Comprehensive benchmark evaluations for CG-NSDE v1 and CG-NSDE v2 (post hoc) are available in the <b>Benchmark</b> and <b>Model</b> pages. Live generation from the trained neural SDE is supported via FastAPI with both <b>in-sample (full)</b> and <b>pre-2020</b> checkpoints active on disk.
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <Seg value={fit} set={(v) => { setFit(v); setLive(null); }} options={[{ v: "full", label: "Trained on all history (in-sample)" }, { v: "pre2020", label: "Trained to 2019 only (pre-2020)" }]} />

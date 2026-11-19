@@ -30,6 +30,7 @@
 \newcommand{\boostStationaryBootstrap}{21.37}
 \newcommand{\boostTPpca}{2.24}
 \newcommand{\boostTimegan}{n/p}
+\newcommand{\boostTimeganFs}{2.56}
 \newcommand{\boostTimevae}{n/p}
 \newcommand{\contamOnePctMaxFlips}{12}
 \newcommand{\contamOnePctMetrics}{17}
@@ -53,6 +54,7 @@
 \newcommand{\corrStationaryBootstrap}{0.20}
 \newcommand{\corrTPpca}{1.62}
 \newcommand{\corrTimegan}{33.22}
+\newcommand{\corrTimeganFs}{9.36}
 \newcommand{\corrTimevae}{12.50}
 \newcommand{\dgpSimCccBoost}{13.6}
 \newcommand{\dgpSimCccHi}{20.6}
@@ -65,8 +67,8 @@
 \newcommand{\dgpSimZeroLo}{-13.4}
 \newcommand{\dgpZeroFloor}{0.1044}
 \newcommand{\nAblationVariants}{13}
-\newcommand{\nGenerators}{14}
-\newcommand{\nRiskGenerators}{13}
+\newcommand{\nGenerators}{15}
+\newcommand{\nRiskGenerators}{14}
 \newcommand{\realCovidBoost}{101.1}
 \newcommand{\realCovidBoostHi}{140.1}
 \newcommand{\realCovidBoostLo}{65.1}
@@ -136,6 +138,7 @@
 \newcommand{\scoreAStationaryBootstrap}{0.11}
 \newcommand{\scoreATPpca}{1.51}
 \newcommand{\scoreATimegan}{3.34}
+\newcommand{\scoreATimeganFs}{1.54}
 \newcommand{\scoreATimevae}{3.44}
 \newcommand{\scoreBCgnsde}{0.79}
 \newcommand{\scoreBCgnsdeTwo}{0.31}
@@ -150,6 +153,7 @@
 \newcommand{\scoreBStationaryBootstrap}{0.06}
 \newcommand{\scoreBTPpca}{0.44}
 \newcommand{\scoreBTimegan}{10.00}
+\newcommand{\scoreBTimeganFs}{2.81}
 \newcommand{\scoreBTimevae}{4.50}
 \newcommand{\scoreCAblBetaZeroOne}{0.28}
 \newcommand{\scoreCAblBetaZeroOneSd}{0.07}
@@ -198,6 +202,7 @@
 \newcommand{\scoreCStationaryBootstrap}{0.18}
 \newcommand{\scoreCTPpca}{0.90}
 \newcommand{\scoreCTimegan}{8.79}
+\newcommand{\scoreCTimeganFs}{1.72}
 \newcommand{\scoreCTimevae}{7.56}
 \newcommand{\scoreDCgnsde}{5.98}
 \newcommand{\scoreDCgnsdeTwo}{0.15}
@@ -212,6 +217,7 @@
 \newcommand{\scoreDStationaryBootstrap}{0.00}
 \newcommand{\scoreDTPpca}{3.57}
 \newcommand{\scoreDTimegan}{6.64}
+\newcommand{\scoreDTimeganFs}{6.76}
 \newcommand{\scoreDTimevae}{6.64}
 \newcommand{\tauBCkrFull}{0.49}
 \newcommand{\tauBCkrFullHi}{0.53}
@@ -225,15 +231,15 @@
 \newcommand{\tauBCkrHeldPrereg}{0.00}
 \newcommand{\tauBCkrHeldPreregHi}{0.39}
 \newcommand{\tauBCkrHeldPreregLo}{-0.11}
-\newcommand{\tauBCnseFull}{0.45}
-\newcommand{\tauBCnseFullHi}{0.54}
-\newcommand{\tauBCnseFullLo}{0.36}
+\newcommand{\tauBCnseFull}{0.52}
+\newcommand{\tauBCnseFullHi}{0.60}
+\newcommand{\tauBCnseFullLo}{0.45}
 \newcommand{\tauBCnseFullPrereg}{0.45}
 \newcommand{\tauBCnseFullPreregHi}{0.56}
 \newcommand{\tauBCnseFullPreregLo}{0.35}
-\newcommand{\tauBCnseHeld}{0.41}
-\newcommand{\tauBCnseHeldHi}{0.52}
-\newcommand{\tauBCnseHeldLo}{0.21}
+\newcommand{\tauBCnseHeld}{0.49}
+\newcommand{\tauBCnseHeldHi}{0.56}
+\newcommand{\tauBCnseHeldLo}{0.30}
 \newcommand{\tauBCnseHeldPrereg}{0.35}
 \newcommand{\tauBCnseHeldPreregHi}{0.42}
 \newcommand{\tauBCnseHeldPreregLo}{0.05}
@@ -249,30 +255,30 @@
 \newcommand{\tauBCusHeldPrereg}{0.17}
 \newcommand{\tauBCusHeldPreregHi}{0.28}
 \newcommand{\tauBCusHeldPreregLo}{0.00}
-\newcommand{\tauRiskA}{0.64}
-\newcommand{\tauRiskAHi}{0.72}
-\newcommand{\tauRiskALo}{0.46}
-\newcommand{\tauRiskB}{0.18}
-\newcommand{\tauRiskBHi}{0.46}
-\newcommand{\tauRiskBLo}{-0.03}
-\newcommand{\tauRiskC}{0.64}
-\newcommand{\tauRiskCHi}{0.77}
-\newcommand{\tauRiskCLo}{0.46}
+\newcommand{\tauRiskA}{0.60}
+\newcommand{\tauRiskAHi}{0.67}
+\newcommand{\tauRiskALo}{0.43}
+\newcommand{\tauRiskB}{0.27}
+\newcommand{\tauRiskBHi}{0.52}
+\newcommand{\tauRiskBLo}{0.10}
+\newcommand{\tauRiskC}{0.67}
+\newcommand{\tauRiskCHi}{0.78}
+\newcommand{\tauRiskCLo}{0.54}
 \newcommand{\tauRiskD}{0.69}
-\newcommand{\tauRiskDHi}{0.79}
-\newcommand{\tauRiskDLo}{0.46}
+\newcommand{\tauRiskDHi}{0.78}
+\newcommand{\tauRiskDLo}{0.49}
 \newcommand{\vOneBestEpoch}{2}
 \newcommand{\vOneEpochs}{10}
 \newcommand{\verdictGFour}{FAIL}
 \newcommand{\verdictGOne}{FAIL}
 \newcommand{\verdictGOnevTwoposthoc}{PASS}
-\newcommand{\verdictGThree}{FAIL}
+\newcommand{\verdictGThree}{PASS}
 \newcommand{\verdictGTwo}{FAIL}
 \newcommand{\verdictGTwovTwoposthoc}{FAIL}
 \newcommand{\verdictHFive}{supported}
 \newcommand{\verdictHFour}{not supported}
 \newcommand{\verdictHOne}{not supported}
-\newcommand{\verdictHThree}{not supported}
+\newcommand{\verdictHThree}{supported}
 \newcommand{\verdictHTwo}{supported}
 \newcommand{\verdictHTwovTwoposthoc}{not supported}
 \newcommand{\verdictKILL}{triggered}

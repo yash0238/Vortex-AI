@@ -1,20 +1,20 @@
-# GATE_G3: FAIL
+# GATE_G3: PASS
 
 Rule (frozen in crisisbench/protocol.py): PASS if H3 holds.
 
-Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; positive = lower benchmark error goes with lower FZ0 loss (joint 2000-replicate block-date x seed bootstrap over 13 generators).
+Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; positive = lower benchmark error goes with lower FZ0 loss (joint 2000-replicate block-date x seed bootstrap over 14 generators).
 
 ```json
 {
-  "tau_C": 0.6410256410256409,
+  "tau_C": 0.6703296703296704,
   "ci_C": [
-    0.46153846153846156,
-    0.7692307692307693
+    0.5384615384615384,
+    0.7802197802197802
   ],
-  "tau_B": 0.17948717948717946,
+  "tau_B": 0.27472527472527475,
   "ci_B": [
-    -0.02564102564102564,
-    0.46153846153846156
+    0.0989010989010989,
+    0.5164835164835165
   ],
   "rank_basis": "mean FZ0, level 0.975, equal_weight",
   "generators": [
@@ -28,11 +28,12 @@ Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; posit
     "quantgan",
     "timegan",
     "quantgan_fs",
+    "timegan_fs",
     "diffusion_fs",
     "cgnsde",
     "cgnsde2"
   ],
-  "H3_holds": false,
+  "H3_holds": true,
   "excluded_generators": {
     "timevae": {
       "reason": "non-positive or non-finite ES from the risk pool (degenerate generator output)",
@@ -57,6 +58,7 @@ Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; posit
     "quantgan": -2.7013574317411897,
     "timegan": -3.0485426827281095,
     "quantgan_fs": -3.3572222477644895,
+    "timegan_fs": -1.3148218399997704,
     "diffusion_fs": 2.556329415024642,
     "cgnsde": -3.0667297660435007,
     "cgnsde2": -3.3070850743714892
@@ -72,7 +74,8 @@ Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; posit
     "quantgan": 12,
     "timegan": 9,
     "quantgan_fs": 1,
-    "diffusion_fs": 13,
+    "timegan_fs": 13,
+    "diffusion_fs": 14,
     "cgnsde": 6,
     "cgnsde2": 2
   }

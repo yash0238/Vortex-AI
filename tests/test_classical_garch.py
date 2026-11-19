@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -48,6 +49,23 @@ def simulate_dcc(seed=11):
 def fitdata(R):
     return FitData("sim", R, pd.bdate_range("2000-01-03", periods=len(R)), [f"A{i}" for i in range(R.shape[1])],
                    np.zeros(len(R), bool))
+
+
+# The test functions take R/Z arguments.  Define them as module-scoped pytest
+# fixtures so the file works under `pytest` as well as `python tests/...`.
+@pytest.fixture(scope="module")
+def _sim():
+    return simulate_dcc()
+
+
+@pytest.fixture(scope="module")
+def R(_sim):
+    return _sim[0]
+
+
+@pytest.fixture(scope="module")
+def Z(_sim):
+    return _sim[1]
 
 
 def check_samples(g, fd, name):
