@@ -264,6 +264,8 @@ def loss_terms(net: Net2, batch: dict, corr_target, tau: float, gen: torch.Gener
 
 
 class CGNSDE2(Generator):
+    NET = Net2
+    DYN_PARAMS = ("rho_raw", "alpha_raw", "theta", "raw_nu")
     name = "cgnsde2"
     family = "neural-ours"
     impl_source = "own"
@@ -333,12 +335,14 @@ class CGNSDE2(Generator):
         B0 = evec[:, ::-1][:, :K] * np.sqrt(ev[::-1][:K])
         B0 = B0 * np.sign(B0.sum(0, keepdims=True))
         init = (torch.from_numpy(B0.copy()), torch.from_numpy(1.0 - (B0 ** 2).sum(1)))
-        self.net = net = Net2(N, hp, init=init)
+        self.net = net = self.NET(N, hp, init=init)
+        if hasattr(net, "set_cascade"):
+            net.set_cascade(Ztr)
         # The few scalar dynamics parameters (persistence, shock impact, leverage, tail index) sit behind
         # sigmoid / softplus maps with small slopes; at the network learning rate they hardly move before the
         # static parts overfit, so they get their own, larger rate and no weight decay.
-        dyn = [p for n_, p in net.named_parameters() if n_ in ("rho_raw", "alpha_raw", "theta", "raw_nu")]
-        rest = [p for n_, p in net.named_parameters() if n_ not in ("rho_raw", "alpha_raw", "theta", "raw_nu")]
+        dyn = [p for n_, p in net.named_parameters() if n_ in self.DYN_PARAMS]
+        rest = [p for n_, p in net.named_parameters() if n_ not in self.DYN_PARAMS]
         opt = torch.optim.Adam([dict(params=rest, lr=hp["lr"], weight_decay=hp["weight_decay"]),
                                 dict(params=dyn, lr=hp["lr_dyn"], weight_decay=0.0)])
         take = lambda A, idx: {k: v[idx] for k, v in A.items()}
@@ -396,6 +400,8 @@ class CGNSDE2(Generator):
             n_train_windows=int(len(tr)), n_val_windows=int(len(va)), n_train_crisis=n_cr,
             train_crisis_freq=self.p_crisis, batches_per_epoch=nb, n_params=sum(p.numel() for p in net.parameters()),
             sec_per_epoch=float(np.mean([h["seconds"] for h in history])), seed=int(seed))
+        if hasattr(net, "cascade_info"):
+            self.info.update(net.cascade_info())
         return self.info
 
     @torch.no_grad()
@@ -556,7 +562,7 @@ class CGNSDE2(Generator):
         self.mu, self.sd, self.vol_mu, self.vol_sd = n(ck["mu"]), n(ck["sd"]), n(ck["vol_mu"]), n(ck["vol_sd"])
         self.sector, self.eta = n(ck["sector"]), n(ck["eta"])
         self.mix = {int(k): {q: (n(v) if q != "bic" else v) for q, v in m.items()} for k, m in ck["mix"].items()}
-        self.net = Net2(len(self.tickers), self.hparams)
+        self.net = cls.NET(len(self.tickers), self.hparams)
         self.net.load_state_dict(ck["state_dict"])
         self.net.eval()
         return self

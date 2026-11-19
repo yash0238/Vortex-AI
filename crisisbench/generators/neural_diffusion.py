@@ -1,7 +1,8 @@
 """Denoising diffusion baseline for return windows (own PyTorch implementation).
 
-Model     DDPM (Ho, Jain & Abbeel 2020) on per-asset z-scored windows x0 (T, N), trained to predict the noise
-          (epsilon parametrisation, simple loss), cosine noise schedule (Nichol & Dhariwal 2021), 1000 steps.
+Model     DDPM (Ho, Jain & Abbeel 2020) on per-asset z-scored windows x0 (T, N), trained to predict the clean
+          window x0 directly (MSE), as in Diffusion-TS (Yuan & Qiao 2024); cosine noise schedule (Nichol &
+          Dhariwal 2021), 1000 steps.
 Denoiser  Transformer encoder over the T days: each day (N returns) is one token, linear in/out projections,
           learned positional embedding, sinusoidal diffusion-step embedding added to every token
           (d_model 128, 4 layers, 4 heads, feed-forward 256, GELU, pre-norm).
@@ -14,7 +15,12 @@ Deviations / remarks
   * This is a generic unconditional DDPM, not a reimplementation of a specific published financial diffusion
     model (e.g. Diffusion-TS, CSDI, TimeGrad); it is labelled "DDPM (own)" in the tables.
   * Default `iters` is a CPU smoke budget; the full-scale runs use the budget in crisisbench/fullscale.py.
-  * Outputs are not clipped.
+  * Fix of 2026-11-18, after the first full-scale run: that run used the epsilon parametrisation.  The cosine
+    schedule ends at alpha_bar = 2.4e-9, so the first DDIM steps divide the denoiser's residual error by
+    sqrt(alpha_bar) ~ 5e-5 and the samples diverged (generated std 780x real; clipping x0 alone still gave 11x
+    in a CPU test).  The x0 parametrisation has no such division at high noise.  The predicted x0 is also
+    clipped to +-c, c = the largest |z-score| in the training windows (data-derived), and eps is recomputed
+    from it; the first run's results were discarded.
 """
 from __future__ import annotations
 
@@ -92,6 +98,7 @@ class Diffusion(Generator):
             raise ValueError(f"Diffusion: {len(tr)} training windows < batch {self.batch}")
         X = torch.as_tensor((data.windows()[tr] - self.mu) / self.sd, dtype=torch.float32).to(DEV)
         self.n_assets = data.n_assets
+        self.clip = float(X.abs().max())
         net = _Denoiser(self.n_assets, P.T, *self.arch).to(DEV)
         ema = copy.deepcopy(net)
         for p in ema.parameters():
@@ -104,7 +111,7 @@ class Diffusion(Generator):
             t = torch.randint(0, self.n_steps, (B,), generator=g).to(DEV)
             eps = torch.randn(x0.shape, generator=g).to(DEV)
             a = ab[t][:, None, None]
-            loss = F.mse_loss(net(a.sqrt() * x0 + (1 - a).sqrt() * eps, t), eps)
+            loss = F.mse_loss(net(a.sqrt() * x0 + (1 - a).sqrt() * eps, t), x0)
             if not torch.isfinite(loss):
                 raise FloatingPointError(f"Diffusion: non-finite loss at iteration {it}")
             opt.zero_grad()
@@ -115,7 +122,7 @@ class Diffusion(Generator):
                 for pe, pn in zip(ema.parameters(), net.parameters()):
                     pe.mul_(self.ema).add_(pn, alpha=1 - self.ema)
             if it % every == 0 or it == self.iters - 1:
-                hist.append(dict(iter=it, loss=float(loss)))
+                hist.append(dict(iter=it, loss=float(loss.detach())))
         self.net = ema.eval()
         self.ab = ab
         return dict(n_train=int(len(tr)), iters=self.iters, sec_per_iter=(time.time() - t0) / max(self.iters, 1),
@@ -132,8 +139,8 @@ class Diffusion(Generator):
             x = torch.as_tensor(rng.standard_normal((b, P.T, self.n_assets)), dtype=torch.float32).to(DEV)
             for j, s in enumerate(steps):
                 a = self.ab[s]
-                eps = self.net(x, torch.full((b,), int(s), device=DEV))
-                x0 = (x - (1 - a).sqrt() * eps) / a.sqrt()
+                x0 = self.net(x, torch.full((b,), int(s), device=DEV)).clamp(-self.clip, self.clip)
+                eps = (x - a.sqrt() * x0) / (1 - a).sqrt()
                 if j + 1 < len(steps):
                     a2 = self.ab[steps[j + 1]]
                     x = a2.sqrt() * x0 + (1 - a2).sqrt() * eps
@@ -148,4 +155,4 @@ class Diffusion(Generator):
     def save(self, path) -> None:
         path = Path(str(path) + ".pt")
         path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(dict(state_dict=self.net.state_dict(), mu=self.mu, sd=self.sd, hparams=self.hparams), path)
+        torch.save(dict(state_dict=self.net.state_dict(), mu=self.mu, sd=self.sd, clip=self.clip, hparams=self.hparams), path)

@@ -240,3 +240,153 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
 - [ ] verify neural baselines; cgnsde test fix; independent review
 - [ ] full queue; risk backtest; DGP validation; final analysis + export
 - [ ] browser check of dashboard; API server; paper + zip; README
+
+## Update 2026-11-17 (evening): pushed to GitHub main
+- Commit 1745f6e on main (author YashO238): all CrisisBench code, results/runs (389 runs), tables, dashboard,
+  paper, cloud runner. artifacts/ and raw vendor downloads are gitignored. Old root docs moved to docs/archive/,
+  new README.md. v0 pipeline folders kept (api/main.py uses models/, training/, data/).
+- Project report draft for the college template: Claude Doc "VORTEX-AI Project Report (Draft)",
+  https://claude.ai/artifact/Js6ybWoJ6LSuCc7euDHgxu (plain-language; Pending items marked).
+- Dashboard: `start_dashboard.bat` (API on 8000 + vite preview on 4173). Rebuild with `cd app; npm run build`
+  after `python -m crisisbench.export_web`.
+
+## Update 2026-11-17 (night): queue running, risk backtest, journal format
+- run_experiments.bat started (5 workers x 2 threads, CPU 97-99%, ~1.8 GB free; Edge + VS Code hold ~4.6 GB).
+  Left at start: v2_markets 16, v2_ablation 39, markets 30, nse_ext 24 (about 109 jobs, roughly 11 h).
+- risk.py: a method whose ES forecast is <= 0 (TimeVAE on every day) gets VaR tests only; Z2/FZ0 = NaN and it is
+  left out of the FZ0 ranking (printed + es_nonpositive_days column in T4). run_risk writes T5/G3 for registered
+  generators and T5_metric_validity_with_v2 / GATE_G3_v2_posthoc / G3_with_v2.json including post hoc rows.
+- analysis.POSTHOC = (cgnsde2, timegan_fs, quantgan_fs, diffusion_fs): in every table, excluded from preregistered
+  H1/G3 verdicts, reported alongside. PRETTY has the _fs labels for the Kaggle results.
+- paper_build: macro names sanitised (digits -> words, e.g. \boostCgnsdeTwo, \verdictHTwovTwoposthoc); new
+  macros heldBoost*, heldScoreC*, rankC*, rankA*, realHeldBoost*, realCovid/Shock/MidBoost*, vTwoCovidBoost,
+  dgp*Rule/Lo/Hi, vOne/vTwo BestEpoch/Epochs/Params.
+- paper/main.tex switched to \documentclass[journal]{IEEEtran} with journal author block.
+- WAITING FOR: user's Kaggle fullscale_results.zip (unzip into project root; it holds results/runs/nse/*_fs and
+  artifacts/...). Then: analysis -> run_risk -> analysis -> export_web -> paper_build; resolve RESULT-DEPENDENT /
+  NEED-MACRO markers in main.tex; update report doc chapter 7; rebuild dashboard; commit as YashO238.
+- 2026-11-17 16:00: skip_gens.txt now also matches market/gen/fit/seedK; seeds 3-4 of laptop-scale QuantGAN/TimeGAN on us/kr full skipped (protocol deviation: 3 seeds for those 4 cells). Estimated finish of the queue about 03:00-04:00 on 18 Nov. User asked whether v1 must appear in the journal paper: recommendation given = keep v1 as one 'initial design' row/paragraph, never call v2 preregistered.
+- 2026-11-17 evening: Edge closed on user's request; 6th worker added via run_experiments_extra.bat (1 worker x 2 threads, --reverse). After a reboot, run_experiments.bat alone is enough (5 workers); add the extra window only if >2 GB RAM is free.
+- 2026-11-18 01:00: overnight extension. New queue stage v2_ablation_held (13 v2 ablations x pre2020 x seeds 0-2 =
+  39 jobs, scored on 2020-24). Restored the 8 skipped GAN seeds (us/kr full seeds 3-4; only kr ones were missing).
+  Still skipped (deviation, state it): QuantGAN/TimeGAN laptop-scale on us/kr pre2020 and on nse_ext.
+  Second run_experiments.bat window started 01:00 (5 workers); expected finish about 08:30-09:30.
+  paper_build tab_ablation uses T2_ablation_nse_full only: add the pre2020 ablation table (T2_ablation_nse_pre2020)
+  to the paper after these runs.
+- 2026-11-18 01:00 IMPORTANT: with all Korea TimeGAN seeds 0-2 in, KR tau(B,C) rose from 0.29 to 0.53, so H4 is
+  not supported, G4 FAIL, and the preregistered KILL criterion (tau >= 0.3 on every market) is TRIGGERED.
+  Frozen consequence: drop the "correlation is not crisis across generators" benchmark-headline framing.
+  Note for the write-up: static models still rank low on family C (iid 8th, t-PPCA 7th); the high tau comes from
+  the weak neural baselines being bad on every family. What survives and should lead the paper: (1) downstream
+  validity: family C predicts VaR/ES quality (tau 0.56 [0.29, 0.78]) while family B does not (-0.07 [-0.38,
+  0.29]); preregistered H3 fails only because the intervals touch at 0.29; (2) CG-NSDE v2 ranks 1/12 on family C
+  in-sample and held-out and 1/11 on the risk backtest (post hoc model). Title must change. Re-check after the
+  two remaining KR GAN seeds and the Kaggle rows. Discuss the reframing with the user before writing.
+
+## Step 0 (crash-prediction idea), 2026-11-18 02:30
+- Prereg docs/step0_prereg.md (1 logged change: daily count capped at K). Code crisisbench/step0.py,
+  results in results/step0/. Data: Kenneth French 49 industries daily 1926-07..2026-09 (data/external/french)
+  + nse_ext panel.
+- Rule verdict: PASS (P1: mean log score cascade -1.46 vs EVT -1.67 vs no-cascade -2.13 over 1025 blocks;
+  P2: 3/3 records: 2008-09 M1 8.8% vs EVT 0.33%; 2020-02 2.6% vs 0.47%; NSE 2020 5e-5 vs 1e-6 floor).
+  F1 FAILED (5-y branching ratio before 2008 and 2020 was BELOW the median: 0.57, 0.72 vs 0.81).
+  F2 passed weakly (decay exponent 0.64 after non-precursor crashes vs 0.10 after precursor ones; 3 vs 7 events).
+- Critical caveat (Claude's reading): the model state at record block starts was 85x (2008) and 40x (2020)
+  the median: the crashes had already begun (Lehman, 24-25 Feb 2020). The win is "amplification given onset",
+  which conditional EVT / GARCH-type forecasts (McNeil-Frey 2000) may also deliver. Not yet evidence for the
+  novel claim. Proposed next (post hoc, to log): state-conditional EVT baseline + lead-time test (forecast one
+  block before the record). Possible reformulation: exogenous onset (unpredictable, EVT) + endogenous
+  amplification (cascade measured on ordinary days). Training branching ratio is near critical (0.93-0.95).
+
+## 2026-11-18 ~04:00 Training finished (all queue stages done 03:44, 0 failures)
+- Watcher ran analysis, export_web, paper_build (184 macros, Overleaf zip rebuilt), dashboard build: all OK.
+- Final verdicts unchanged: H1 no, H2 yes, G1 FAIL, H3 no, G3 FAIL, H4 no (US 0.60, KR 0.53), G4 FAIL, KILL triggered,
+  H5 yes, G2 FAIL. Post hoc v2: H3 supported (0.64 vs 0.09, FZ0 rank 1/11), H2(v2) "not supported" = v2 BEATS the
+  simple regime models (0.15 vs 0.53/0.70; good for us), G1(v2) PASS, G2(v2) FAIL.
+- Held-out ablation (T2_ablation_nse_pre2020, 3 seeds): what matters = per-factor vol (scalar_vol C 0.90 vs 0.74),
+  FHS innovations (param_innov C 0.82, D 1.31), latent SDE (no_sde C 0.79), vol dynamics (no_voldyn A 1.43).
+  GAT / SupCon / graph loss / leverage / K make no held-out difference (no_gat C 0.73). Report honestly.
+- Waiting on: user's answer on Step 0 follow-up checks; Kaggle fullscale_results.zip (tonight).
+
+## 2026-11-18 afternoon: Kaggle merge, diffusion bug, v3 (graph-Hawkes cascade)
+- Kaggle zip (C:\Users\DELL\Downloads\fullscale_results.zip, copy in data/external/kaggle/, gitignored) merged:
+  timegan_fs + quantgan_fs (5 seeds full/pre2020 + yearly refits). TimeGAN at 50k iters still fails (disc 0.99,
+  Gaussian tails); QuantGAN full scale is decent (C rank 3 in-sample, FZ0 rank 2 of generators).
+- diffusion_fs DISCARDED: sampler diverged (std 785x real). Cause: cosine schedule alpha_bar_T = 2.4e-9, epsilon
+  parametrisation divides residual error by 5e-5. Fix in neural_diffusion.py: x0 parametrisation (as Diffusion-TS)
+  + x0 clip to max |train z|. New Kaggle notebook cloud/vortex_diffusion_rerun.ipynb (+ rebuilt vortex_bundle.zip),
+  user must run it (~3 h GPU) and send fullscale_diffusion.zip -> unzip in project root -> analysis pipeline.
+- paper_build: new macros (tau intervals, post hoc taus, contamination counts, risk ranks, held-out ablation),
+  t2_ablation now has in-sample + held-out columns, t4_risk at 97.5% (frozen ranking level).
+- User direction (18 Nov): fix the model/results first, LaTeX last; wants CG-NSDE as a genuinely novel star.
+- v3 = crisisbench/generators/cgnsde3.py: v2 + graph-Hawkes cascade in the log-variance states (tail events
+  e_ti = 1[z_ti < q_i] add kappa_s e_i + kappa_g (A e)_i to idio log-var, kappa_m mean(e) to factor log-vars;
+  A = learnable sparse kNN contagion graph). Motivation: v2 ACF(r^2) 0.075 vs 0.142, held-out COVID boost 22 vs 101,
+  GAT irrelevant in ablation; Step 0 near-critical cascade. POST HOC; dev on pre2020 fit only
+  (results/dev_logs/, results/dev_cgnsde2.jsonl gen=cgnsde3). Queue stages v3_* (81 jobs) added, ORDER starts with v3.
+- crisisbench/figures_extra.py: fan chart (f7), contagion heatmap (f8, needs v3 checkpoint), strategy sandbox +
+  leverage/lead-lag table (f9, T9_sandbox_facts). v2 leverage -0.13 vs real -0.19 (GARCH-FHS -0.02).
+- diffusion x0 fix CPU test (1500 iters): std ratio 1.63 (was 785 / 11): sampler stable; bundle rebuilt, safe to run on Kaggle.
+- v3 DEV RESULTS (pre2020 fit only; real: boost 14.5, acf1_sq 0.101, kurt 3.22, cvar 1.49). v2 ref: val 58.385,
+  acf 0.074, kurt 2.92, boost 21.3. v3 k5 s0/s1: val 58.363/58.348, acf 0.078/0.081, kurt 3.1, boost 24.
+  v3 k10: val 58.346 (best), acf 0.111, kurt 4.43, boost 25.7, cvar 1.94. tail_q 0.025: val 58.389 (worse).
+  In every run kappa_self -> ~0.008 while kappa_graph -> 0.5-1.5: likelihood prefers NEIGHBOUR contagion.
+  FROZEN (before any held-out look): contagion_k = 10, chosen by validation ELBO. no_regime variant added.
+- VORTEX Money consumer app (18 Nov): app/money.html + app/src/money/* (engine.ts maths in browser, screens: Onboarding,
+  Home w/ Money Health score + badges + XP + quiz, Goal planner MC, Crash test + SIP-through-crash + history replay,
+  Diversify calm-vs-crash meter + network, Reality/tip check, Portfolio editor incl. real MF search via mfapi.in).
+  Data: crisisbench/export_money.py -> app/public/money/engine.json (v2 scenarios; growth assumption 10.5%/yr, own
+  stock means removed; stress = worst 5% of 24k generated quarters by EW drawdown). Rerun with --gen cgnsde3 after v3.
+  Launcher start_money.bat (port 4174). Sanity: basket 1y median +10.6% [-8%, +31%]; bold crash bad -25%.
+- VORTEX Money flagship pass (18 Nov evening): backend money_api/app.py (FastAPI: accounts scrypt+HMAC tokens, state
+  sync with version conflict 409, cached mfapi proxy, rate limits, security headers, serves app/dist; tests
+  tests/test_money_api.py 6/6 pass; Dockerfile.money). New screens: Fund X-ray (real NAV: CAGR, worst year, max DD,
+  NAV + drawdown charts, model crash test), Retirement SWP ("will my money last", safe withdrawal), behaviour-gap
+  replay (2020 panic sell) in Crash, chance-vs-SIP bars + outcome histogram in Goal, missions/streak/health history/
+  share card/level titles/toasts/level-up in Home+App, account sync sheet, mobile More menu, brand (mark, icons,
+  og.png, manifest, docs/brand.md), motion polish. start_money.bat now runs the backend on :8100.
+- v3 HELD-OUT RESULTS (18 Nov 18:15; T2_ablation_v3_nse_pre2020, 3 seeds; v3 main 5 seeds): C / A
+  v2 0.742/1.211; v3 0.676/0.964; no_cascade 0.732/1.210; no_graph_cascade 0.746/1.212 (graph contagion carries the
+  whole gain); no_mkt_cascade 0.730/1.160; uniform_graph 0.683/1.096 (which neighbours matters for A, not C);
+  no_gat 0.672/0.906 (GAT encoder irrelevant); no_supcon 0.695/1.032; scalar_vol 0.898/1.383;
+  no_regime 0.638/0.878 (LABEL-FREE IS BEST held-out). In-sample v3 A 0.41 (v2 0.73), C 0.165 (v2 0.145).
+  Do NOT promote no_regime on held-out evidence (test-set selection). Confirmatory test to pre-register: no_regime vs
+  full v3 on us/kr pre2020 held-out family C, 3 seeds; prediction: no_regime <= full on both.
+- App now on v3 scenarios: bold-mix severe-crash bad case -30% (v2 -25%; real COVID for the same mix -31%); stress pool worst-5% EW drawdown median -41%.
+
+## 2026-11-18 ~22:30 ALL RUNS FINAL (87 v3 jobs + 6 confirmatory + diffusion_fs merged; 0 failures)
+- CONFIRMATORY TEST FAILED: no_regime vs full v3, held-out C: us 0.602 vs 0.647 (pass, within noise), kr 0.518 vs
+  0.445 (FAIL, ~3 sd worse). "Crises emerge without labels" is NOT established; report as non-replicating.
+- Held-out C (pre2020): nse v3 0.68 (best) > v2 0.74 > dcc 0.87; kr v3 0.44 (best) > boot 0.47 > v2 0.50;
+  us v2 0.43 (best) > boot 0.65 = v3 0.65. In-sample C: nse v2 0.15, v3 0.16, boot 0.19; us boot 0.28, v3 0.33;
+  kr boot 0.13, reg-G 0.45, v3 0.54.
+- Risk FZ0 97.5 EW: GARCH-FHS benchmark -3.495, v3 -3.381 (best generator), v2 -3.343, QuantGAN-GPU -3.259.
+- Metric validity with all 15 incl post hoc: tau C 0.68 [0.45,0.83], D 0.75, A 0.52, B 0.31 [-0.01,0.50]:
+  G3-with-posthoc now FAIL (overlap). Registered 10: C 0.56 [0.29,0.78], B -0.07 [-0.38,0.29] (FAIL, touch).
+- diffusion_fs (x0-param fix): std 2.3x, corr_fro 21, kurt 9.3, boost 24 (in band), disc 0.95.
+- Next: rewrite paper/main.tex on frozen results (title/abstract reframed), project report, commit + push.
+- 18 Nov late: paper/main.tex rewritten on final results (all numbers via macros; 399 macros; refs added); compile
+  not verified locally (running a downloaded TeX binary was blocked) -> user compiles the Overleaf zip.
+  README rewritten; project report doc updated (status, acceptance table incl. H4/G4 now FAIL, v3 in 6.5, new 6.8
+  VORTEX Money, chapter 7 final results, abstract, future work). app/public/money/engine.json gitignored
+  (vendor-derived real returns). Commit + push NOT done: blocked by permission classifier, awaiting user approval.
+
+## 2026-11-18 ~22:45 STRONG BASELINES (user: "make a strong baseline", per research plan sec. 4 + masterplan I.9/I.12)
+- crisisbench/generators/classical_strong.py (post hoc rows): gjr_evt_tcopula (GJR-GARCH-t + GPD-tail margins +
+  t copula, McNeil-Frey/Demarta-McNeil), adcc_gjr (Cappiello-Engle-Sheppard asymmetric DCC, FHS innovations),
+  rs_tcopula (2-state HMM on EW return; per-state t copula AND per-state margins -> common vol + corr switching).
+  Smoke (nse full): rs_tcopula boost 32.5 (real 29.3), cvar 2.24 (2.20) -> genuinely strong. Queue stage "strong"
+  (90 jobs, run_strong.bat); watcher b9unsoobo reruns analysis/run_risk/export/paper_build when done.
+- Official Diffusion-TS (ICLR 2024): cloud/dts_driver.py (authors' classes + energy.yaml config, seq 60, 47 feats,
+  25k steps, 1000 sampling steps), cloud/vortex_diffusion_ts.ipynb (smoke test first), bundle rebuilt;
+  crisisbench/generators/external.py scores the official samples; queue stage "dts" (14 jobs) after the user's
+  Kaggle run returns diffusion_ts_results.zip -> unzip into project root -> queue --stage dts -> pipeline.
+  Local pip install / running third-party code was blocked by the permission classifier (so no local smoke test).
+- STRONG BASELINE RESULTS (90/90 ok): held-out C nse v3 0.68 (best) > v2 0.74 > dcc 0.87 > adcc/rs/garch/boot 0.92;
+  kr rs_tcopula 0.43 vs v3 0.44 (tie) ; us v2 0.43 > rs 0.50 > boot/v3 0.65. In-sample nse rs 0.49, adcc 0.60.
+  Risk FZ0: GARCH bench, v3, v2, rs_tcopula (3rd gen), QuantGAN-GPU, DCC, ADCC, GARCH-FHS, GJR-EVT-tcop.
+  Metric validity (18 gens): C 0.67, D 0.74, A 0.57, B 0.23. Paper/README corrected (no "best in Korea").
+- 19 Nov: official Diffusion-TS merged (4 zips; smoke output had overwritten full/seed0 -> discarded; driver fixed to
+  write smoke to _smoke/). Valid: full seeds 1-3, pre2020 seeds 0-3 (2000 windows each, stocks config, GPU,
+  10k steps). Result: std 0.67-0.71x real, crisis windows 0.6-0.75% (real 15%) -> crisis metrics not produced,
+  family C ~7.1 (bottom), family B 0.86 (decent), disc 0.93. Paper generators + results text updated.

@@ -1,0 +1,19 @@
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+Model & Corr. err. & Boost \% & CVaR ratio & Tail co-ex. & Kurt. & ACF$(r^2)$ & Disc. & $S_A$ & $S_B$ & $S_C$ & $S_D$ \\
+\midrule
+Real (95\% band) & $\le$4.47 & nan [nan, nan] & nan [nan, nan] & 0.214 [0.130, 0.262] & 2.81 [1.77, 3.20] & 0.087 [0.067, 0.099] & 0.77 [0.50, 0.88] & -- & -- & -- & -- \\
+\midrule
+i.i.d. Gaussian & \textbf{3.96} & 2.8 & 1.15 & \textbf{0.132} & -0.00 & 0.000 & 0.95 & 2.81 & 0.63 & nan & 0.97 \\
+Static t-PPCA & \textbf{4.20} & 2.3 & 1.26 & \textbf{0.176} & 1.03 & 0.000 & 0.89 & 2.57 & \underline{0.56} & nan & 0.86 \\
+Stationary bootstrap & \textbf{3.96} & 22.0 & 2.20 & \textbf{0.204} & 6.20 & 0.136 & \textbf{0.64} & 2.94 & 0.62 & nan & 0.58 \\
+GARCH-t FHS & \textbf{4.30} & 16.0 & 1.58 & \textbf{0.176} & 6.44 & 0.117 & \textbf{0.79} & 2.46 & 1.00 & nan & 0.67 \\
+DCC-GARCH-t & \textbf{4.31} & 8.5 & 1.66 & \textbf{0.186} & 7.57 & 0.121 & \textbf{0.81} & 2.60 & 0.99 & nan & 0.78 \\
+Regime Gaussian & \textbf{3.97} & 10.6 & 1.55 & \textbf{0.195} & 0.54 & 0.056 & 0.92 & 1.76 & 0.62 & nan & 0.99 \\
+Gaussian HMM & \textbf{3.97} & 4.5 & 1.34 & \textbf{0.194} & 0.88 & 0.051 & 0.92 & 1.79 & 0.62 & nan & 0.88 \\
+TimeVAE & 13.18 & n/p & n/p & 0.076 & -0.92 & 0.017 & 1.00 & 4.03 & 3.64 & \underline{7.20} & 5.41 \\
+CG-NSDE v1 (preregistered) & 4.55 & 4.1 & 1.28 & \textbf{0.200} & 1.53 & 0.010 & 0.92 & 2.52 & 0.89 & nan & 2.05 \\
+CG-NSDE v2 (ours, post hoc) & \textbf{4.17} & 29.6 & 1.88 & \textbf{0.213} & 4.36 & \textbf{0.074} & \textbf{0.53} & \underline{1.23} & 0.71 & nan & 0.59 \\
+CG-NSDE v3 (ours, post hoc) & \textbf{4.15} & 32.2 & 2.18 & \textbf{0.216} & 5.83 & 0.112 & \textbf{0.53} & 2.08 & 0.67 & nan & \underline{0.51} \\
+\bottomrule
+\end{tabular}

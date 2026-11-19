@@ -1,0 +1,272 @@
+{
+  "main": {
+    "metrics": {
+      "std_ratio": {
+        "value": 1.2567852770989516,
+        "err": 2.1916692167805083,
+        "inside": false,
+        "produced": true
+      },
+      "corr_fro": {
+        "value": 3.9582503617211646,
+        "err": 0.8849321108781225,
+        "inside": true,
+        "produced": true
+      },
+      "corr_mae": {
+        "value": 0.06574870275450832,
+        "err": 0.85431556742686,
+        "inside": true,
+        "produced": true
+      },
+      "eig_dist": {
+        "value": 0.20982097381466971,
+        "err": 0.5993052959728417,
+        "inside": true,
+        "produced": true
+      },
+      "kurt_med": {
+        "value": 0.5056265957222892,
+        "err": 3.2197099306937402,
+        "inside": false,
+        "produced": true
+      },
+      "acf1_ret": {
+        "value": 0.0074491009285623695,
+        "err": 1.0101288436123557,
+        "inside": true,
+        "produced": true
+      },
+      "acf1_sq": {
+        "value": 0.05690624510775193,
+        "err": 1.8883392558545704,
+        "inside": false,
+        "produced": true
+      },
+      "acf5_sq_mean": {
+        "value": 0.033212694491501875,
+        "err": 1.5734992743011365,
+        "inside": false,
+        "produced": true
+      },
+      "skew_ew": {
+        "value": -0.35554441467254366,
+        "err": 0.6435088783664694,
+        "inside": true,
+        "produced": true
+      },
+      "pc1_share": {
+        "value": 0.29173180087447215,
+        "err": 0.14420410471871065,
+        "inside": true,
+        "produced": true
+      },
+      "crisis_freq": {
+        "value": 0.148,
+        "err": 10.0,
+        "inside": false,
+        "produced": true
+      },
+      "tail_coexc": {
+        "value": 0.19406429232192415,
+        "err": 0.30717720053810504,
+        "inside": true,
+        "produced": true
+      },
+      "boost_pct": {
+        "value": 9.989718290778937,
+        "err": NaN,
+        "inside": false,
+        "produced": true
+      },
+      "cvar_ratio": {
+        "value": 1.5490537870805863,
+        "err": NaN,
+        "inside": false,
+        "produced": true
+      },
+      "pc1_share_gap": {
+        "value": 0.027416073090360094,
+        "err": NaN,
+        "inside": false,
+        "produced": true
+      },
+      "connect_gap": {
+        "value": 0.025439628042525725,
+        "err": NaN,
+        "inside": false,
+        "produced": true
+      },
+      "disc_feat": {
+        "value": 0.8962025316455696,
+        "err": 1.0492536010475775,
+        "inside": false,
+        "produced": true
+      },
+      "disc_raw": {
+        "value": 0.5443037974683544,
+        "err": 0.8451801363193778,
+        "inside": true,
+        "produced": true
+      }
+    },
+    "family": {
+      "A": 1.754475899934797,
+      "B": 0.6206892697491337,
+      "C": NaN,
+      "D": 0.9472168686834777
+    }
+  },
+  "alt_rule": {
+    "metrics": {
+      "std_ratio": {
+        "value": 1.2567852770989516,
+        "err": 2.1916692167805083,
+        "inside": false,
+        "produced": true
+      },
+      "corr_fro": {
+        "value": 3.9582503617211646,
+        "err": 0.8849321108781225,
+        "inside": true,
+        "produced": true
+      },
+      "corr_mae": {
+        "value": 0.06574870275450832,
+        "err": 0.85431556742686,
+        "inside": true,
+        "produced": true
+      },
+      "eig_dist": {
+        "value": 0.20982097381466971,
+        "err": 0.5993052959728417,
+        "inside": true,
+        "produced": true
+      },
+      "kurt_med": {
+        "value": 0.5056265957222892,
+        "err": 3.2197099306937402,
+        "inside": false,
+        "produced": true
+      },
+      "acf1_ret": {
+        "value": 0.0074491009285623695,
+        "err": 1.0101288436123557,
+        "inside": true,
+        "produced": true
+      },
+      "acf1_sq": {
+        "value": 0.05690624510775193,
+        "err": 1.8883392558545704,
+        "inside": false,
+        "produced": true
+      },
+      "acf5_sq_mean": {
+        "value": 0.033212694491501875,
+        "err": 1.5734992743011365,
+        "inside": false,
+        "produced": true
+      },
+      "skew_ew": {
+        "value": -0.35554441467254366,
+        "err": 0.6435088783664694,
+        "inside": true,
+        "produced": true
+      },
+      "pc1_share": {
+        "value": 0.29173180087447215,
+        "err": 0.14420410471871065,
+        "inside": true,
+        "produced": true
+      },
+      "crisis_freq": {
+        "value": 0.1945,
+        "err": 0.9020666666666667,
+        "inside": false,
+        "produced": true
+      },
+      "tail_coexc": {
+        "value": 0.19406429232192415,
+        "err": 0.30717720053810504,
+        "inside": true,
+        "produced": true
+      },
+      "boost_pct": {
+        "value": 22.840282272692743,
+        "err": 0.5960667040653329,
+        "inside": true,
+        "produced": true
+      },
+      "cvar_ratio": {
+        "value": 1.872124668291209,
+        "err": 0.4098504711771138,
+        "inside": true,
+        "produced": true
+      },
+      "pc1_share_gap": {
+        "value": 0.06003244664078522,
+        "err": 0.8387936951479213,
+        "inside": true,
+        "produced": true
+      },
+      "connect_gap": {
+        "value": 0.05791213252525999,
+        "err": 0.8334665749666431,
+        "inside": true,
+        "produced": true
+      }
+    },
+    "family": {
+      "A": 1.754475899934797,
+      "B": 0.6206892697491337,
+      "C": 0.6479035520936305
+    }
+  },
+  "n_gen": 2000,
+  "n_gen_crisis": 296,
+  "market": "nse_ext",
+  "generator": "regime_gaussian",
+  "base_generator": "regime_gaussian",
+  "fit": "upto2024",
+  "seed": 1,
+  "family_tag": "regime",
+  "impl_source": "own",
+  "train_minutes": 0.001146392027537028,
+  "sample_seconds": 0.5029768943786621,
+  "fit_days": 3483,
+  "fit_first": "2010-11-15",
+  "fit_last": "2024-12-31",
+  "ref_windows": 395,
+  "hparams": {},
+  "info": {
+    "days_normal": 2910,
+    "days_crisis": 573,
+    "shrink_weight": [
+      1.0,
+      1.0
+    ],
+    "shrunk": [
+      false,
+      false
+    ],
+    "trans": [
+      [
+        0.9556548642145067,
+        0.044345135785493296
+      ],
+      [
+        0.2268760907504363,
+        0.7731239092495636
+      ]
+    ],
+    "stationary_crisis": 0.16350171537779226,
+    "n_crisis_spells": 130
+  },
+  "protocol_version": "1.0.0",
+  "conditional": {
+    "mac_crisis": 0.3716459584523119,
+    "mac_normal": 0.22041972867016443,
+    "boost_pct": 68.60830048858378,
+    "note": "labels REQUESTED from the generator, not derived from its output"
+  }
+}

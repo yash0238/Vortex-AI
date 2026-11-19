@@ -8,7 +8,7 @@ out = ROOT / "cloud" / "vortex_bundle.zip"
 files = [p for p in (ROOT / "crisisbench").rglob("*.py")]
 files += [p for p in (ROOT / "data" / "panels" / "nse").iterdir() if p.is_file()]
 files += list((ROOT / "artifacts" / "reference" / "nse").glob("*.pkl"))
-files += [ROOT / "data" / "node_features.py"]
+files += [ROOT / "data" / "node_features.py", ROOT / "cloud" / "dts_driver.py"]
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for p in files:
         z.write(p, Path("vortex") / p.relative_to(ROOT))

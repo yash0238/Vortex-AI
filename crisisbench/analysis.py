@@ -32,7 +32,16 @@ PRETTY = {
     "garch_fhs": "GARCH-t FHS", "dcc_garch": "DCC-GARCH-t", "regime_gaussian": "Regime Gaussian",
     "hmm_gaussian": "Gaussian HMM", "timevae": "TimeVAE", "quantgan": "QuantGAN", "timegan": "TimeGAN",
     "cgnsde": "CG-NSDE v1 (preregistered)", "cgnsde2": "CG-NSDE v2 (ours, post hoc)",
+    # full-scale GPU runs (crisisbench/fullscale.py), added after the protocol was frozen
+    "timegan_fs": "TimeGAN (full scale, GPU)", "quantgan_fs": "QuantGAN (full scale, GPU)",
+    "diffusion_fs": "DDPM diffusion (GPU)",
+    "cgnsde3": "CG-NSDE v3 (ours, post hoc)",
+    # strong classical baselines added after the freeze (crisisbench/generators/classical_strong.py)
+    "gjr_evt_tcopula": "GJR-EVT t-copula", "adcc_gjr": "ADCC-GJR (FHS)", "rs_tcopula": "Regime-switching t-copula",
+    "diffusion_ts": "Diffusion-TS (official code, GPU)",
 }
+# Rows added after the protocol was frozen: reported in every table, left out of the preregistered verdicts.
+POSTHOC = ("cgnsde2", "cgnsde3", "timegan_fs", "quantgan_fs", "diffusion_fs", "gjr_evt_tcopula", "adcc_gjr", "rs_tcopula", "diffusion_ts")
 MAIN = list(PRETTY)
 REGIME_AWARE = ("regime_gaussian", "hmm_gaussian", "cgnsde")
 
@@ -42,6 +51,8 @@ def pretty(g: str) -> str:
         return PRETTY[g]
     if g.startswith("cgnsde2@"):
         return "CG-NSDE v2 / " + g.split("@")[1]
+    if g.startswith("cgnsde3@"):
+        return "CG-NSDE v3 / " + g.split("@")[1]
     if g.startswith("cgnsde@"):
         return "CG-NSDE v1 / " + g.split("@")[1]
     return g
@@ -262,8 +273,8 @@ def run_all() -> dict:
             save(t, f"T1_{mk}_{fit}", table_md(t, ref, title))
             # H1 was preregistered on the registered generators: the post hoc v2 is left out of the headline tau
             # and the value with v2 is reported next to it.
-            tau_bc = family_tau(df, mk, fit, [g for g in gens if g != "cgnsde2"], "B", "C")
-            tau_bc_v2 = family_tau(df, mk, fit, gens, "B", "C") if "cgnsde2" in gens else {}
+            tau_bc = family_tau(df, mk, fit, [g for g in gens if g not in POSTHOC], "B", "C")
+            tau_bc_v2 = family_tau(df, mk, fit, gens, "B", "C") if any(g in gens for g in POSTHOC) else {}
             taus ={f"{a}_vs_{b}": family_tau(df, mk, fit, gens, a, b, n_boot=500)
                     for a, b in combinations(FAMILIES, 2)}
             metric_tau_matrix(t).to_csv(TABLES / f"F2_metric_tau_{mk}_{fit}.csv")
@@ -281,16 +292,19 @@ def run_all() -> dict:
                 summary[f"G1/{fit}"] = dict(verdict=verdict, **body)
                 write_gate(f"GATE_G1_{fit}", verdict, body,
                            f"Evaluated on market nse, fit '{fit}', {len(gens)} generators.")
-                if "cgnsde2" in set(t.generator):
-                    verdict2, body2 = gate_g1(t, tau_bc, "cgnsde2")
-                    summary[f"G1v2/{fit}"] = dict(verdict=verdict2, **body2)
-                    write_gate(f"GATE_G1_{fit}_v2_posthoc", verdict2, body2,
-                               f"POST HOC: same gate evaluated for CG-NSDE v2. Market nse, fit '{fit}'.")
-            abl = [g for g in sorted(set(df[(df.market == mk) & (df.fit == fit)].generator))
-                   if g == "cgnsde2" or g.startswith("cgnsde2@")]
-            if len(abl) > 1:
-                ta = main_table(df, mk, fit, abl)
-                save(ta, f"T2_ablation_{mk}_{fit}", table_md(ta, ref, f"CG-NSDE ablations, market {mk}, fit '{fit}'"))
+                for mv, vt in (("cgnsde2", "v2"), ("cgnsde3", "v3")):
+                    if mv in set(t.generator):
+                        verdict2, body2 = gate_g1(t, tau_bc, mv)
+                        summary[f"G1{vt}/{fit}"] = dict(verdict=verdict2, **body2)
+                        write_gate(f"GATE_G1_{fit}_{vt}_posthoc", verdict2, body2,
+                                   f"POST HOC: same gate evaluated for CG-NSDE {vt}. Market nse, fit '{fit}'.")
+            for mv, suffix in (("cgnsde2", ""), ("cgnsde3", "_v3")):
+                abl = [g for g in sorted(set(df[(df.market == mk) & (df.fit == fit)].generator))
+                       if g == mv or g.startswith(mv + "@")]
+                if len(abl) > 1:
+                    ta = main_table(df, mk, fit, abl)
+                    save(ta, f"T2_ablation{suffix}_{mk}_{fit}",
+                         table_md(ta, ref, f"CG-NSDE {mv[-2:]} ablations, market {mk}, fit '{fit}'"))
     from .analysis_extra import contamination_table, heldout_table, hypotheses
     g2 = None
     if "nse/pre2020" in summary:

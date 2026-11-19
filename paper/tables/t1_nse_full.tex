@@ -6,10 +6,23 @@ Real (95\% band) & $\le$2.59 & 29.3 [7.9, 56.6] & 2.20 [1.27, 3.36] & 0.206 [0.1
 \midrule
 i.i.d. Gaussian & \textbf{0.15} & 2.7 & 1.15 & 0.132 & -0.00 & 0.000 & 1.00 & 1.59 & 0.04 & 1.03 & 3.74 \\
 Static t-PPCA & \textbf{1.62} & 2.2 & 1.27 & \textbf{0.176} & 1.03 & 0.000 & 0.95 & 1.52 & 0.43 & 0.91 & 3.48 \\
-Stationary bootstrap & \textbf{0.21} & \textbf{21.5} & \textbf{2.18} & \textbf{0.205} & \textbf{6.18} & \textbf{0.135} & \textbf{0.40} & \underline{0.12} & 0.06 & \underline{0.19} & \underline{0.00} \\
+Stationary bootstrap & \textbf{0.21} & \textbf{21.5} & \textbf{2.18} & \textbf{0.205} & \textbf{6.18} & \textbf{0.135} & \textbf{0.40} & \underline{0.12} & 0.06 & 0.19 & \underline{0.00} \\
 GARCH-t FHS & \textbf{2.10} & \textbf{16.6} & \textbf{1.62} & \textbf{0.177} & \textbf{6.73} & \textbf{0.118} & 0.74 & 0.30 & 0.83 & 0.55 & 1.45 \\
 DCC-GARCH-t & \textbf{1.97} & \textbf{8.6} & \textbf{1.64} & \textbf{0.187} & \textbf{7.84} & \textbf{0.118} & 0.92 & 0.52 & 0.78 & 0.63 & 1.52 \\
 Regime Gaussian & \textbf{0.16} & \textbf{10.6} & \textbf{1.55} & \textbf{0.195} & 0.53 & 0.056 & 0.95 & 1.19 & 0.04 & 0.53 & 3.03 \\
 Gaussian HMM & \textbf{0.16} & 4.8 & \textbf{1.33} & \textbf{0.194} & 0.89 & 0.051 & 0.96 & 1.25 & \underline{0.03} & 0.70 & 3.32 \\
+TimeVAE & 12.50 & n/p & n/p & 0.073 & -0.93 & 0.007 & 1.00 & 3.44 & 4.50 & 7.56 & 6.64 \\
+QuantGAN & 5.00 & 3.3 & \textbf{1.31} & 0.126 & \textbf{5.39} & 0.002 & 0.86 & 1.37 & 1.38 & 1.09 & 6.20 \\
+TimeGAN & 33.22 & n/p & n/p & 0.836 & -0.30 & 0.314 & 1.00 & 3.34 & 10.00 & 8.79 & 6.64 \\
+CG-NSDE v1 (preregistered) & \textbf{2.15} & 3.9 & \textbf{1.29} & \textbf{0.199} & 1.53 & 0.010 & 0.93 & 1.71 & 0.79 & 1.22 & 5.98 \\
+CG-NSDE v2 (ours, post hoc) & \textbf{1.04} & \textbf{29.1} & \textbf{1.85} & \textbf{0.212} & \textbf{4.46} & 0.075 & \textbf{0.55} & 0.73 & 0.31 & \underline{0.15} & 0.15 \\
+TimeGAN (full scale, GPU) & 11.70 & 2.0 & 1.09 & 0.132 & 0.05 & 0.034 & 0.99 & 2.08 & 3.04 & 3.49 & 6.62 \\
+QuantGAN (full scale, GPU) & 2.83 & \textbf{26.7} & \textbf{2.64} & \textbf{0.177} & 161.27 & 0.020 & 0.81 & 3.42 & 0.90 & 0.52 & 2.48 \\
+DDPM diffusion (GPU) & 21.14 & \textbf{23.8} & \textbf{2.74} & 0.682 & 9.33 & 0.033 & 0.95 & 2.90 & 8.87 & 3.62 & 6.49 \\
+CG-NSDE v3 (ours, post hoc) & \textbf{0.98} & \textbf{33.8} & \textbf{2.22} & \textbf{0.220} & \textbf{7.16} & \textbf{0.116} & \textbf{0.55} & 0.41 & 0.25 & 0.16 & 0.19 \\
+GJR-EVT t-copula & \textbf{2.08} & \textbf{8.7} & \textbf{1.46} & 0.132 & \textbf{6.85} & \textbf{0.127} & 0.84 & 0.42 & 0.79 & 0.97 & 2.18 \\
+ADCC-GJR (FHS) & \textbf{2.36} & \textbf{16.0} & \textbf{1.64} & \textbf{0.173} & \textbf{6.95} & \textbf{0.122} & 0.71 & 0.30 & 0.94 & 0.60 & 0.86 \\
+Regime-switching t-copula & \textbf{2.16} & \textbf{30.2} & \textbf{2.15} & \textbf{0.175} & 12.61 & \textbf{0.174} & 0.81 & 1.11 & 0.67 & 0.49 & 1.54 \\
+Diffusion-TS (official code, GPU) & 2.93 & n/p & n/p & \textbf{0.205} & 2.62 & \textbf{0.163} & 0.93 & 1.28 & 0.86 & 7.11 & 6.03 \\
 \bottomrule
 \end{tabular}

@@ -1,0 +1,20 @@
+timevae/equal_weight/0.95: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+timevae/equal_weight/0.975: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+timevae/equal_weight/0.99: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+timevae/dirichlet_seed7/0.95: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+timevae/dirichlet_seed7/0.975: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+timevae/dirichlet_seed7/0.99: ES forecast <= 0 on 1238 days; Z2 and FZ0 undefined, method left out of the FZ0 ranking
+--- T5 (10 generators)
+     key          label   kind       tau        lo       hi  n_generators
+family_A Family A score family  0.644444  0.377778 0.822222            10
+family_B Family B score family -0.066667 -0.377778 0.288889            10
+family_C Family C score family  0.555556  0.288889 0.777778            10
+family_D Family D score family  0.600000  0.244444 0.777778            10
+G3: FAIL
+--- T5_with_v2 (11 generators)
+     key          label   kind      tau        lo       hi  n_generators
+family_A Family A score family 0.636364  0.418182 0.781818            11
+family_B Family B score family 0.090909 -0.163636 0.381818            11
+family_C Family C score family 0.636364  0.418182 0.818182            11
+family_D Family D score family 0.672727  0.381818 0.818182            11
+G3_with_v2: PASS

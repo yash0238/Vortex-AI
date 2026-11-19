@@ -10,15 +10,22 @@
   "G1": {
     "verdict": "FAIL"
   },
+  "H3": {
+    "verdict": "not supported",
+    "evidence": "tau(crisis family, backtest rank) = 0.56 [0.29, 0.78]; tau(correlation family, backtest rank) = -0.07 [-0.38, 0.29]"
+  },
+  "G3": {
+    "verdict": "FAIL"
+  },
   "H4": {
-    "verdict": "supported",
-    "evidence": "US: tau(B,C) = 0.60 [0.56, 0.64]; KR: tau(B,C) = 0.29 [0.21, 0.29]"
+    "verdict": "not supported",
+    "evidence": "US: tau(B,C) = 0.60 [0.56, 0.64]; KR: tau(B,C) = 0.53 [0.45, 0.53]"
   },
   "G4": {
-    "verdict": "PASS"
+    "verdict": "FAIL"
   },
   "KILL": {
-    "verdict": "not triggered"
+    "verdict": "triggered"
   },
   "H5": {
     "verdict": "supported",
@@ -27,6 +34,10 @@
   "G2": {
     "verdict": "FAIL",
     "evidence": "CG-NSDE v1 boost inside the real episode interval on 0 of 2 episodes"
+  },
+  "H3 (with v2, post hoc)": {
+    "verdict": "not supported",
+    "evidence": "tau(crisis family, backtest rank) = 0.67 [0.44, 0.78]; tau(correlation family, backtest rank) = 0.23 [-0.05, 0.46]; CG-NSDE v2 FZ0 rank 2 of 18"
   },
   "H2 (v2, post hoc)": {
     "verdict": "not supported",

@@ -1,0 +1,54 @@
+{
+  "tau_C": 0.673202614379085,
+  "ci_C": [
+    0.4379084967320262,
+    0.7777777777777779
+  ],
+  "tau_B": 0.22875816993464054,
+  "ci_B": [
+    -0.045751633986928116,
+    0.46405228758169936
+  ],
+  "rank_basis": "mean FZ0, level 0.975, equal_weight",
+  "generators": [
+    "iid_gaussian",
+    "t_ppca",
+    "stationary_bootstrap",
+    "garch_fhs",
+    "dcc_garch",
+    "regime_gaussian",
+    "hmm_gaussian",
+    "quantgan",
+    "timegan",
+    "cgnsde",
+    "cgnsde2",
+    "timegan_fs",
+    "quantgan_fs",
+    "diffusion_fs",
+    "cgnsde3",
+    "gjr_evt_tcopula",
+    "adcc_gjr",
+    "rs_tcopula"
+  ],
+  "H3_holds": false,
+  "fz0_rank": {
+    "iid_gaussian": 15,
+    "t_ppca": 14,
+    "stationary_bootstrap": 9,
+    "garch_fhs": 7,
+    "dcc_garch": 5,
+    "regime_gaussian": 12,
+    "hmm_gaussian": 11,
+    "quantgan": 17,
+    "timegan": 13,
+    "cgnsde": 10,
+    "cgnsde2": 2,
+    "timegan_fs": 18,
+    "quantgan_fs": 4,
+    "diffusion_fs": 16,
+    "cgnsde3": 1,
+    "gjr_evt_tcopula": 8,
+    "adcc_gjr": 6,
+    "rs_tcopula": 3
+  }
+}

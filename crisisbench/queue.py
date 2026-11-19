@@ -60,15 +60,47 @@ def stages() -> dict[str, list[dict]]:
                        + [J(m, v2, "pre2020", k) for m in ("us", "kr") for k in (0, 1, 2)]
                        + [J("nse_ext", v2, "upto2024", k) for k in (0, 1, 2)])
     s["v2_ablation"] = [J("nse", g, "full", k) for g in ABLATIONS_V2 for k in (0, 1, 2)]
+    # added 2026-11-18: the same ablations trained to 2019 and scored on the 2020-24 held-out period
+    s["v2_ablation_held"] = [J("nse", g, "pre2020", k) for g in ABLATIONS_V2 for k in (0, 1, 2)]
+    # CG-NSDE v3 (post hoc, graph-Hawkes cascade, see generators/cgnsde3.py): same grid as v2
+    v3 = "cgnsde3"
+    s["v3_main"] = [J("nse", v3, f, k, risk=(f == "pre2020" and k == 0)) for k in P.SEEDS for f in P.FITS]
+    s["v3_risk"] = [J("nse", v3, f, 0, risk=True) for f in RISK_REFITS]
+    s["v3_ablation_held"] = [J("nse", g, "pre2020", k) for g in ABLATIONS_V3 for k in (0, 1, 2)]
+    s["v3_markets"] = ([J(m, v3, "full", k) for m in ("us", "kr") for k in P.SEEDS]
+                       + [J(m, v3, "pre2020", k) for m in ("us", "kr") for k in (0, 1, 2)]
+                       + [J("nse_ext", v3, "upto2024", k) for k in (0, 1, 2)])
+    s["v3_ablation"] = [J("nse", g, "full", k) for g in ABLATIONS_V3 for k in (0, 1, 2)]
+    # Confirmatory test, pre-registered 2026-11-18 18:15 (docs/STATE.md) before any us/kr v3 result was looked at:
+    # label-free v3 (no_regime) has a held-out family-C score <= full v3 on BOTH us and kr (pre2020, seeds 0-2).
+    s["v3_confirm"] = [J(m, "cgnsde3@no_regime", "pre2020", k) for m in ("us", "kr") for k in (0, 1, 2)]
+    # strong classical baselines (post hoc, 18 Nov): same grid as the registered generators
+    SG = ("rs_tcopula", "adcc_gjr", "gjr_evt_tcopula")
+    s["strong"] = ([J("nse", g, f, k, risk=(f == "pre2020" and k == 0)) for g in SG for k in P.SEEDS for f in P.FITS]
+                   + [J("nse", g, f, 0, risk=True) for g in SG for f in RISK_REFITS]
+                   + [J(m, g, "full", k) for m in ("us", "kr") for g in SG for k in P.SEEDS]
+                   + [J(m, g, "pre2020", k) for m in ("us", "kr") for g in SG for k in (0, 1, 2)])
+    # official Diffusion-TS samples (cloud/dts_driver.py on a GPU), scored locally
+    # only the runs whose samples exist; a risk pool only where 22000 windows were generated
+    def _dts(f, k):
+        p = ARTIFACTS / "external" / "diffusion_ts" / "nse" / f / f"seed{k}.npy"
+        if not p.exists():
+            return None
+        import numpy as _np
+        n = _np.load(p, mmap_mode="r").shape[0]
+        return J("nse", "diffusion_ts", f, k, risk=(n >= 22000 and (f != "full")))
+    s["dts"] = [j for j in ([_dts(f, k) for k in P.SEEDS for f in P.FITS] + [_dts(f, 0) for f in RISK_REFITS]) if j]
     return s
 
 
+ABLATIONS_V3 = ["cgnsde3@" + v for v in ("no_regime", "no_cascade", "no_graph_cascade", "no_mkt_cascade", "uniform_graph", "no_gat",
+                                         "no_supcon", "no_sde", "scalar_vol")]
 ABLATIONS_V2 = ["cgnsde2@" + v for v in ("no_gat", "no_supcon", "no_graph_loss", "no_sde", "scalar_vol", "no_voldyn",
                                          "no_leverage", "gauss", "param_innov", "beta01", "K1", "K4", "K16")]
 # v1 ablations are dropped (v1 stopped at epoch 2, its ablations are uninformative); `results/skip_gens.txt`
 # makes already-running queue processes skip them too.
-ORDER = ["v2_main", "v2_risk", "v2_markets", "v2_ablation", "nse_main", "nse_risk", "markets", "nse_ext",
-         "contamination", "sim"]
+ORDER = ["strong", "v3_main", "v3_risk", "v3_ablation_held", "v3_markets", "v3_ablation", "v3_confirm", "v2_main", "v2_risk", "v2_markets", "v2_ablation", "markets", "v2_ablation_held", "nse_main", "nse_risk",
+         "nse_ext", "contamination", "sim"]
 
 
 def done(j: dict) -> bool:

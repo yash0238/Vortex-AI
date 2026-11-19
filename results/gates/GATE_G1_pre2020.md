@@ -2,7 +2,7 @@
 
 Rule (frozen in crisisbench/protocol.py): 
 
-Evaluated on market nse, fit 'pre2020', 12 generators.
+Evaluated on market nse, fit 'pre2020', 20 generators.
 
 ```json
 {

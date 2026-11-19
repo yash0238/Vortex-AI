@@ -19,6 +19,11 @@ REGISTRY = {
     "diffusion": ("neural_diffusion", "Diffusion"),
     "cgnsde": ("cgnsde", "CGNSDE"),
     "cgnsde2": ("cgnsde2", "CGNSDE2"),
+    "cgnsde3": ("cgnsde3", "CGNSDE3"),
+    "gjr_evt_tcopula": ("classical_strong", "GjrEvtTCopula"),
+    "adcc_gjr": ("classical_strong", "AdccGjr"),
+    "rs_tcopula": ("classical_strong", "RsTCopula"),
+    "diffusion_ts": ("external", "DiffusionTS"),
 }
 
 

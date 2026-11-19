@@ -5,11 +5,24 @@ Model & Corr. err. & Boost \% & CVaR ratio & Tail co-ex. & Kurt. & ACF$(r^2)$ & 
 Real (95\% band) & $\le$4.64 & 53.1 [7.3, 97.4] & 2.72 [1.14, 4.45] & 0.290 [0.187, 0.369] & 8.16 [2.73, 10.82] & 0.184 [0.080, 0.207] & 0.57 [0.50, 0.64] & -- & -- & -- & -- \\
 \midrule
 i.i.d. Gaussian & 6.32 & 2.3 & \textbf{1.16} & 0.116 & -0.00 & 0.000 & 1.00 & 1.71 & 1.30 & 1.14 & 2.00 \\
-Static t-PPCA & 6.05 & 2.5 & \textbf{1.25} & 0.150 & 0.66 & 0.000 & 0.90 & 1.68 & \underline{1.20} & 1.08 & 1.66 \\
-Stationary bootstrap & 6.31 & \textbf{8.6} & \textbf{1.41} & 0.159 & \textbf{3.15} & \textbf{0.096} & 0.68 & 1.24 & 1.30 & 0.92 & \underline{0.65} \\
-GARCH-t FHS & 6.72 & \textbf{11.0} & \textbf{1.39} & 0.147 & \textbf{4.77} & \textbf{0.113} & 0.79 & \underline{0.96} & 1.43 & 0.92 & 1.07 \\
-DCC-GARCH-t & 6.69 & \textbf{8.5} & \textbf{1.56} & 0.175 & \textbf{5.05} & \textbf{0.111} & 0.83 & 1.00 & 1.42 & \underline{0.87} & 1.19 \\
+Static t-PPCA & 6.05 & 2.5 & \textbf{1.25} & 0.150 & 0.66 & 0.000 & 0.90 & 1.68 & 1.20 & 1.08 & 1.66 \\
+Stationary bootstrap & 6.31 & \textbf{8.6} & \textbf{1.41} & 0.159 & \textbf{3.15} & \textbf{0.096} & 0.68 & 1.24 & 1.30 & 0.92 & 0.65 \\
+GARCH-t FHS & 6.72 & \textbf{11.0} & \textbf{1.39} & 0.147 & \textbf{4.77} & \textbf{0.113} & 0.79 & 0.96 & 1.43 & 0.92 & 1.07 \\
+DCC-GARCH-t & 6.69 & \textbf{8.5} & \textbf{1.56} & 0.175 & \textbf{5.05} & \textbf{0.111} & 0.83 & 1.00 & 1.42 & 0.87 & 1.19 \\
 Regime Gaussian & 6.29 & 5.9 & \textbf{1.39} & 0.142 & 0.20 & 0.026 & 0.99 & 1.58 & 1.29 & 0.99 & 1.79 \\
 Gaussian HMM & 6.29 & 3.4 & \textbf{1.28} & 0.153 & 0.57 & 0.037 & 0.98 & 1.55 & 1.29 & 1.00 & 1.75 \\
+TimeVAE & 15.16 & n/p & n/p & 0.084 & -0.71 & 0.144 & 1.00 & 3.06 & 2.93 & 7.26 & 6.30 \\
+QuantGAN & 8.18 & 4.1 & \textbf{1.32} & 0.118 & \textbf{2.74} & 0.003 & 0.83 & 1.67 & 1.49 & 1.15 & 4.51 \\
+TimeGAN & 25.71 & 1.2 & 1.07 & 0.478 & -0.36 & 0.152 & 1.00 & 2.41 & 6.02 & 2.40 & 5.95 \\
+CG-NSDE v1 (preregistered) & 6.45 & 2.9 & \textbf{1.27} & 0.165 & 1.50 & 0.006 & 0.84 & 1.60 & 1.31 & 1.21 & 1.73 \\
+CG-NSDE v2 (ours, post hoc) & 6.31 & \textbf{22.1} & \textbf{1.60} & 0.176 & \textbf{2.95} & 0.072 & \textbf{0.61} & 1.21 & 1.27 & 0.74 & \underline{0.39} \\
+TimeGAN (full scale, GPU) & 12.87 & -0.7 & 1.12 & 0.099 & 0.04 & 0.055 & 1.00 & 1.52 & 2.64 & 1.46 & 6.28 \\
+QuantGAN (full scale, GPU) & 6.87 & \textbf{12.2} & \textbf{1.55} & 0.138 & \textbf{6.42} & 0.016 & 0.68 & 1.42 & 1.42 & 0.94 & 1.14 \\
+DDPM diffusion (GPU) & 15.16 & \textbf{18.7} & \textbf{2.12} & 0.579 & 13.60 & 0.020 & 0.88 & 1.64 & 3.40 & 1.19 & 4.43 \\
+CG-NSDE v3 (ours, post hoc) & 6.15 & \textbf{25.1} & \textbf{1.93} & 0.181 & \textbf{4.29} & \textbf{0.109} & \textbf{0.62} & 0.96 & 1.23 & \underline{0.68} & 0.43 \\
+GJR-EVT t-copula & 6.43 & 7.3 & \textbf{1.37} & 0.122 & \textbf{4.52} & \textbf{0.109} & 0.86 & 1.03 & 1.36 & 1.02 & 1.53 \\
+ADCC-GJR (FHS) & 6.86 & \textbf{11.7} & \textbf{1.45} & 0.143 & \textbf{5.07} & \textbf{0.112} & 0.78 & 0.95 & 1.47 & 0.92 & 1.00 \\
+Regime-switching t-copula & 6.23 & \textbf{22.1} & \textbf{1.64} & 0.145 & \textbf{6.40} & \textbf{0.133} & 0.82 & \underline{0.81} & 1.31 & 0.92 & 1.14 \\
+Diffusion-TS (official code, GPU) & 5.65 & n/p & n/p & 0.176 & 0.85 & \textbf{0.080} & 0.94 & 1.39 & \underline{0.99} & 7.08 & 2.95 \\
 \bottomrule
 \end{tabular}

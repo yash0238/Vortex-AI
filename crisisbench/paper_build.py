@@ -31,7 +31,9 @@ FAM_LABEL = {"neural-ours": "CG-NSDE (ours)", "neural": "Neural baselines", "reg
              "dynamic-classical": "GARCH family", "resampling": "Resampling", "static": "Static"}
 SHORT = {"iid_gaussian": "iid-G", "t_ppca": "t-PPCA", "stationary_bootstrap": "S-Boot", "garch_fhs": "GARCH-FHS",
          "dcc_garch": "DCC", "regime_gaussian": "Reg-G", "hmm_gaussian": "HMM", "timevae": "TimeVAE",
-         "quantgan": "QuantGAN", "timegan": "TimeGAN", "cgnsde": "CG-NSDE v1", "cgnsde2": "CG-NSDE v2"}
+         "quantgan": "QuantGAN", "timegan": "TimeGAN", "cgnsde": "CG-NSDE v1", "cgnsde2": "CG-NSDE v2", "cgnsde3": "CG-NSDE v3",
+         "timegan_fs": "TimeGAN-GPU", "quantgan_fs": "QuantGAN-GPU", "diffusion_fs": "DDPM-GPU",
+         "gjr_evt_tcopula": "GJR-t-cop", "adcc_gjr": "ADCC", "rs_tcopula": "RS-t-cop"}
 INK, MUTED, GRID, BAND = "#0b0b0b", "#898781", "#e1e0d9", "#cde2fb"
 plt.rcParams.update({"font.size": 8, "font.family": "serif", "axes.spines.top": False, "axes.spines.right": False,
                      "axes.edgecolor": "#c3c2b7", "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED,
@@ -65,8 +67,18 @@ def write_table(name: str, header: list[str], rows: list[list[str]], align: str 
     (TAB / f"{name}.tex").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+_DIGITS = {"0": "Zero", "1": "One", "2": "Two", "3": "Three", "4": "Four", "5": "Five", "6": "Six", "7": "Seven",
+           "8": "Eight", "9": "Nine"}
+
+
+def macro_name(name: str) -> str:
+    """LaTeX command names may hold letters only: digits become words, everything else is dropped
+    (cgnsde2 -> CgnsdeTwo, 'H2 (v2, post hoc)' -> HTwovTwoposthoc)."""
+    return "".join(_DIGITS.get(c, c) for c in name if c.isalpha() or c.isdigit())
+
+
 def macro(name: str, value) -> None:
-    macros[name] = value if isinstance(value, str) else num(value)
+    macros[macro_name(name)] = value if isinstance(value, str) else num(value)
 
 
 def legend_handles(tags):
@@ -243,7 +255,7 @@ def tab_risk() -> None:
     if not p.exists():
         return skipped.append("tab_risk")
     t = pd.read_csv(p)
-    d = t[(t.portfolio == "equal_weight") & (np.isclose(t.level, 0.99))].sort_values("fz0")
+    d = t[(t.portfolio == "equal_weight") & (np.isclose(t.level, 0.975))].sort_values("fz0")
     rows = [[tex_escape(r["name"]), str(int(r.violations)), num(r.expected, 1), num(r.kupiec_p, 3), num(r.ind_p, 3),
              num(r.cc_p, 3), r.traffic, num(r.z2, 2), num(r.fz0, 3)] for _, r in d.iterrows()]
     write_table("t4_risk", ["Method", "Viol.", "Exp.", "$p_{UC}$", "$p_{IND}$", "$p_{CC}$", "Light", "$Z_2$", "FZ0"], rows)
@@ -254,12 +266,30 @@ def tab_validity() -> None:
     if not p.exists():
         return skipped.append("tab_validity")
     t = pd.read_csv(p)
-    rows = [[tex_escape(r.label), num(r.tau), f"[{r.lo:.2f}, {r.hi:.2f}]"] for _, r in t.iterrows()]
-    write_table("t5_validity", ["Ranking by", "Kendall $\\tau$", "95\\% CI"], rows)
+    pv = TABLES / "T5_metric_validity_with_v2.csv"
+    tv = pd.read_csv(pv) if pv.exists() else None
+    rows = []
+    for _, r in t.iterrows():
+        row = [tex_escape(r.label), num(r.tau), f"[{r.lo:.2f}, {r.hi:.2f}]"]
+        if tv is not None:
+            x = tv[tv.key == r.key]
+            row += [num(x.tau.iloc[0]), f"[{x.lo.iloc[0]:.2f}, {x.hi.iloc[0]:.2f}]"] if len(x) else ["--", "--"]
+        rows.append(row)
+    head = ["Ranking by", f"$\\tau$ ({int(t.n_generators.iloc[0])} reg.)", "95\\% CI"]
+    if tv is not None:
+        head += [f"$\\tau$ ({int(tv.n_generators.iloc[0])}, +post hoc)", "95\\% CI"]
+    write_table("t5_validity", head, rows)
+    macro("nRiskGen", str(int(t.n_generators.iloc[0])))
     for f in "ABCD":
         x = t[t.key == f"family_{f}"]
         if len(x):
-            macro(f"tauRisk{f}", float(x.tau.iloc[0]))
+            macro(f"tauRisk{f}", float(x.tau.iloc[0])); macro(f"tauRisk{f}Lo", float(x.lo.iloc[0])); macro(f"tauRisk{f}Hi", float(x.hi.iloc[0]))
+        if tv is not None:
+            x = tv[tv.key == f"family_{f}"]
+            if len(x):
+                macro(f"tauRiskP{f}", float(x.tau.iloc[0])); macro(f"tauRiskP{f}Lo", float(x.lo.iloc[0])); macro(f"tauRiskP{f}Hi", float(x.hi.iloc[0]))
+    if tv is not None:
+        macro("nRiskGenP", str(int(tv.n_generators.iloc[0])))
 
 
 def tab_taus(summary: dict) -> None:
@@ -271,7 +301,8 @@ def tab_taus(summary: dict) -> None:
             if t:
                 rows.append([names[mk], "in-sample" if fit == "full" else "held-out", str(t["n_generators"]), num(t["tau"]),
                              f"[{t['lo']:.2f}, {t['hi']:.2f}]", f"[{t['loo_min']:.2f}, {t['loo_max']:.2f}]"])
-                macro(f"tauBC{mk}{'Full' if fit == 'full' else 'Held'}", t["tau"])
+                tg = f"tauBC{mk}{'Full' if fit == 'full' else 'Held'}"
+                macro(tg, t["tau"]); macro(tg + "Lo", t["lo"]); macro(tg + "Hi", t["hi"])
     if rows:
         write_table("t6_taus", ["Market", "Fit", "Models", "$\\tau(B,C)$", "95\\% CI (seeds)", "Leave-one-out range"], rows, "llrrrr")
     else:
@@ -282,11 +313,107 @@ def tab_ablation() -> None:
     p = TABLES / "T2_ablation_nse_full.csv"
     if not p.exists():
         return skipped.append("tab_ablation")
+    t = pd.read_csv(p).set_index("generator")
+    ph = TABLES / "T2_ablation_nse_pre2020.csv"
+    th = pd.read_csv(ph).set_index("generator") if ph.exists() else None
+    rows = []
+    for g, r in t.iterrows():
+        name = tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Full model (v2)"))
+        row = [name, num(r.boost_pct, 1), num(r.score_A), num(r.score_C)]
+        if th is not None:
+            h = th.loc[g] if g in th.index else None
+            row += [num(h.boost_pct, 1), num(h.score_A), num(h.score_C), num(h.score_D)] if h is not None else ["--"] * 4
+        rows.append(row)
+    head = ["Variant", "Boost \\%", "$S_A$", "$S_C$"] + (["Boost \\%", "$S_A$", "$S_C$", "$S_D$"] if th is not None else [])
+    write_table("t2_ablation", head, rows, "l" + "r" * (len(head) - 1))
+    if th is not None:
+        for g, h in th.iterrows():
+            k = "".join(w.capitalize() for w in g.replace("cgnsde2@", "").replace("cgnsde2", "full").split("_")).replace("0", "Zero").replace("1", "One").replace("4", "Four").replace("6", "Six")
+            macro(f"ablHeldC{k}", h.score_C); macro(f"ablHeldA{k}", h.score_A); macro(f"ablHeldD{k}", h.score_D)
+            macro(f"ablHeldCsd{k}", h.score_C_sd)
+
+
+def contamination() -> None:
+    p = TABLES / "T7_contamination.csv"
+    if not p.exists():
+        return skipped.append("contamination")
     t = pd.read_csv(p)
-    rows = [[tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Full model (v2)")), num(r.boost_pct, 1), num(r.cvar_ratio, 2),
-             num(r.corr_fro, 2), num(r.kurt_med, 2), num(r.acf1_sq, 3), num(r.score_A), num(r.score_B), num(r.score_C)]
-            for g, r in zip(t.generator, t.itertuples())]
-    write_table("t2_ablation", ["Variant", "Boost \\%", "CVaR", "Corr. err.", "Kurt.", "ACF$(r^2)$", "$S_A$", "$S_B$", "$S_C$"], rows)
+    for panel, tag in zip(t.panel.unique(), ("Tick", "Spikes", "Split")):
+        x = t[t.panel == panel]
+        macro(f"contam{tag}Metrics", str(int((x.pair_flips > 0).sum())))
+        macro(f"contam{tag}MaxFlips", str(int(x.pair_flips.max())))
+        macro(f"contam{tag}Pairs", str(int(x.pairs.iloc[0])))
+        macro(f"contamNMetrics", str(len(x)))
+
+
+def risk_numbers() -> None:
+    p = TABLES / "T4_risk.csv"
+    if not p.exists():
+        return
+    t = pd.read_csv(p)
+    d = t[(t.portfolio == "equal_weight") & np.isclose(t.level, 0.975) & t.fz0.notna()].sort_values("fz0")
+    gens = d[d.kind == "generator"].reset_index(drop=True)
+    for g, tag in (("cgnsde2", "VTwo"), ("cgnsde3", "VThree"), ("quantgan_fs", "QuantganFs"), ("garch_fhs", "GarchFhs"), ("diffusion_fs", "DiffusionFs")):
+        i = gens.index[gens.method == g]
+        if len(i):
+            macro(f"riskGenRank{tag}", str(int(i[0]) + 1))
+    macro("riskNGen", str(len(gens)))
+    d99 = t[(t.portfolio == "equal_weight") & np.isclose(t.level, 0.99)]
+    for g, tag in (("cgnsde2", "VTwo"), ("cgnsde3", "VThree"), ("hist_sim", "Hs"), ("garch_fhs_bench", "GarchBench")):
+        x = d99[d99.method == g]
+        if len(x):
+            macro(f"viol{tag}", str(int(x.violations.iloc[0])))
+    macro("violExp", num(d99.expected.iloc[0], 1))
+    macro("nGreenNinetyNine", str(int((d99[d99.kind == "generator"].traffic == "green").sum())))
+
+
+def tab_ablation_v3() -> None:
+    p, ph = TABLES / "T2_ablation_v3_nse_full.csv", TABLES / "T2_ablation_v3_nse_pre2020.csv"
+    if not ph.exists():
+        return skipped.append("tab_ablation_v3")
+    th = pd.read_csv(ph).set_index("generator")
+    tf = pd.read_csv(p).set_index("generator") if p.exists() else None
+    order = ["cgnsde3"] + [g for g in th.index if g != "cgnsde3"]
+    rows = []
+    for g in order:
+        h = th.loc[g]
+        name = tex_escape(g.replace("cgnsde3@", "-- ").replace("cgnsde3", "Full model (v3)").replace("_", " "))
+        row = [name]
+        if tf is not None:
+            f = tf.loc[g] if g in tf.index else None
+            row += [num(f.score_A), num(f.score_C)] if f is not None else ["--", "--"]
+        row += [num(h.boost_pct, 1), num(h.score_A), f"{h.score_C:.2f} $\\pm$ {h.score_C_sd:.2f}", num(h.score_D)]
+        rows.append(row)
+        k = "".join(w.capitalize() for w in g.replace("cgnsde3@", "").replace("cgnsde3", "full").split("_"))
+        macro(f"vThreeHeldC{k}", h.score_C); macro(f"vThreeHeldA{k}", h.score_A); macro(f"vThreeHeldCsd{k}", h.score_C_sd)
+    head = ["Variant"] + (["$S_A$ in", "$S_C$ in"] if tf is not None else []) + ["Boost \\% held", "$S_A$ held", "$S_C$ held", "$S_D$ held"]
+    write_table("t2b_ablation_v3", head, rows, "l" + "r" * (len(head) - 1))
+    for mk in ("us", "kr"):
+        t = t1(mk, "pre2020")
+        if t is not None:
+            t = t.set_index("generator")
+            for g, tag in (("cgnsde3", "Full"), ("cgnsde2", "VTwo")):
+                if g in t.index:
+                    macro(f"confirm{mk.capitalize()}{tag}", t.loc[g].score_C)
+        pa = TABLES / f"T2_ablation_v3_{mk}_pre2020.csv"
+        if pa.exists():
+            a = pd.read_csv(pa).set_index("generator")
+            for g, tag in (("cgnsde3", "Full"), ("cgnsde3@no_regime", "NoRegime")):
+                if g in a.index:
+                    macro(f"confirm{mk.capitalize()}{tag}", a.loc[g].score_C)
+                    macro(f"confirm{mk.capitalize()}{tag}Sd", a.loc[g].score_C_sd)
+
+
+def step0_numbers() -> None:
+    p, q = RESULTS / "step0" / "summary.json", RESULTS / "step0" / "fingerprints.json"
+    if not p.exists():
+        return skipped.append("step0")
+    s = json.loads(p.read_text())
+    macro("sZeroBlocks", str(s["french_blocks"]))
+    for k, tag in (("m1", "Cascade"), ("m0a", "Evt"), ("m0b", "NoCascade")):
+        macro(f"sZeroLs{tag}", s["french_mean_ls"][k]); macro(f"sZeroNseLs{tag}", s["nse_mean_ls"][k])
+    macro("sZeroRecWins", str(s["P2_wins"])); macro("sZeroRecTotal", str(s["P2_total"]))
+    macro("sZeroFOne", "held" if s["fingerprints"]["F1"] else "failed"); macro("sZeroFTwo", "held" if s["fingerprints"]["F2"] else "failed")
 
 
 def tab_hypotheses() -> None:
@@ -297,7 +424,7 @@ def tab_hypotheses() -> None:
     rows = [[k, tex_escape(v.get("verdict", "")), tex_escape(v.get("evidence", ""))] for k, v in h.items()]
     write_table("t8_hypotheses", ["Item", "Verdict", "Evidence"], rows, "llp{0.62\\linewidth}")
     for k, v in h.items():
-        macro("verdict" + k.replace(" ", "").replace("(", "").replace(")", ""), tex_escape(v.get("verdict", "")))
+        macro("verdict" + k, tex_escape(v.get("verdict", "")))
 
 
 def numbers(summary: dict) -> None:
@@ -319,7 +446,52 @@ def numbers(summary: dict) -> None:
             macro(f"corr{k}", r.get("corr_fro", np.nan))
             macro(f"scoreC{k}", r.score_C)
             macro(f"scoreB{k}", r.score_B)
+            macro(f"scoreA{k}", r.score_A)
         macro("nGenerators", str(len(t)))
+    th = t1("nse", "pre2020")
+    if th is not None:
+        for _, r in th.iterrows():
+            k = "".join(w.capitalize() for w in r.generator.split("_"))
+            macro(f"heldBoost{k}", r.get("boost_pct", np.nan))
+            macro(f"heldScoreC{k}", r.score_C)
+            macro(f"heldRankC{k}", str(int(r.rank_C)) if pd.notna(r.rank_C) else "n/p")
+        if t is not None:
+            for _, r in t.iterrows():
+                k = "".join(w.capitalize() for w in r.generator.split("_"))
+                macro(f"rankC{k}", str(int(r.rank_C)) if pd.notna(r.rank_C) else "n/p")
+                macro(f"rankA{k}", str(int(r.rank_A)) if pd.notna(r.rank_A) else "n/p")
+    p = RESULTS / "reference" / "nse" / "pre2020.json"
+    if p.exists():
+        r = json.loads(p.read_text())["metrics"]["boost_pct"]
+        macro("realHeldBoost", r["real"]); macro("realHeldBoostLo", r["lo"]); macro("realHeldBoostHi", r["hi"])
+    p = TABLES / "T3_heldout.csv"
+    if p.exists():
+        t3 = pd.read_csv(p)
+        for ep, tag in (("covid_2020", "Covid"), ("shock_2022", "Shock"), ("mid_2024", "Mid")):
+            e = t3[t3.episode == ep]
+            if len(e):
+                macro(f"real{tag}Boost", e.real.iloc[0]); macro(f"real{tag}BoostLo", e.lo.iloc[0])
+                macro(f"real{tag}BoostHi", e.hi.iloc[0]); macro(f"n{tag}Crisis", str(int(e.n_real_crisis.iloc[0])))
+                g = e[e.generator == "cgnsde2"]
+                if len(g):
+                    macro(f"vTwo{tag}Boost", g.gen.iloc[0])
+                macro(f"nInside{tag}", str(int(e.inside.astype(str).str.lower().eq("true").sum())))
+    p = RESULTS / "01_dgp" / "metric_validation.csv"
+    if p.exists():
+        dg = pd.read_csv(p).set_index("panel")
+        for panel, tag in (("sim_boost00", "Zero"), ("sim_boost20", "Twenty"), ("sim_boost40", "Forty"),
+                           ("sim_boost80", "Eighty"), ("sim_ccc", "Ccc")):
+            if panel in dg.index:
+                macro(f"dgp{tag}Rule", dg.loc[panel, "rule_boost_pct"])
+                macro(f"dgp{tag}Lo", dg.loc[panel, "rule_lo"]); macro(f"dgp{tag}Hi", dg.loc[panel, "rule_hi"])
+    for v, gen in (("vOne", "cgnsde"), ("vTwo", "cgnsde2")):
+        f = RESULTS / "runs" / "nse" / gen / "full" / "seed0" / "metrics.json"
+        if f.exists():
+            info = json.loads(f.read_text()).get("info", {})
+            macro(f"{v}BestEpoch", str(info.get("best_epoch", "")))
+            macro(f"{v}Epochs", str(info.get("epochs_run", "")))
+            if info.get("n_params"):
+                macro(f"{v}Params", f"{int(info['n_params']):,}".replace(",", "{,}"))
     (PAPER / "numbers.tex").write_text("% Generated by crisisbench.paper_build. Do not edit.\n" + "".join(
         f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())), encoding="utf-8")
 
@@ -348,7 +520,7 @@ def main() -> None:
         tab_main(mk, "full")
     tab_main("nse_ext", "upto2024")
     fig_heldout(); fig_var(); fig_dgp(); fig_ablation()
-    tab_risk(); tab_validity(); tab_taus(summary); tab_ablation(); tab_hypotheses()
+    tab_risk(); tab_validity(); tab_taus(summary); tab_ablation(); tab_ablation_v3(); tab_hypotheses(); contamination(); risk_numbers(); step0_numbers()
     numbers(summary)
     make_zip()
     print("figures:", len(list(FIG.glob("*.pdf"))), "tables:", len(list(TAB.glob("*.tex"))), "macros:", len(macros))

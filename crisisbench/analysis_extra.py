@@ -132,6 +132,14 @@ def hypotheses(summary: dict, g2: dict | None, h5: bool | None, g2v2: dict | Non
         n = sum(g2.values())
         H["G2"] = dict(verdict="PASS" if n >= 2 else "FAIL",
                        evidence=f"CG-NSDE v1 boost inside the real episode interval on {n} of {len(g2)} episodes")
+    p2 = RESULTS / "06_risk" / "G3_with_v2.json"
+    if p2.exists():
+        b = json.loads(p2.read_text())
+        H["H3 (with v2, post hoc)"] = dict(
+            verdict="supported" if b["H3_holds"] else "not supported",
+            evidence=f"tau(crisis family, backtest rank) = {b['tau_C']:.2f} [{b['ci_C'][0]:.2f}, {b['ci_C'][1]:.2f}]; "
+                     f"tau(correlation family, backtest rank) = {b['tau_B']:.2f} [{b['ci_B'][0]:.2f}, {b['ci_B'][1]:.2f}]; "
+                     f"CG-NSDE v2 FZ0 rank {b['fz0_rank'].get('cgnsde2')} of {len(b['generators'])}")
     # Post hoc: the same checks for CG-NSDE v2 (designed after the v1 results; not preregistered).
     g1v2 = summary.get("G1v2/full")
     if g1v2 and g1v2.get("H2_simple_regime_model_matches_cgnsde") is not None:

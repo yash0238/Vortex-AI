@@ -89,8 +89,11 @@ def main() -> None:
                                  n=s["n"], violations=s["violations"], expected=s["expected"], rate=s["rate"],
                                  kupiec_p=s["kupiec_p"], ind_p=s["christoffersen_ind_p"], cc_p=s["cc_p"],
                                  traffic=s["traffic_light"], z2=s["z2"], z2_p=s["z2_p"], fz0=s["fz0"],
-                                 qloss=s["quantile_loss"]))
-                if pf == RANK_PF and abs(lv - RANK_LEVEL) < 1e-9 and kind == "generator":
+                                 qloss=s["quantile_loss"], es_nonpositive_days=s.get("es_nonpositive_days", 0)))
+                if s.get("es_nonpositive_days"):
+                    print(f"{name}/{pf}/{lv}: ES forecast <= 0 on {s['es_nonpositive_days']} days; "
+                          "Z2 and FZ0 undefined, method left out of the FZ0 ranking")
+                if pf == RANK_PF and abs(lv - RANK_LEVEL) < 1e-9 and kind == "generator" and np.isfinite(s["fz0"]):
                     daily[name] = R.fz0_loss(r, V[:, k], E[:, k], a)
         if pf == "equal_weight":
             k99 = int(np.argmax(levels))
@@ -99,15 +102,28 @@ def main() -> None:
                           methods={m: dict(name=fc[m][3], color=COLORS.get(m), var99=np.round(-100 * fc[m][0][:, k99], 3).tolist())
                                    for m in show})
     t4 = pd.DataFrame(rows)
-    t4["rank_fz0"] = t4.groupby(["portfolio", "level"])["fz0"].rank(method="min").astype(int)
+    t4["rank_fz0"] = t4.groupby(["portfolio", "level"])["fz0"].rank(method="min").astype("Int64")   # NaN: FZ0 undefined
     t4.to_csv(TABLES / "T4_risk.csv", index=False)
     (TABLES / "T4_risk.md").write_text(t4.to_markdown(index=False, floatfmt=".4g"), encoding="utf-8")
     (OUT / "series.json").write_text(json.dumps(series), encoding="utf-8")
 
     # ------------------------------------------------ T5 metric validity
-    gens = [g for g in MAIN if g in daily]
+    # H3 / G3 were preregistered on the registered generators: the post hoc CG-NSDE v2 is left out of the
+    # verdict and a second, labelled evaluation includes it.
+    allg = [g for g in MAIN if g in daily]
+    from .analysis import POSTHOC
+    validity(daily, [g for g in allg if g not in POSTHOC], "", "GATE_G3",
+             "Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; positive = lower benchmark "
+             "error goes with lower FZ0 loss.")
+    if any(g in allg for g in POSTHOC):
+        validity(daily, allg, "_with_v2", "GATE_G3_v2_posthoc",
+                 "POST HOC: same test with the rows added after the protocol freeze (CG-NSDE v2, full-scale GPU "
+                 "baselines) included among the generators.")
+
+
+def validity(daily: dict, gens: list, suffix: str, gate: str, note: str) -> None:
     if len(gens) < 4:
-        print(f"T4 written; only {len(gens)} generators have complete risk pools, T5 skipped")
+        print(f"only {len(gens)} generators have complete risk pools, T5{suffix} skipped")
         return
     L = np.column_stack([daily[g] for g in gens])                      # (days, gens)
     df = load_runs("nse")
@@ -120,32 +136,40 @@ def main() -> None:
     for k in keys:
         if any(g not in seedval[k] for g in gens):
             continue
-        point = kendall([seedval[k][g].mean() for g in gens], L.mean(0))
+        vals = [seedval[k][g] for g in gens]
+        if any(not np.isfinite(v).any() for v in vals):            # metric not produced by some generator
+            continue
+        point = kendall([np.nanmean(v) for v in vals], L.mean(0))
         reps = []
         for _ in range(2000):
             st = rng.integers(0, len(L), nb)
             ii = ((st[:, None] + np.arange(20)[None, :]) % len(L)).ravel()[:len(L)]
-            ms = [seedval[k][g][rng.integers(0, len(seedval[k][g]), len(seedval[k][g]))].mean() for g in gens]
+            ms = [np.nanmean(v[rng.integers(0, len(v), len(v))]) for v in vals]
             reps.append(kendall(ms, L[ii].mean(0)))
-        reps = np.array(reps)[np.isfinite(reps)]
+        reps = np.array(reps, dtype=float)
+        reps = reps[np.isfinite(reps)]
+        if not np.isfinite(point) or len(reps) == 0:
+            continue
         fam = k.startswith("family_")
         out.append(dict(key=k, label=("Family " + k[-1] + " score") if fam else k, kind="family" if fam else "metric",
                         tau=point, lo=float(np.quantile(reps, 0.025)), hi=float(np.quantile(reps, 0.975)),
                         n_generators=len(gens)))
     t5 = pd.DataFrame(out)
-    t5.to_csv(TABLES / "T5_metric_validity.csv", index=False)
-    (TABLES / "T5_metric_validity.md").write_text(t5.to_markdown(index=False, floatfmt=".3g"), encoding="utf-8")
+    t5.to_csv(TABLES / f"T5_metric_validity{suffix}.csv", index=False)
+    (TABLES / f"T5_metric_validity{suffix}.md").write_text(t5.to_markdown(index=False, floatfmt=".3g"), encoding="utf-8")
+    if not {"family_B", "family_C"} <= set(t5.key):
+        print(f"family B or C missing from T5{suffix}; G3 not evaluated")
+        return
     c, b = t5[t5.key == "family_C"].iloc[0], t5[t5.key == "family_B"].iloc[0]
     h3 = bool(c.tau > 0.5 and c.tau > b.tau and c.lo > b.hi)
     body = dict(tau_C=float(c.tau), ci_C=[float(c.lo), float(c.hi)], tau_B=float(b.tau), ci_B=[float(b.lo), float(b.hi)],
                 rank_basis=f"mean FZ0, level {RANK_LEVEL}, {RANK_PF}", generators=gens, H3_holds=h3,
                 fz0_rank={g: int(x) for g, x in zip(gens, pd.Series(L.mean(0)).rank(method="min"))})
-    write_gate("GATE_G3", "PASS" if h3 else "FAIL", body,
-               "Kendall tau between benchmark family rank (pre2020 fit) and backtest rank; positive = lower benchmark "
-               "error goes with lower FZ0 loss.")
-    (OUT / "G3.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
+    write_gate(gate, "PASS" if h3 else "FAIL", body, note)
+    (OUT / f"G3{suffix}.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
+    print(f"--- T5{suffix} ({len(gens)} generators)")
     print(t5[t5.kind == "family"].to_string(index=False))
-    print("G3:", "PASS" if h3 else "FAIL")
+    print(f"G3{suffix}:", "PASS" if h3 else "FAIL")
 
 
 if __name__ == "__main__":

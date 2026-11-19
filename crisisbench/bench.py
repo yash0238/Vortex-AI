@@ -188,7 +188,7 @@ def run(market: str, gen_name: str, fit: str, seed: int, force: bool = False, sa
     if mpath.exists() and not force and (not want_risk_pool or ppath.exists()):
         return json.loads(mpath.read_text())
     skip = RESULTS / "skip_gens.txt"        # one generator-name prefix per line: jobs that are no longer wanted
-    key = f"{market}/{gen_name}/{fit}"      # a line matches as a prefix of the generator name or of market/gen/fit
+    key = f"{market}/{gen_name}/{fit}/seed{seed}"   # a line matches as a prefix of the gen name or of market/gen/fit/seedK
     if skip.exists() and any(p.strip() and (gen_name.startswith(p.strip()) or key.startswith(p.strip()))
                              for p in skip.read_text().splitlines()):
         print(f"dropped by results/skip_gens.txt: {market}/{label}/{fit}/seed{seed}\nskipped", flush=True)

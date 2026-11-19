@@ -365,6 +365,17 @@ def summarise(r, var, es, alpha: float, neighbours=None, n_sim: int = 2000,
         neighbours = np.asarray(neighbours)[ok]
     hits = r < -var
     n, x = int(hits.size), int(hits.sum())
+    n_bad_es = int((es <= 0).sum())
+    if n_bad_es:        # ES forecast is a gain: Z2 and FZ0 are undefined; VaR-only tests still apply
+        return dict(
+            n=n, violations=x, expected=float(alpha * n), rate=float(x / n),
+            kupiec_p=kupiec_pof(hits, alpha)[1],
+            christoffersen_ind_p=christoffersen_independence(hits)[1],
+            cc_p=christoffersen_cc(hits, alpha)[1],
+            traffic_light=basel_traffic_light(x, n, alpha),
+            z2=float("nan"), z2_p=float("nan"), fz0=float("nan"),
+            quantile_loss=float(quantile_loss(r, var, alpha).mean()), es_nonpositive_days=n_bad_es,
+        )
     z2, z2_p = acerbi_szekely_z2(r, var, es, alpha, neighbours, n_sim, rng)
     return dict(
         n=n, violations=x, expected=float(alpha * n), rate=float(x / n),
