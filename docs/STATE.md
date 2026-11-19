@@ -409,3 +409,15 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
 - Panel script doc: https://claude.ai/artifact/FvEqJitEb8XX4mTsmS3yZU
 - Report test rows filled (all Pass) + VORTEX Money test table; backend tests 6/6.
 - Deployment: NOT done; needs user's hosting account + decision on public data use.
+- 2026-11-19 (late): user disliked the paper's tone and shared a review (Gemini) asking for journal register.
+  paper/main.tex rewritten: new title; abstract 250 words; intro with RQ1/RQ2, findings, bulleted
+  contributions, roadmap; new Problem Formulation section; full CG-NSDE method (equations for emission,
+  EGARCH recursion, contagion, loss, sampling, matching the code); design path framed as diagnosis -> change ->
+  effect; baselines listed 11 registered + 9 post hoc = 20; protocol deviations as a list; new Discussion;
+  Threats to validity each with its impact; dramatic phrasing removed. Every number is still a macro (checked:
+  no undefined macros). Old version: git HEAD or scratchpad main_before_rewrite.tex.
+  paper_build: readable ablation labels, "--" for not produced (was n/p), tau typeset in the verdict table,
+  scatter figure full width with log x and non-overlapping labels, Diffusion-TS label in held-out figure.
+  Not compiled locally (no TeX) -> user compiles the zip on Overleaf. User also asked to "humanize" for the
+  10% AI-content limit: told them we will not tune text to evade detectors; recommend own-words revision by the
+  team + an AI-use disclosure (IEEE policy).

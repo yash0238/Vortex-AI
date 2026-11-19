@@ -32,7 +32,7 @@ FAM_LABEL = {"neural-ours": "CG-NSDE (ours)", "neural": "Neural baselines", "reg
 SHORT = {"iid_gaussian": "iid-G", "t_ppca": "t-PPCA", "stationary_bootstrap": "S-Boot", "garch_fhs": "GARCH-FHS",
          "dcc_garch": "DCC", "regime_gaussian": "Reg-G", "hmm_gaussian": "HMM", "timevae": "TimeVAE",
          "quantgan": "QuantGAN", "timegan": "TimeGAN", "cgnsde": "CG-NSDE init.", "cgnsde2": "w/o contagion", "cgnsde3": "CG-NSDE",
-         "timegan_fs": "TimeGAN-GPU", "quantgan_fs": "QuantGAN-GPU", "diffusion_fs": "DDPM-GPU",
+         "timegan_fs": "TimeGAN-GPU", "quantgan_fs": "QuantGAN-GPU", "diffusion_fs": "DDPM-GPU", "diffusion_ts": "Diffusion-TS",
          "gjr_evt_tcopula": "GJR-t-cop", "adcc_gjr": "ADCC", "rs_tcopula": "RS-t-cop"}
 INK, MUTED, GRID, BAND = "#0b0b0b", "#898781", "#e1e0d9", "#cde2fb"
 plt.rcParams.update({"font.size": 8, "font.family": "serif", "axes.spines.top": False, "axes.spines.right": False,
@@ -50,8 +50,28 @@ def t1(market: str, fit: str) -> pd.DataFrame | None:
 
 def num(x, nd=2) -> str:
     if x is None or (isinstance(x, float) and not np.isfinite(x)):
-        return "n/p"
+        return "--"          # not produced; table notes explain the dash
     return f"{x:.{nd}f}"
+
+
+# Readable names for ablation variants (tables and figures).
+ABL_LABEL = {
+    "cgnsde2": "Without contagion (all parts)", "cgnsde3": "CG-NSDE (all parts)",
+    "no_gat": "no graph attention", "no_supcon": "no contrastive loss", "no_graph_loss": "no graph loss",
+    "no_sde": "no latent SDE", "scalar_vol": "one scalar volatility state", "no_voldyn": "no volatility dynamics",
+    "no_leverage": "no leverage term", "gauss": "Gaussian likelihood", "param_innov": "parametric innovations",
+    "beta01": r"KL weight 0.1", "K1": "$K=1$ factor", "K4": "$K=4$ factors", "K16": "$K=16$ factors",
+    "no_cascade": "no contagion term", "no_graph_cascade": "no graph contagion", "no_mkt_cascade": "no market contagion",
+    "uniform_graph": "uniform contagion graph", "no_regime": "no regime labels",
+}
+
+
+def abl_label(g: str, tex: bool = True) -> str:
+    base, _, var = g.partition("@")
+    s = ABL_LABEL.get(var, var.replace("_", " ")) if var else ABL_LABEL.get(base, base)
+    if var:
+        s = ("-- " if tex else "") + s
+    return s if tex else s.replace("$", "")
 
 
 def tex_escape(s: str) -> str:
@@ -91,21 +111,59 @@ def fig_scatter(market="nse", fit="full") -> None:
     if t is None:
         return skipped.append("fig_scatter")
     ref = reference(market, fit)["metrics"]
-    fig, ax = plt.subplots(figsize=(3.45, 2.7))
+    # Full text width and a log x axis: correlation errors span two orders of magnitude, and on a linear axis
+    # in one column the classical models crowd into one corner where their labels cannot be read.
+    fig, ax = plt.subplots(figsize=(7.1, 2.9))
+    ax.set_xscale("log")
     ax.axhspan(ref["boost_pct"]["lo"], ref["boost_pct"]["hi"], color=BAND, lw=0, zorder=0)
-    ax.axvspan(0, ref["corr_fro"]["ceiling"], color=BAND, lw=0, zorder=0, alpha=0.6)
+    ax.axvspan(1e-3, ref["corr_fro"]["ceiling"], color=BAND, lw=0, zorder=0, alpha=0.6)
     ax.axhline(ref["boost_pct"]["real"], color="#1c5cab", lw=0.8, zorder=1)
-    for _, r in t.iterrows():
-        if not np.isfinite(r.get("boost_pct", np.nan)):
-            continue
+    pts = [r for _, r in t.iterrows() if np.isfinite(r.get("boost_pct", np.nan))]
+    for r in pts:
         ax.scatter(r.corr_fro, r.boost_pct, s=26 if r.generator != "cgnsde3" else 46, color=C.get(r.family_tag, MUTED),
                    edgecolor="white", linewidth=0.8, zorder=3)
-        ax.annotate(SHORT.get(r.generator, r.generator), (r.corr_fro, r.boost_pct), xytext=(4, 3),
-                    textcoords="offset points", fontsize=6.5, color=INK)
-    ax.set_xlabel("Correlation error $\\|C_{gen}-C_{real}\\|_F$ (lower is better)")
+    ax.set_xlabel("Correlation error $\\|C_{gen}-C_{real}\\|_F$, log scale (lower is better)")
     ax.set_ylabel("Crisis correlation boost (%)")
-    ax.legend(handles=legend_handles(set(t.family_tag)), fontsize=6, loc="best", handletextpad=0.2)
-    fig.tight_layout(pad=0.3)
+    ax.set_xlim(0.1, 40)
+    leg =ax.legend(handles=legend_handles(set(t.family_tag)), fontsize=6, loc="upper right", handletextpad=0.2)
+    fig.tight_layout(pad=0.3)          # final layout BEFORE placing labels, so measured positions stay valid
+    # Greedy label placement with measured text boxes: for each point try offsets in order and keep the first
+    # label box that stays inside the axes and touches no placed label, no other point and not the legend.
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    axbox = ax.get_window_extent(rend)
+    legbox = leg.get_window_extent(rend)
+    marks = [ax.transData.transform((r.corr_fro, r.boost_pct)) for r in pts]
+    placed = [legbox]
+    cands = [(5, 2, "left"), (-5, 2, "right"), (5, -9, "left"), (-5, -9, "right"), (10, 9, "left"), (-10, 9, "right"),
+             (10, -16, "left"), (-10, -16, "right"), (18, -3, "left"), (-18, -3, "right"), (16, 17, "left"),
+             (-16, 17, "right"), (16, -24, "left"), (-16, -24, "right"), (26, 8, "left"), (-26, 8, "right")]
+    pad = 2.0 * fig.dpi / 72.0
+    for i in sorted(range(len(pts)), key=lambda k: -pts[k].boost_pct):
+        r = pts[i]
+        lab = SHORT.get(r.generator, r.generator)
+        chosen = None
+        for dx, dy, ha in cands:
+            a = ax.annotate(lab, (r.corr_fro, r.boost_pct), xytext=(dx, dy), textcoords="offset points",
+                            fontsize=6.5, color=INK, ha=ha, va="bottom")
+            bb = a.get_window_extent(rend)
+            inside = bb.x0 >= axbox.x0 and bb.x1 <= axbox.x1 and bb.y0 >= axbox.y0 and bb.y1 <= axbox.y1
+            clash = any(bb.x0 - pad < b.x1 and bb.x1 + pad > b.x0 and bb.y0 - pad < b.y1 and bb.y1 + pad > b.y0
+                        for b in placed)
+            clash = clash or any(bb.x0 - pad < mx < bb.x1 + pad and bb.y0 - pad < my < bb.y1 + pad for mx, my in marks)
+            if inside and not clash:
+                chosen = (a, bb, dx, dy)
+                break
+            a.remove()
+        if chosen is None:          # fall back to the default spot rather than dropping the label
+            a = ax.annotate(lab, (r.corr_fro, r.boost_pct), xytext=(5, 2), textcoords="offset points",
+                            fontsize=6.5, color=INK, ha="left", va="bottom")
+            chosen = (a, a.get_window_extent(rend), 5, 2)
+        a, bb, dx, dy = chosen
+        placed.append(bb)
+        if abs(dx) > 6 or abs(dy) > 9:   # leader line when the label sits away from its point
+            ax.annotate("", (r.corr_fro, r.boost_pct), xytext=(dx, dy), textcoords="offset points",
+                        arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.5, shrinkA=0, shrinkB=2.5))
     fig.savefig(FIG / f"f1_scatter_{market}_{fit}.pdf")
     plt.close(fig)
 
@@ -147,8 +205,9 @@ def fig_heldout() -> None:
         ax.errorbar(d.gen, y, xerr=d.gen_sd.fillna(0), fmt="none", ecolor=MUTED, elinewidth=1)
         ax.scatter(d.gen, y, color=[C.get(k, MUTED) for k in d.family_tag], s=22, zorder=3, edgecolor="white", linewidth=0.7)
         ax.set_yticks(y)
-        ax.set_yticklabels([SHORT.get(g, g) for g in d.generator], color=INK)
-        ax.set_title(f"{d.episode_label[0]} (n={d.n_real_crisis[0]})", fontsize=8, loc="left")
+        ax.set_yticklabels([SHORT.get(g, g) + ("" if np.isfinite(v) else " (not produced)") for g, v in zip(d.generator, d.gen)],
+                           color=INK)
+        ax.set_title(f"{d.episode_label[0]} ({d.n_real_crisis[0]} windows)", fontsize=7, loc="left")
         ax.set_xlabel("Crisis correlation boost (%)")
         ax.grid(axis="y", visible=False)
     fig.tight_layout(pad=0.4)
@@ -213,7 +272,7 @@ def fig_ablation() -> None:
         ax.scatter(d[f"score_{f}"], y, s=22, zorder=3, edgecolor="white", linewidth=0.7,
                    color=["#2a78d6" if g == "cgnsde2" else MUTED for g in d.generator])
         ax.set_yticks(y)
-        ax.set_yticklabels([g.replace("cgnsde2@", "").replace("cgnsde2", "without contagion (full)").replace("_", " ") for g in d.generator], color=INK)
+        ax.set_yticklabels([abl_label(g, tex=False) for g in d.generator], color=INK)
         ax.set_xlabel(f"family {f} score")
         ax.set_xlim(left=0)
         ax.grid(axis="y", visible=False)
@@ -318,7 +377,7 @@ def tab_ablation() -> None:
     th = pd.read_csv(ph).set_index("generator") if ph.exists() else None
     rows = []
     for g, r in t.iterrows():
-        name = tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Without contagion (full)"))
+        name = abl_label(g)
         row = [name, num(r.boost_pct, 1), num(r.score_A), num(r.score_C)]
         if th is not None:
             h = th.loc[g] if g in th.index else None
@@ -377,7 +436,7 @@ def tab_ablation_v3() -> None:
     rows = []
     for g in order:
         h = th.loc[g]
-        name = tex_escape(g.replace("cgnsde3@", "-- ").replace("cgnsde3", "CG-NSDE (full model)").replace("_", " "))
+        name = abl_label(g)
         row = [name]
         if tf is not None:
             f = tf.loc[g] if g in tf.index else None
@@ -453,7 +512,15 @@ def tab_hypotheses() -> None:
         return (x.replace("(with v2, post hoc)", "(with post hoc models)").replace("(v2, post hoc)", "(CG-NSDE w/o contagion, post hoc)")
                  .replace("CG-NSDE v2", "CG-NSDE without contagion").replace("CG-NSDE v1", "CG-NSDE initial design")
                  .replace("CG-NSDE ", "CG-NSDE ").replace(" v2 ", " post hoc ").replace(" v1 ", " initial design "))
-    rows = [[plain(k), tex_escape(plain(v.get("verdict", ""))), tex_escape(plain(v.get("evidence", "")))] for k, v in h.items()]
+    def mathy(x):
+        """Typeset the analysis code's plain-text tau and market codes."""
+        for a, b in (("tau(B,C)", r"$\tau_{B,C}$"), ("tau(crisis family, backtest rank)", r"$\tau$(crisis family, backtest)"),
+                     ("tau(correlation family, backtest rank)", r"$\tau$(correlation family, backtest)"),
+                     ("NSE in-sample", "India, in sample:"), ("held-out $", "held out: $"), ("US: ", "United States: "),
+                     ("KR: ", "Korea: "), (" = ", " $=$ "), (" vs ", " against ")):
+            x = x.replace(a, b)
+        return x
+    rows = [[plain(k), tex_escape(plain(v.get("verdict", ""))), mathy(tex_escape(plain(v.get("evidence", ""))))] for k, v in h.items()]
     write_table("t8_hypotheses", ["Item", "Verdict", "Evidence"], rows, "llp{0.62\\linewidth}")
     for k, v in h.items():
         macro("verdict" + k, tex_escape(v.get("verdict", "")))

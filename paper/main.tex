@@ -17,8 +17,8 @@
 
 \begin{document}
 
-\title{Crisis Dependence in Synthetic Equity Returns: A Preregistered Benchmark,\\
-Its Failed Hypotheses, and a Graph-Contagion Generator}
+\title{Evaluating Crisis Dependence in Synthetic Equity Returns: A Preregistered Benchmark and a
+Graph-Contagion Neural SDE}
 
 \author{Yashovardhan~Thopte,
         Alok~Shukla,
@@ -27,30 +27,28 @@ Its Failed Hypotheses, and a Graph-Contagion Generator}
 Engineering, Bandra (W), Mumbai 400050, India.}}
 
 \markboth{Preprint, under review}%
-{Thopte \MakeLowercase{\textit{et al.}}: Crisis Dependence in Synthetic Equity Returns}
+{Thopte \MakeLowercase{\textit{et al.}}: Evaluating Crisis Dependence in Synthetic Equity Returns}
 
 \maketitle
 
 \begin{abstract}
-Synthetic return generators are usually judged by how well they reproduce the unconditional correlation matrix.
-Stress testing needs something else: the way cross-asset dependence changes under stress. We froze, before scoring
-any generator, a benchmark (CrisisBench), five hypotheses and four pass/fail gates, and we report every verdict.
-CrisisBench scores generators on four metric families on 47 large Indian stocks, labels every window by one rule
-applied to its own returns, expresses every error in units of real sampling noise, holds out the 2020 to 2024
-crises, replicates on United States and Korean panels, and validates the rankings against an out-of-sample
-Value-at-Risk and Expected-Shortfall backtest. Most preregistered hypotheses failed. Correlation fidelity and
-crisis dependence rank generators in a similar order (Kendall $\tau=\tauBCnseFull$ in sample), which triggered our
-own rule for abandoning the headline claim. The crisis family tracked backtest quality ($\tau=\tauRiskC$) while the
-correlation family did not ($\tau=\tauRiskB$), but the bootstrap intervals touch, so the preregistered test of metric
-validity failed as well. The boost statistic itself is ordinal and partly driven by volatility clustering, which we
-show on data with known ground truth. We then describe CG-NSDE, a latent neural SDE whose final, post hoc design adds factor-volatility
-states and a graph-Hawkes cascade to the registered design, motivated by evidence that tail events in equity markets
-self-excite near criticality. Against \nGenerators\ generators, including strong classical models (a
-GARCH-EVT copula, an asymmetric DCC and a regime-switching copula), it is the best on held-out crisis dependence in
-India, ties a regime-switching copula in Korea, and gives the best risk forecasts among generators; removing the graph
-contagion removes its gain.
-A pre-specified confirmatory test of a label-free variant failed in Korea, and no generator reproduces the intensity
-of the COVID-2020 crash.
+Synthetic return generators for multi-asset portfolios are usually evaluated by how closely they reproduce the
+unconditional correlation matrix, whereas stress testing depends on how cross-asset dependence changes in turbulent
+markets. We introduce CrisisBench, a benchmark whose protocol, five hypotheses and four pass/fail gates were fixed
+before any generator was scored. CrisisBench labels every window by a single rule applied to its own returns,
+expresses every error in units of real-data sampling noise, holds out the 2020--2024 crises, replicates on United
+States and Korean panels, and validates metric rankings against an out-of-sample Value-at-Risk and
+Expected-Shortfall backtest. On 47 Indian equities, correlation fidelity and crisis dependence rank generators
+similarly (Kendall $\tau=\tauBCnseFull$), and three of the five hypotheses are not supported. Crisis-dependence
+scores track backtest quality ($\tau=\tauRiskC$) while correlation scores do not ($\tau=\tauRiskB$), although the
+preregistered interval criterion is not met. A controlled ground-truth study shows that the crisis correlation boost
+is compressed and partly driven by volatility clustering, so it is an ordinal statistic. We also propose CG-NSDE, a
+latent neural stochastic differential equation with factor-level volatility states and a graph-Hawkes contagion
+term, developed after the preregistered design failed and reported as exploratory. Among \nGenerators\ generators,
+including GARCH-EVT copula, asymmetric DCC and regime-switching copula models, CG-NSDE has the lowest held-out
+crisis error in India, the best mean rank across six market and fit settings, and the most accurate risk forecasts
+among generators; ablation attributes its held-out gain to contagion between connected stocks. No generator
+reproduces the intensity of the COVID-2020 crash.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -61,73 +59,118 @@ Value-at-Risk, Hawkes process, neural SDE
 % ===========================================================================
 \section{Introduction}
 % ===========================================================================
-Generative models of asset returns are proposed for data augmentation, privacy-preserving data sharing and
-scenario generation for risk management \cite{assefa2020synthetic,potluru2023synthetic,eckerli2021gans}. In the
-multi-asset case the usual evidence of quality is a small distance between the generated and the real
+\IEEEPARstart{G}{enerative} models of asset returns are proposed for data augmentation, privacy-preserving data
+sharing and scenario generation for risk management \cite{assefa2020synthetic,potluru2023synthetic,eckerli2021gans}.
+In the multi-asset case, the usual evidence of quality is a small distance between the generated and the real
 correlation matrix, together with stylised facts such as heavy tails and volatility clustering
-\cite{cont2001stylized}. A risk manager asks a different question. Correlations between equities rise in falling
-and turbulent markets \cite{longin2001extreme,ang2002asymmetric}, and it is this change of dependence that removes
-diversification when it is needed. A generator can match the pooled correlation matrix closely and still produce the
-same dependence in every window.
+\cite{cont2001stylized}. Risk management depends on a different property. Correlations between equities rise in
+falling and turbulent markets \cite{longin2001extreme,ang2002asymmetric}, and this change in dependence reduces the
+benefit of diversification when it is most needed. A generator can match the pooled correlation matrix closely and
+still produce the same dependence in calm and turbulent windows.
 
-We asked whether the two views order generators differently, and whether either ordering predicts how useful the
-generated scenarios are for a risk task. Before any generator was scored we froze, in one protocol file, the
-windows, splits, crisis labelling rule, metric families, uncertainty procedure, five hypotheses (H1 to H5), four
-gates (G1 to G4) and a rule for abandoning the benchmark framing. All verdicts are produced by code from the run
-outputs. The design responds to a flaw in our own earlier evaluation, in which generated windows inherited the crisis
-label of a conditioning real window, so that crisis metrics partly measured the conditioning data.
+Existing evaluations rarely test this property directly. Generated windows are seldom classified as calm or
+turbulent by the same rule that is applied to real data; differences between generated and real statistics are
+reported without reference to the sampling noise of the real statistic; few studies score generators on crises
+that occurred after the training period; and fidelity metrics are seldom checked against the downstream task they
+are meant to support. A previous version of our own evaluation pipeline had a further problem: generated windows
+inherited the crisis label of the real window used to condition them, so the crisis metrics partly measured the
+conditioning data rather than the generator.
 
-The answers were mostly negative, and we report them as the main result:
+This paper addresses two questions. \textbf{RQ1:} do correlation fidelity and crisis dependence order generators
+differently? \textbf{RQ2:} does either ordering predict the quality of risk forecasts made from the generated
+scenarios? To keep the answers free of analyst choices made after seeing results, we fixed the data, splits, crisis
+labelling rule, metrics, uncertainty procedure, five hypotheses (H1--H5), four gates (G1--G4) and a rule for
+abandoning the benchmark framing in a protocol file before any generator was scored. All verdicts are computed by
+code from the run outputs.
+
+The preregistered answers are largely negative. Correlation fidelity and crisis dependence rank generators
+similarly on all three markets (H1 and H4 not supported), which triggered our abandonment rule. Crisis-dependence
+scores predict backtest quality better than correlation scores, but the bootstrap intervals overlap, so the
+preregistered criterion for metric validity (H3) is not met. The crisis correlation boost is compressed relative to
+the true effect and responds to volatility clustering alone. The generator we registered, CG-NSDE, failed for
+reasons that we diagnose. Two exploratory changes to that design, an information bottleneck with factor-level
+volatility states and a graph-Hawkes contagion term, produce the strongest generator on held-out crisis dependence
+in India and in the risk backtest, and the most consistent one across markets. These findings are post hoc and are
+reported separately from the preregistered verdicts.
+
+The contributions of this paper are:
 \begin{itemize}
-\item Correlation fidelity and crisis dependence rank generators similarly in sample on all three markets (H1 and
-H4 fail); our abandonment rule was triggered.
-\item The crisis family tracks the backtest better than the correlation family, but not with separated intervals
-(H3 and G3 fail); with all post hoc generators included the gap shrinks further.
-\item The crisis correlation boost is compressed and responds to volatility clustering without any regime, so it is
-an ordinal statistic.
-\item The registered design of our own generator failed for diagnosable reasons.
+\item \textbf{CrisisBench}, a preregistered benchmark for cross-asset crisis dependence with noise-normalised
+metrics, a held-out crisis split, a controlled ground-truth study, a data-contamination study and a downstream
+VaR/ES validation, released as code (Section~\ref{sec:bench}).
+\item \textbf{Evidence on fidelity metrics} from \nGenerators\ generators on three markets: correlation error alone
+is the least informative family for risk use, and the crisis boost must be read as an ordinal statistic
+(Section~\ref{sec:results}).
+\item \textbf{CG-NSDE}, a latent neural SDE in which tail events raise the volatility of connected stocks through a
+learned contagion graph, with a documented design path and component ablations (Section~\ref{sec:method}).
 \end{itemize}
-The positive findings are post hoc and labelled so. Adding factor-volatility states and then a graph-Hawkes cascade to the registered
-design gives the strongest generator on held-out crisis dependence in India and in the risk backtest, even against
-strong classical copula and asymmetric-DCC models, and the most consistent across three markets (mean rank
-\avgRankCgnsdeThree, never worse than \worstRankCgnsdeThree th); an ablation attributes the last change's gain to
-contagion along the asset graph. A confirmatory test that we pre-specified for a label-free variant failed on one market.
 
-Our contributions are therefore (i) a preregistered benchmark with noise ceilings, a held-out crisis split, a
-ground-truth check, a contamination check and a downstream risk validation, released as code; (ii) a set of negative
-and positive results about how generator fidelity should be measured; and (iii) a generator whose crisis behaviour
-comes from an explicit, ablated contagion mechanism rather than from regime labels alone.
+Section~\ref{sec:related} reviews related work and Section~\ref{sec:problem} defines the evaluation problem.
+Section~\ref{sec:bench} describes CrisisBench, Section~\ref{sec:method} the proposed generator and
+Section~\ref{sec:generators} the baselines. Section~\ref{sec:setup} gives the experimental setup,
+Section~\ref{sec:results} the results and Section~\ref{sec:discussion} their implications.
+Sections~\ref{sec:threats} to~\ref{sec:conclusion} cover threats to validity, reproducibility and conclusions.
 
 % ===========================================================================
 \section{Related Work}
+\label{sec:related}
 % ===========================================================================
-\textbf{Generators.} TimeGAN \cite{yoon2019timegan}, Quant GANs \cite{wiese2020quantgans} and TimeVAE
-\cite{desai2021timevae} are widely used neural baselines; signature-based conditional GANs \cite{liao2024sigcwgan},
+\textbf{Return generators.} TimeGAN \cite{yoon2019timegan}, Quant GANs \cite{wiese2020quantgans} and TimeVAE
+\cite{desai2021timevae} are widely used neural baselines. Signature-based conditional GANs \cite{liao2024sigcwgan},
 correlation-matrix GANs \cite{marti2020corrgan}, market generators for small data \cite{buehler2020market}, neural
 SDEs \cite{li2020scalable,kidger2021neuralsde} and diffusion models \cite{ho2020ddpm,song2021score,yuan2024diffusionts}
-extend the family. Multi-asset work targets inter-asset correlation directly
-\cite{masi2023correlated,masi2026gandiffusion,huh2026marketgans}. Classical alternatives are GARCH
-\cite{bollerslev1986garch}, dynamic conditional correlation \cite{engle2002dcc}, filtered historical simulation
-\cite{baroneadesi1999fhs}, the stationary bootstrap \cite{politis1994stationary} and Markov regime switching
-\cite{hamilton1989regime}.
+extend this family, and several multi-asset studies target inter-asset correlation directly
+\cite{masi2023correlated,masi2026gandiffusion,huh2026marketgans}. Classical alternatives include GARCH
+\cite{bollerslev1986garch}, dynamic conditional correlation (DCC) \cite{engle2002dcc}, filtered historical simulation
+(FHS) \cite{baroneadesi1999fhs}, the stationary bootstrap \cite{politis1994stationary} and Markov regime switching
+\cite{hamilton1989regime}. Our generator belongs to the latent neural SDE family; unlike the models above, its
+crisis behaviour comes from an explicit volatility-contagion mechanism that can be removed and tested.
 
-\textbf{Evaluation.} General time-series generation benchmarks and surveys exist
+\textbf{Evaluation of synthetic financial data.} General benchmarks and surveys for time-series generation exist
 \cite{ang2023tsgbench,stenger2024evaluation}. In finance, Kwon and Lee test whether GANs learn stylised facts
 \cite{kwon2024stylized}; Caulfield and Gleeson compare deep generative and parametric models
 \cite{caulfield2024systematic}; Cetingoz and Lehalle argue that standard evaluation misses what matters for portfolio
-use \cite{cetingoz2025synthetic}; Zhang et al.\ show that realistic-looking output can fail a trading backtest
-\cite{zhang2026sfag}. CTBench evaluates crypto generators over regimes \cite{ang2025ctbench}; Tail-GAN trains on the
-joint elicitability of VaR and ES \cite{cont2022tailgan}; Ericson et al.\ use VaR backtesting as a performance
-indicator \cite{ericson2024var}. Our reading of these works is based on their abstracts; none mentions a
-real-versus-real noise ceiling or a crisis-labelled held-out test of cross-asset dependence.
+use \cite{cetingoz2025synthetic}; and Zhang et al.\ show that realistic-looking output can fail a trading backtest
+\cite{zhang2026sfag}. CTBench evaluates cryptocurrency generators across regimes \cite{ang2025ctbench}, Tail-GAN
+trains on the joint elicitability of VaR and ES \cite{cont2022tailgan}, and Ericson et al.\ use VaR backtesting as a
+performance indicator \cite{ericson2024var}. To our knowledge, none of these evaluations normalises errors by a
+real-versus-real noise ceiling, labels generated and real windows with the same crisis rule, or scores cross-asset
+dependence on crises held out from training.
 
 \textbf{Crisis dependence and contagion.} Higher correlation in bear markets is documented in
-\cite{longin2001extreme,ang2002asymmetric}; absorption ratios and connectedness follow the same idea
+\cite{longin2001extreme,ang2002asymmetric}, and absorption ratios and connectedness measures build on the same idea
 \cite{kritzman2011absorption,diebold2014network}. Forbes and Rigobon \cite{forbes2002contagion} show that measured
-correlation rises with volatility even when the underlying dependence is unchanged. Self-exciting point processes
-\cite{hawkes1971spectra} describe clustering of extreme moves; equity markets have been estimated to operate close to
-criticality \cite{hardiman2013critical,filimonov2012quantifying}, and mutually exciting jumps model contagion across
-markets \cite{aitsahalia2015modeling}.
+correlation rises with volatility even when the underlying dependence is unchanged, which bears directly on how a
+crisis correlation statistic should be read (Section~\ref{sec:dgp}). Self-exciting point processes
+\cite{hawkes1971spectra} describe the clustering of extreme moves; equity markets have been estimated to operate
+close to criticality \cite{hardiman2013critical,filimonov2012quantifying}, and mutually exciting jumps model
+contagion across markets \cite{aitsahalia2015modeling}. CG-NSDE embeds a mutually exciting mechanism of this kind in
+the volatility states of a generator.
+
+% ===========================================================================
+\section{Problem Formulation}
+\label{sec:problem}
+% ===========================================================================
+Let $r_t\in\mathbb{R}^N$ be the daily log returns of $N$ assets. A window is $X=(r_{s-T+1},\dots,r_s)\in
+\mathbb{R}^{T\times N}$. A generator $G$ is fitted on a training period and then produces windows $\tilde X\sim G$
+without any conditioning input: no real window, date or label is passed to it at sampling time. A crisis rule
+$c:\mathbb{R}^{T\times N}\to\{0,1\}$ assigns each window, real or generated, to the crisis or the normal class
+using only that window's returns.
+
+For a statistic $\theta$ computed on a set of windows, possibly separately for each class, let $\theta$ be its value
+on the real windows, $\hat\theta$ its value on the generated windows, and $[\ell,u]$ a 95\% bootstrap interval of
+the real value. The normalised error is
+\begin{equation}
+e(\hat\theta) = \min\!\left(\frac{|\hat\theta-\theta|}{(u-\ell)/2},\;10\right).
+\label{eq:err}
+\end{equation}
+For a distance metric (for example between correlation matrices), the error is the generated-to-real distance
+divided by the 95th percentile of real-to-real distances between bootstrap resamples. An error of one therefore
+means ``as far from the real value as real data is from itself''. Metrics are grouped into families $F$, and the
+family score $S_F$ is the mean error over the family's metrics. Generators are ranked by each $S_F$, and two
+rankings are compared by Kendall's $\tau$ \cite{kendall1938rank}. RQ1 asks whether $\tau$ between the
+static-dependence ranking ($S_B$) and the crisis-dependence ranking ($S_C$) is low; RQ2 asks which family ranking has
+the highest $\tau$ with the ranking by out-of-sample risk-forecast loss.
 
 % ===========================================================================
 \section{CrisisBench: Benchmark Design}
@@ -136,144 +179,202 @@ markets \cite{aitsahalia2015modeling}.
 \subsection{Data}
 The main panel holds daily log returns of 47 large Indian equities from the NIFTY 50 universe, November 2010 to
 December 2024 (Yahoo Finance, adjusted close). Two replication panels of the same size and period are built by the
-same code from large-cap United States and Korean (KOSPI) stocks. Cleaning rules were fixed before scoring: a ticker
-is kept if its history covers the sample with fewer than 2\% missing days and no price unchanged for more than ten
-days; gaps of up to five days are forward filled; a return above 30\% in absolute value is replaced by the
-cross-sectional median when it reverses by at least 80\% within two days or exceeds 50\% without reversal, and is
-otherwise kept and logged. Every action is written to an audit file with a hash of the return matrix. The panel has
-survivorship bias, and the raw prices cannot be redistributed. Stocks with derivatives, which covers the panel, have
-no fixed daily price band in India \cite{sebi2023tradingchapter}, so no circuit-filter clipping is applied.
+same code from large-cap United States and Korean (KOSPI) stocks. The cleaning rules were fixed before scoring:
+\begin{itemize}
+\item a ticker is kept if fewer than 2\% of its days are missing and its price never stays unchanged for more than
+ten days;
+\item gaps of up to five days are forward filled;
+\item a return above 30\% in absolute value is replaced by the cross-sectional median if it reverses by at least 80\%
+within two days or exceeds 50\% without reversal; otherwise it is kept and logged.
+\end{itemize}
+Every action is written to an audit file together with a hash of the return matrix. Stocks with traded derivatives,
+which include every stock in the panel, have no fixed daily price band in India \cite{sebi2023tradingchapter}, so no
+circuit-filter clipping is applied.
 
 \subsection{Windows, fits and seeds}
-A sample is a window of $T=60$ days and $N$ assets. Real windows overlap with stride one: \realNseWindows\ windows,
-\realNseCrisis\ labelled crisis. The \emph{full} fit estimates on the whole sample and is scored in sample; the
-\emph{pre2020} fit estimates on data to 31 December 2019 and is scored on the later sample, which contains three
-held-out episodes (March to July 2020, February to June 2022, June to July 2024). Neural generators use 2018 to 2019
-for early stopping only. Each (generator, fit) is run with five seeds and 2000 windows per seed. Sampling is
-unconditional: no real window, date or label is passed to a generator at sampling time.
+A sample is a window of $T=60$ trading days. Real windows overlap with stride one, giving \realNseWindows\ windows on
+the Indian panel, of which \realNseCrisis\ are labelled crisis. Each generator is fitted in two ways:
+\begin{itemize}
+\item \emph{full fit}: estimated on the whole sample and scored in sample;
+\item \emph{pre2020 fit}: estimated on data up to 31 December 2019 and scored on 2020--2024, which contains three
+held-out episodes (March--July 2020, February--June 2022 and June--July 2024).
+\end{itemize}
+Neural generators use 2018--2019 for early stopping only. Each (generator, fit) pair is run with five seeds and 2000
+generated windows per seed.
 
 \subsection{Crisis label rule}
 \label{sec:label}
-The label of a window is a function of its own returns, the same for real and generated windows. With
-$\mathrm{rv}$ the mean cross-sectional dispersion over the last 20 days, $\mathrm{dd}$ the share of assets down more
-than 5\% over the last five days and $\mathrm{cp}$ the share with a last-day move above 9.5\%,
+With $\mathrm{rv}$ the mean cross-sectional dispersion over the last 20 days of a window, $\mathrm{dd}$ the share of
+assets down more than 5\% over the last five days and $\mathrm{cp}$ the share of assets with a last-day move above
+9.5\%, the crisis score of a window is
 \begin{equation}
 s = 0.5\,\frac{\mathrm{rv}}{\mathrm{rv}_{\mathrm{ref}}} + 0.3\,\mathrm{dd} + 0.2\,\mathrm{cp},
-\qquad \text{crisis} \iff s \ge s^{\ast},
+\qquad c(X)=1 \iff s \ge s^{\ast},
 \label{eq:score}
 \end{equation}
-where $\mathrm{rv}_{\mathrm{ref}}$ and $s^{\ast}$ are the 99th and 85th percentiles on the fit-period real windows and
-are never re-estimated on generated data. The rule contains no correlation term. A generator with fewer than 20
-crisis windows has its crisis metrics recorded as not produced.
+where $\mathrm{rv}_{\mathrm{ref}}$ and $s^{\ast}$ are the 99th and 85th percentiles over the real windows of the fit
+period. Both thresholds are fixed per fit and never re-estimated on generated data, and the rule contains no
+correlation term, so a generator cannot satisfy it by producing high correlation alone. If a generator produces
+fewer than 20 crisis windows, its crisis metrics are recorded as not produced.
 
-\subsection{Metric families and scores}
+\subsection{Metric families}
 \textbf{A, marginal and temporal:} standard-deviation ratio, median excess kurtosis, lag-1 autocorrelation of
-returns and of squared returns (lags 1 and 1 to 5), skewness of the equal-weight portfolio.
-\textbf{B, static dependence:} Frobenius and mean absolute differences of pooled correlation matrices, eigenvalue
-spectrum distance, top-eigenvalue share.
+returns, autocorrelation of squared returns (lag 1 and lags 1--5), and skewness of the equal-weight portfolio.
+
+\textbf{B, static dependence:} Frobenius and mean absolute distances between pooled correlation matrices, eigenvalue
+spectrum distance, and top-eigenvalue share.
+
 \textbf{C, crisis dependence:} crisis frequency; the crisis correlation boost
 \begin{equation}
-\mathrm{boost} = 100\,(\bar m_{\mathrm{crisis}} - \bar m_{\mathrm{normal}})/\bar m_{\mathrm{normal}},
+\mathrm{boost} = 100\,\frac{\bar m_{\mathrm{crisis}} - \bar m_{\mathrm{normal}}}{\bar m_{\mathrm{normal}}},
 \label{eq:boost}
 \end{equation}
-with $m$ the mean absolute off-diagonal entry of a window's own correlation matrix; lower-tail co-exceedance; the
-crisis-to-normal ratio of the 5\% expected shortfall of equal-weight returns; and the crisis-minus-normal gaps of the
-top-eigenvalue share \cite{kritzman2011absorption} and of connectedness \cite{diebold2014network}.
-\textbf{D, distinguishability:} accuracy of a gradient-boosted classifier, real against generated, under blocked
-cross-validation, on summary features and on principal components.
+where $m$ is the mean absolute off-diagonal entry of a window's own correlation matrix and the bars average over the
+windows of each class; lower-tail co-exceedance; the crisis-to-normal ratio of the 5\% expected shortfall of
+equal-weight returns; and the crisis-minus-normal gaps in top-eigenvalue share \cite{kritzman2011absorption} and in
+connectedness \cite{diebold2014network}.
 
-For each fit, 500 circular block-bootstrap resamples of the real windows give a 95\% interval $[\ell,u]$ for every
-statistic; a generator's normalised error is $e=\min(|\hat\theta-\theta|/((u-\ell)/2),10)$, and for distance metrics
-the generated-to-real distance divided by the 95th percentile of real-to-real distances. An error of one means ``as
-far from the real value as real data is from itself''. Family scores $S_F$ are mean errors; rankings are compared by
-Kendall's $\tau$ \cite{kendall1938rank} with intervals over seeds.
+\textbf{D, distinguishability:} accuracy of a gradient-boosted classifier trained to separate real from generated
+windows under blocked cross-validation, on summary features and on principal components.
+
+The intervals in (\ref{eq:err}) come from 500 circular block-bootstrap resamples of the real windows of each fit.
 
 \subsection{Controlled ground truth and contamination}
-Four simulated panels follow a two-state Markov-switching one-factor model in which the crisis state raises the
-population mean correlation by a known 0, 20, 40 or 80\%; a fifth is a constant-correlation GARCH panel with true
-boost zero. Three contaminated copies of the real panel (one bad tick, 1\% spikes, one unadjusted split) test whether
-generator orderings survive data errors.
+To test whether the boost measures what it claims, four simulated panels follow a two-state Markov-switching
+one-factor model in which the crisis state raises the population mean correlation by a known 0, 20, 40 or 80\%. A
+fifth panel is a constant-correlation GARCH model whose true boost is zero. To test robustness to data errors,
+three contaminated copies of the real panel contain one bad tick, 1\% random spikes and one unadjusted stock split,
+respectively.
 
 \subsection{Downstream risk validation}
 \label{sec:riskdesign}
-For each out-of-sample day from January 2020 and each generator, the one-day VaR and ES of a portfolio are forecast
-from 20\,000 generated windows: the forecast is the empirical VaR and ES of the next-day returns of the 5\% of pool
-entries whose 20-day volatility is closest to the real portfolio's. The pool for year $Y$ comes from the generator
-refitted to the end of year $Y-1$. Benchmarks are 500-day historical simulation and GARCH-t FHS on the portfolio.
-We report unconditional and conditional coverage tests \cite{kupiec1995techniques,christoffersen1998interval}, the
-Basel traffic light \cite{bcbs1996backtesting}, the $Z_2$ test \cite{acerbi2014backtesting} and the FZ0 loss
-\cite{fissler2016elicitability,patton2019dynamic}. Generators are ranked by mean FZ0 loss at 97.5\% on the
-equal-weight portfolio (frozen). Metric validity is the Kendall $\tau$ between that ranking and each family ranking
-on the pre2020 fit, with a joint bootstrap over days and seeds.
+For each out-of-sample day from January 2020 and each generator, we forecast the one-day VaR and ES of a portfolio
+from 20\,000 generated windows. The forecast is the empirical VaR and ES of the next-day returns of the 5\% of
+generated windows whose 20-day portfolio volatility is closest to the real portfolio's. The pool used in year $Y$
+comes from the generator refitted on data up to the end of year $Y-1$. Two standard risk models serve as reference
+points: 500-day historical simulation and a GARCH-t FHS model fitted directly on the portfolio. We report
+unconditional and conditional coverage tests \cite{kupiec1995techniques,christoffersen1998interval}, the Basel
+traffic light \cite{bcbs1996backtesting}, the $Z_2$ test \cite{acerbi2014backtesting} and the FZ0 loss
+\cite{fissler2016elicitability,patton2019dynamic}. Generators are ranked by mean FZ0 loss at the 97.5\% level on the
+equal-weight portfolio, as fixed in the protocol. Metric validity is the Kendall $\tau$ between this ranking and each
+family ranking on the pre2020 fit, with intervals from a joint bootstrap over days and seeds.
 
 \subsection{Preregistered hypotheses and gates}
+Table~\ref{tab:prereg} lists the hypotheses and gates. H1 and H4 address RQ1, H3 addresses RQ2, H2 asks whether a
+simple regime model is as good as the proposed generator, and H5 concerns sensitivity to data errors. The kill rule
+states that if H1 fails on every market, the claim that crisis dependence is a distinct evaluation axis is dropped.
+
 \begin{table}[t]
-\caption{Hypotheses and gates frozen before any generator was scored.}
+\caption{Hypotheses and Gates Fixed Before Any Generator Was Scored}
 \label{tab:prereg}
 \centering
 \footnotesize
-\begin{tabular}{@{}lp{0.86\columnwidth}@{}}
+\begin{tabular}{@{}lp{0.84\columnwidth}@{}}
 \toprule
 H1 & Kendall $\tau$ between the family-B and family-C rankings is below 0.3. \\
 H2 & A non-neural regime model (regime Gaussian or HMM) has a family-C score within one seed standard deviation of
 CG-NSDE, or better. \\
-H3 & $\tau$ between the family-C rank and the backtest rank exceeds 0.5 and exceeds the $\tau$ of family B, with
+H3 & $\tau$ between the family-C ranking and the backtest ranking exceeds 0.5 and exceeds that of family B, with
 non-overlapping bootstrap intervals. \\
-H4 & ($\tau_{B,C}<0.3$) replicates on at least one other market. \\
-H5 & One bad tick flips the order of at least one generator pair on at least one metric. \\
+H4 & $\tau_{B,C}<0.3$ replicates on at least one other market. \\
+H5 & One bad tick reverses the order of at least one generator pair on at least one metric. \\
 \midrule
-G1 & Every regime-aware generator beats every static one on family C and H2 is false. \\
-G2 & CG-NSDE's held-out boost lies inside the real interval on at least two of three episodes. \\
-G3, G4 & H3, H4 hold. \quad Kill: H1 fails on every market $\Rightarrow$ drop the benchmark framing. \\
+G1 & Every regime-aware generator beats every static one on family C, and H2 is false. \\
+G2 & The held-out boost of CG-NSDE lies inside the real interval on at least two of three episodes. \\
+G3, G4 & H3 and H4 hold, respectively. \\
+Kill & If H1 fails on every market, the benchmark framing is dropped. \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 % ===========================================================================
-\section{Generators}
-\label{sec:generators}
-% ===========================================================================
-\textbf{Registered (11).} Static: i.i.d.\ Gaussian; static multivariate Student-t with a rank-8 PPCA covariance
-\cite{tipping1999ppca}. Resampling: the stationary bootstrap of whole cross-sections. Dynamic classical: GARCH(1,1)-t
-with FHS of residual cross-sections; DCC(1,1) with Student-t innovations. Regime: a supervised two-regime Gaussian
-whose day labels come from the frozen rule; an unsupervised Gaussian HMM \cite{rabiner1989hmm} with states chosen by
-BIC. Neural: TimeGAN, Quant GAN with Lambert-W preprocessing \cite{goerg2015lambert}, TimeVAE, all own CPU-budget
-PyTorch reimplementations; and the registered design of CG-NSDE. A weak score of a CPU-budget neural baseline is evidence about that
-budget, not about the published method.
-
-\textbf{Added after the protocol was frozen (post hoc, never in a preregistered verdict).} TimeGAN (50\,000
-iterations per phase), Quant GAN (10\,000 generator updates) and a DDPM \cite{ho2020ddpm} with a transformer denoiser
-(30\,000 iterations, cosine schedule \cite{nichol2021improved}, DDIM sampling \cite{song2021ddim}) trained on a GPU.
-The first diffusion run used the noise parametrisation and diverged at sampling (generated standard deviation
-several hundred times the real one) because the schedule leaves $\bar\alpha_T\approx2.4\times10^{-9}$; it was
-discarded and rerun with the clean-sample parametrisation of \cite{yuan2024diffusionts}. Three strong classical models
-that a market-risk team would use, all on GJR-GARCH-t margins with leverage \cite{nelson1991egarch}: a semi-parametric
-(generalised Pareto tails) t copula in the style of \cite{mcneil2000estimation}; an asymmetric DCC whose correlations
-rise after joint negative shocks, with filtered-historical-simulation innovations \cite{engle2002dcc,baroneadesi1999fhs};
-and a two-state regime-switching t copula whose turbulent state has its own correlation, tail dependence and shock
-size. Diffusion-TS \cite{yuan2024diffusionts}, run with the authors' \emph{official} code and their published
-configuration for stock data (10\,000 training steps), changing only the window length and the number of assets;
-limited GPU time allowed three in-sample and four held-out runs and no risk-pool refits. The two post hoc
-designs of CG-NSDE (Section~\ref{sec:method}).
-
-% ===========================================================================
-\section{CG-NSDE}
+\section{CG-NSDE: Graph-Contagion Latent Neural SDE}
 \label{sec:method}
 % ===========================================================================
-CG-NSDE works on per-asset z-scored returns, trains on windows with labels from the frozen rule (in the prior, a
-supervised contrastive loss \cite{khosla2020supcon} and the batch sampler), and samples unconditionally: a regime is
-drawn with the training crisis frequency, a latent code from a per-regime Gaussian mixture fitted to posterior codes
-\cite{ghosh2020rae}, a latent SDE is solved by the Euler scheme, and days are emitted sequentially. A generated window
-is labelled crisis only if the frozen rule says so. A two-layer graph attention network \cite{velickovic2018gat} on a
-$k$-nearest-neighbour correlation graph of each window feeds the posterior.
+\subsection{Overview}
+CG-NSDE models per-asset z-scored returns $x_t$ (scaled with training-period statistics only). Training windows
+carry labels $y=c(X)$ from the frozen rule, but sampling is unconditional, and a generated window counts as a crisis
+only if the rule assigns it to that class. The model has four parts: an encoder that maps a window to a latent
+initial state, a latent SDE that produces a path of latent states, a factor-volatility emission that turns the path
+into daily returns, and a contagion term that lets tail events raise future volatility along an asset graph.
 
-We describe the model as a design path: the design we registered, and the two changes that produced the final model,
-each with the scores it moved (Table~\ref{tab:path}). Both changes were made after the registered design failed and
-are post hoc; each was developed on 2010 to 2019 data only.
+\textbf{Encoder and prior.} A two-layer graph attention network \cite{velickovic2018gat} runs on a $k$-nearest
+neighbour graph ($k=5$) of each window's absolute correlations and produces a graph vector $g$. The posterior is
+$q(z_0\mid X)=\mathcal{N}(\mu,\operatorname{diag}\sigma^2)$, computed by a multilayer perceptron from a GRU summary of
+$X$ and from $g$, with $z_0\in\mathbb{R}^{16}$. The prior $p(z_0\mid y)$ is a learned diagonal Gaussian for each
+regime.
+
+\textbf{Latent dynamics.} The latent path follows $dz=f(z,t)\,dt+\sigma(z,t)\,dW$ on $[0,1]$, solved by the Euler
+scheme with $T$ steps to give $z_1,\dots,z_T$ \cite{li2020scalable}.
+
+\subsection{Factor-volatility emission}
+Given the latent state $z_t$ and a log-variance state $v_t=(v^f_t,v^i_t)$, the return of day $t$ is drawn from a
+multivariate Student-t distribution with $\nu$ degrees of freedom, zero mean and covariance
+\begin{equation}
+\Sigma_t = B\,\operatorname{diag}\!\big(e^{v^{f}_t + a^{f}(z_t)}\big)B^{\top}
+         + \operatorname{diag}\!\big(d\odot e^{v^{i}_t + a^{i}(z_t)}\big),
+\label{eq:sigma}
+\end{equation}
+where $B\in\mathbb{R}^{N\times K}$ are static factor loadings ($K=8$, initialised by PCA), $d$ are idiosyncratic
+variances, $v^f_t\in\mathbb{R}^K$ are factor log-variance states, $v^i_t\in\mathbb{R}^N$ are idiosyncratic
+log-variance states, and $a(z_t)$ is a bounded shift read from the latent path. When factor variances rise relative
+to idiosyncratic variances, correlations rise. A crisis correlation boost can therefore be produced by the dynamics
+of $v_t$ rather than by memorised windows.
+
+The states follow an EGARCH-type recursion \cite{nelson1991egarch} on shocks standardised by the current model
+covariance. Let $\hat f_t$ be the posterior mean of the standardised factors given $x_t$, $c_k$ its variance,
+$\varepsilon_t$ the idiosyncratic residual and $c^i_j$ its standardising variance. Then
+\begin{align}
+v^f_{t+1,k} &= \rho_k v^f_{t,k} + \alpha_k\Big(\frac{\hat f_{t,k}^2}{c_k}-1\Big) + \theta_k\frac{\hat f_{t,k}}{\sqrt{c_k}},
+\label{eq:vf}\\
+v^i_{t+1,j} &= \rho_i v^i_{t,j} + \alpha_i\Big(\frac{\varepsilon_{t,j}^2}{d_{t,j}\,c^i_j}-1\Big),
+\label{eq:vi}
+\end{align}
+with persistences $\rho\in(0,1)$, shock loadings $\alpha\ge0$, leverage terms $\theta_k$, $d_{t,j}$ the current
+idiosyncratic variance and $v_1=2\tanh(Wz_0)$. All states are clipped to a fixed range. In training the recursion is
+driven by the observed returns; in sampling it is driven by the model's own draws.
+
+\subsection{Graph-Hawkes contagion}
+Let $e_{t,i}=\mathbf{1}[x_{t,i}<q_i]$ indicate a tail event, where $q_i$ is the 1\% quantile of asset $i$'s z-scored
+training returns. Let $A$ be a row-stochastic contagion graph, the softmax of learnable logits over the $k_c=10$
+assets most correlated with asset $i$ in the training period (initialised at their absolute correlations, with no
+self-loops). After (\ref{eq:vf})--(\ref{eq:vi}), the states are increased by
+\begin{align}
+v^{i}_{t+1,i} &\mathrel{+}= \kappa_s\, e_{t,i} + \kappa_g \textstyle\sum_j A_{ij}\, e_{t,j}, \label{eq:cascade}\\
+v^{f}_{t+1,k} &\mathrel{+}= \kappa_{m,k}\, \tfrac{1}{N}\textstyle\sum_j e_{t,j}, \label{eq:mkt}
+\end{align}
+with $\kappa_s,\kappa_g,\kappa_{m,k}\ge0$. Through the persistence $\rho$, each excitation decays geometrically, which
+is an exponential Hawkes kernel \cite{hawkes1971spectra} in log-variance that is mutually exciting along the graph
+\cite{aitsahalia2015modeling}. Because the thresholds $q_i$ are fixed rather than scaled by current volatility, a
+cluster of tail days in sampling raises volatility, which in turn produces more tail days.
+
+\subsection{Training objective and sampling}
+The model is trained by minimising
+\begin{equation}
+\mathcal{L} = -\frac{1}{T}\sum_{t=1}^{T}\log p(x_t\mid z_t,v_t)
++ \frac{\beta}{T}\,\mathrm{KL}\big(q(z_0\mid X)\,\|\,p(z_0\mid y)\big)
++ \lambda_c\,\mathcal{L}_{\mathrm{con}} + \lambda_g\,\mathcal{L}_{\mathrm{graph}},
+\label{eq:loss}
+\end{equation}
+where the KL term is summed over latent dimensions, $\beta$ is ramped to one over five epochs,
+$\mathcal{L}_{\mathrm{con}}$ is a supervised contrastive loss on latent paths \cite{khosla2020supcon} with weight
+$\lambda_c=0.1$, and $\mathcal{L}_{\mathrm{graph}}$ ($\lambda_g=0.1$) aligns the attention weights with the
+row-normalised absolute correlations of each window. Batches are stratified so that each contains crisis windows.
+Training uses Adam, and early stopping uses the validation objective on 2018--2019.
+
+To sample a window: (i) draw a regime with the training crisis frequency; (ii) draw $z_0$ from a per-regime Gaussian
+mixture fitted to posterior codes of the training windows \cite{ghosh2020rae}; (iii) solve the latent SDE; and (iv)
+emit days sequentially, updating $v_t$ by (\ref{eq:vf})--(\ref{eq:mkt}). Standardised innovations are resampled from
+the model's own training residuals, as in filtered historical simulation \cite{baroneadesi1999fhs}.
+
+\subsection{Design path}
+\label{sec:path}
+The model above is the result of two changes to the design we registered. Each change addresses a specific
+diagnostic finding, was developed on 2010--2019 data only, and is evaluated by ablation. Both changes were made after
+the registered design failed, so they are exploratory. Table~\ref{tab:path} reports the crisis score at each step.
 
 \begin{table}[t]
-\caption{Design path of CG-NSDE on the Indian panel: family scores before and after each change (lower is better;
-in-sample = full fit, held-out = trained to 2019, scored on 2020 to 2024).}
+\caption{Design Path of CG-NSDE on the Indian Panel: Family Scores After Each Change (Lower Is Better)}
 \label{tab:path}
 \centering
 \footnotesize
@@ -283,103 +384,118 @@ Design & $S_C$ in & $S_C$ held & $S_A$ held \\
 \midrule
 Registered design: decoder sees window codes; one scalar volatility state & \scoreCCgnsde & \heldScoreCCgnsde & \heldScoreACgnsde \\
 + Change 1: information bottleneck and factor-volatility states, resampled residuals & \scoreCCgnsdeTwo & \heldScoreCCgnsdeTwo & \heldScoreACgnsdeTwo \\
-+ Change 2: graph-Hawkes contagion in the volatility states (final model) & \scoreCCgnsdeThree & \heldScoreCCgnsdeThree & \heldScoreACgnsdeThree \\
++ Change 2: graph-Hawkes contagion (final model) & \scoreCCgnsdeThree & \heldScoreCCgnsdeThree & \heldScoreACgnsdeThree \\
 \bottomrule
+\multicolumn{4}{@{}p{0.95\columnwidth}@{}}{\scriptsize ``in'': full fit, scored in sample; ``held'': pre2020
+fit, scored on 2020--2024.}
 \end{tabular}
 \end{table}
 
-\subsection{The registered design and why it failed}
-In the registered design the graph vector and a 64-dimensional latent state both feed the decoder, which emits a
-multivariate Student-t day whose whole covariance is scaled by one volatility state. The validation likelihood was best
-after \vOneBestEpoch\ of \vOneEpochs\ epochs: with windows overlapping in 59 of 60 days, the almost unregularised codes
-memorise the window, so early stopping selects a model whose dynamics barely moved. And a scalar volatility state
-cannot change correlations. Its generated windows are close to i.i.d.\ Student-t days.
+\textbf{Registered design.} The graph vector and a 64-dimensional latent state both fed the decoder, and one scalar
+volatility state scaled the whole covariance. The validation likelihood was best after \vOneBestEpoch\ of
+\vOneEpochs\ epochs. Because consecutive training windows share 59 of 60 days, the weakly regularised codes could
+memorise each window, and early stopping selected a model whose dynamics had barely been trained. A scalar volatility
+state also cannot change correlations. As a result, the generated windows were close to independent Student-t days.
 
-\subsection{Change 1: an information bottleneck and factor-volatility states}
-\textbf{Removed:} the decoder's direct access to the graph vector and the large latent code, the scalar volatility
-state, and a pooled-correlation matching loss. \textbf{Added:} the graph vector enters only the posterior, and
-everything the decoder knows passes through a 16-dimensional $z_0$ whose KL divergence to the regime prior is summed
-with weight one. The covariance of day $t$ becomes
-\begin{equation}
-\Sigma_t = B\,\operatorname{diag}\!\big(e^{v^{f}_t + a^{f}(z_t)}\big)B^{\top}
-         + \operatorname{diag}\!\big(d\odot e^{v^{i}_t + a^{i}(z_t)}\big),
-\label{eq:sigma}
-\end{equation}
-with static loadings $B$ ($K=8$, PCA start), factor log-variance states $v^f$, idiosyncratic states $v^i$ and a shift
-$a(z_t)$ read from the latent path. The states follow an EGARCH-type recursion \cite{nelson1991egarch} on shocks
-standardised by the current model variance, with leverage terms, teacher-forced in training and self-fed in
-sampling. When factor variances rise relative to idiosyncratic ones, correlations rise. Samples use filtered
-historical simulation of the model's own standardised residuals \cite{baroneadesi1999fhs}. This change cut the crisis
-score from \scoreCCgnsde\ to \scoreCCgnsdeTwo\ in sample and from \heldScoreCCgnsde\ to \heldScoreCCgnsdeTwo\ on the
-held-out crises (Table~\ref{tab:path}). Its ablation (Section~\ref{sec:ablate}) shows which parts did the work:
-factor-specific volatility, resampled residuals and the latent SDE; the graph attention network and the contrastive and
-graph losses did not.
+\textbf{Change 1: information bottleneck and factor volatility.} The decoder's direct access to the graph vector and
+the large latent code was removed, together with the scalar volatility state and a pooled-correlation matching loss.
+The graph vector now enters only the posterior, and everything the decoder receives passes through the
+16-dimensional $z_0$ under a KL penalty with weight one. The factor-volatility emission (\ref{eq:sigma})--(\ref{eq:vi})
+and resampled residuals were added. This change reduced the crisis score from \scoreCCgnsde\ to \scoreCCgnsdeTwo\ in
+sample and from \heldScoreCCgnsde\ to \heldScoreCCgnsdeTwo\ on the held-out crises.
 
-\subsection{Change 2: tail stress that spreads along an asset graph}
-\textbf{Motivation.} After Change 1 the model still under-produced volatility clustering and, trained to 2019,
-produced a held-out boost far below COVID-2020's. In a separate preregistered study on the Kenneth French 49 industry
-portfolios (1926 to 2026) we modelled daily counts of 1\% tail exceedances as a self-exciting negative-binomial
-process. Over \sZeroBlocks\ out-of-sample 20-day blocks it scored a mean log predictive score of \sZeroLsCascade\
-against \sZeroLsEvt\ for an extreme-value baseline and \sZeroLsNoCascade\ without self-excitation, and it beat the
-extreme-value baseline on \sZeroRecWins\ of \sZeroRecTotal\ record-breaking crashes. Its early-warning fingerprint
-\sZeroFOne: the record crashes had already begun at the forecast points, so the evidence is for \emph{amplification
-given an onset}, not prediction.
+\textbf{Change 2: graph-Hawkes contagion.} After Change 1 the model under-produced volatility clustering and, when
+trained to 2019, produced a held-out boost far below that of COVID-2020. We tested the contagion idea first in a
+separate preregistered study on the Kenneth French 49 industry portfolios (1926--2026), modelling daily counts of
+1\% tail exceedances as a self-exciting negative-binomial process. Over \sZeroBlocks\ out-of-sample 20-day blocks it
+reached a mean log predictive score of \sZeroLsCascade, against \sZeroLsEvt\ for an extreme-value baseline and
+\sZeroLsNoCascade\ without self-excitation, and it was better than the extreme-value baseline on \sZeroRecWins\ of
+\sZeroRecTotal\ record crashes. Its early-warning criterion \sZeroFOne: the record crashes had already begun at the
+forecast points. The evidence therefore supports \emph{amplification once a crash has started}, not prediction of
+its onset. We added (\ref{eq:cascade})--(\ref{eq:mkt}) to the generator and fixed $k_c=10$ by validation
+likelihood on 2010--2019 data before any held-out evaluation. In every development fit the likelihood kept
+$\kappa_s$ near zero while $\kappa_g$ grew by more than an order of magnitude, so stress was transmitted to
+neighbouring stocks rather than back to the stock that was hit. This change reduced the held-out crisis score from
+\heldScoreCCgnsdeTwo\ to \heldScoreCCgnsdeThree\ and the held-out family-A score from \heldScoreACgnsdeTwo\ to
+\heldScoreACgnsdeThree, at a similar in-sample crisis score.
 
-\textbf{Added.} With $e_{t,i}=\mathbf{1}[x_{t,i}<q_i]$ ($q_i$ the 1\% quantile of asset $i$'s z-scored training
-returns) and a row-stochastic contagion graph $A$ (softmax of learnable logits over the $k=10$ most correlated
-training-period neighbours),
-\begin{align}
-v^{i}_{t+1,i} &\mathrel{+}= \kappa_s\, e_{t,i} + \kappa_g \textstyle\sum_j A_{ij}\, e_{t,j}, \label{eq:cascade}\\
-v^{f}_{t+1,k} &\mathrel{+}= \kappa_{m,k}\, \tfrac{1}{N}\textstyle\sum_j e_{t,j},
-\end{align}
-with $\kappa\ge0$. With the persistence of the Change-1 recursion each excitation decays geometrically: an exponential
-Hawkes kernel \cite{hawkes1971spectra} in log-variance, mutually exciting along the graph
-\cite{aitsahalia2015modeling}. The threshold is unconditional, so in sampling a cluster of tail days raises volatility,
-which produces more tail days. In every development fit the likelihood kept $\kappa_s$ near zero while $\kappa_g$ grew
-by more than an order of magnitude: stress was transmitted to neighbours rather than back to the stock that was hit.
-The neighbour count was fixed at $k=10$ by validation likelihood on 2010 to 2019 data before any held-out evaluation.
-This change lowered the held-out crisis score from \heldScoreCCgnsdeTwo\ to \heldScoreCCgnsdeThree\ and the held-out
-family-A score from \heldScoreACgnsdeTwo\ to \heldScoreACgnsdeThree, at a similar in-sample crisis score
-(Table~\ref{tab:path}). This is the final model, called CG-NSDE in the rest of the paper; the model after Change 1 alone
-is reported as ``CG-NSDE without contagion''.
-
-\textbf{Ablations.} Of Change 1: graph attention, contrastive loss, graph loss, SDE, leverage, factor structure,
-volatility dynamics, Student-t likelihood, resampled innovations, KL weight, $K\in\{1,4,16\}$. Of the final model: no
-cascade, no graph term, no market term, uniform graph, no graph attention, no contrastive loss, no SDE, scalar
-volatility, and no regime labels at all (one shared prior, no contrastive loss, unstratified batches).
+In the rest of the paper, ``CG-NSDE'' denotes the final model, ``CG-NSDE without contagion'' the model after Change 1
+only, and ``CG-NSDE initial design'' the registered design.
 
 % ===========================================================================
-\section{Experimental Protocol and Deviations}
+\section{Baseline Generators}
+\label{sec:generators}
 % ===========================================================================
-The protocol was frozen on 12 November 2026 (version 1.0.0). A resumable job queue ran every (market, generator,
-fit, seed) job on one laptop CPU; GPU baselines ran on a cloud GPU with the unchanged runner. Tables, figures and
-quoted numbers are produced by one build script. Deviations we are aware of: both post hoc designs of CG-NSDE, the strong classical
-baselines and the GPU baselines were added after the freeze and are excluded from every preregistered verdict; the CPU TimeGAN and Quant GAN were not
-run on the United States and Korean held-out fits or on the 2025 to 2026 extension; ablations use three seeds; the
-risk backtest uses one seed per refit; TimeVAE is excluded from the FZ0 ranking because its ES forecasts are
-non-positive; the ground-truth check uses 200 bootstrap resamples. The confirmatory test of Section~\ref{sec:confirm}
-was written down before the United States and Korean results of the final model were inspected.
+We compare \nGenerators\ generators: 11 registered in the protocol and 9 added after it was frozen.
+
+\textbf{Registered (11).} Static: an i.i.d.\ Gaussian and a static multivariate Student-t with a rank-8 PPCA
+covariance \cite{tipping1999ppca}. Resampling: the stationary bootstrap of whole cross-sections. Dynamic classical:
+GARCH(1,1)-t with FHS of residual cross-sections, and DCC(1,1) with Student-t innovations. Regime: a supervised
+two-regime Gaussian whose day labels come from the frozen rule, and an unsupervised Gaussian HMM
+\cite{rabiner1989hmm} with the number of states chosen by BIC. Neural: TimeGAN, Quant GAN with Lambert-W
+preprocessing \cite{goerg2015lambert} and TimeVAE, all trained within a CPU budget, and the CG-NSDE initial design.
+The CPU-budget neural baselines are our own PyTorch reimplementations; their scores reflect that budget rather than
+the best achievable performance of the published methods.
+
+\textbf{Added after the freeze (9).} These generators are excluded from every preregistered verdict.
+\begin{itemize}
+\item \emph{GPU neural baselines:} TimeGAN (50\,000 iterations per phase), Quant GAN (10\,000 generator updates) and a
+DDPM \cite{ho2020ddpm} with a transformer denoiser (30\,000 iterations, cosine schedule \cite{nichol2021improved},
+DDIM sampling \cite{song2021ddim}) using the clean-sample parametrisation of \cite{yuan2024diffusionts}.
+\item \emph{Diffusion-TS} \cite{yuan2024diffusionts}, run with the authors' official code and published configuration
+for stock data (10\,000 training steps), changing only the window length and number of assets.
+\item \emph{Strong classical models} of the kind used by market-risk teams, all on GJR-GARCH-t margins with leverage
+\cite{nelson1991egarch}: a semi-parametric t copula with generalised Pareto tails in the style of
+\cite{mcneil2000estimation}; an asymmetric DCC whose correlations rise after joint negative shocks, with FHS
+innovations \cite{engle2002dcc,baroneadesi1999fhs}; and a two-state regime-switching t copula whose turbulent state has
+its own correlation, tail dependence and shock size.
+\item \emph{CG-NSDE without contagion} and \emph{CG-NSDE} (Section~\ref{sec:path}).
+\end{itemize}
+
+% ===========================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+% ===========================================================================
+The protocol was frozen on 12 November 2026 (version 1.0.0). All registered and classical generators and every
+CG-NSDE variant were trained on a single laptop CPU; one CG-NSDE run takes about 20 to 30 minutes. The GPU baselines
+were trained on a cloud GPU with the same runner code. Every table, figure and number in this paper is produced by
+one build script from the run outputs.
+
+\textbf{Protocol deviations.} The following departures from the protocol are known:
+\begin{itemize}
+\item both CG-NSDE changes, the strong classical baselines and the GPU baselines were added after the freeze and are
+excluded from every preregistered verdict;
+\item the CPU TimeGAN and Quant GAN were not run on the United States and Korean held-out fits;
+\item ablations use three seeds instead of five, and the risk backtest uses one seed per annual refit;
+\item TimeVAE is excluded from the FZ0 ranking because its ES forecasts are non-positive, and Diffusion-TS has no
+risk refits because of limited GPU time (three in-sample and four held-out runs);
+\item the ground-truth study uses 200 bootstrap resamples instead of 500.
+\end{itemize}
+The confirmatory test in Section~\ref{sec:confirm} was written down before the United States and Korean results of
+the final model were inspected.
 
 % ===========================================================================
 \section{Results}
 \label{sec:results}
 % ===========================================================================
-\subsection{What the real data supports}
+\subsection{Reference values on real data}
 The in-sample crisis boost is \realNseBoost\% [\realNseBoostLo, \realNseBoostHi] in India, \realUsBoost\%
-[\realUsBoostLo, \realUsBoostHi] in the United States and \realKrBoost\% [\realKrBoostLo, \realKrBoostHi] in Korea. In
-the held-out sample it is \realCovidBoost\% [\realCovidBoostLo, \realCovidBoostHi] in the COVID episode
+[\realUsBoostLo, \realUsBoostHi] in the United States and \realKrBoost\% [\realKrBoostLo, \realKrBoostHi] in Korea.
+In the held-out sample it is \realCovidBoost\% [\realCovidBoostLo, \realCovidBoostHi] in the COVID episode
 (\nCovidCrisis\ crisis windows) and \realShockBoost\% [\realShockBoostLo, \realShockBoostHi] in 2022
-(\nShockCrisis\ windows). Fourteen years of daily data contain few independent crises, so the intervals are wide and
-generators inside the band cannot be ordered.
+(\nShockCrisis\ windows). The June--July 2024 episode contains fewer than five crisis windows under the rule and
+gives no interval. Because fourteen years of daily data contain few independent crises, these intervals are wide,
+and generators whose values fall inside them cannot be ordered.
 
-\subsection{Does the boost statistic measure what it claims?}
+\subsection{Validity of the boost statistic}
 \label{sec:dgp}
-On simulated panels the rule-labelled boost is monotone in the truth but compressed: a population boost of 80\% reads
-\dgpEightyRule\% [\dgpEightyLo, \dgpEightyHi] and 40\% reads \dgpFortyRule\% [\dgpFortyLo, \dgpFortyHi], and a panel
-with no correlation change reads \dgpZeroRule\% [\dgpZeroLo, \dgpZeroHi] (Fig.~\ref{fig:dgp}). On the GARCH panel
-without regimes it reads \dgpCccRule\% [\dgpCccLo, \dgpCccHi]: volatility clustering alone produces a positive boost,
-as the argument of \cite{forbes2002contagion} predicts. The boost is ordinal: comparable between a generator and real
-data under one rule, not a population correlation increase.
+On the simulated panels (Fig.~\ref{fig:dgp}), the rule-labelled boost increases with the true boost but is
+compressed: a population boost of 80\% reads \dgpEightyRule\% [\dgpEightyLo, \dgpEightyHi], 40\% reads
+\dgpFortyRule\% [\dgpFortyLo, \dgpFortyHi], and a panel with no correlation change reads \dgpZeroRule\%
+[\dgpZeroLo, \dgpZeroHi]. On the GARCH panel without regimes it reads \dgpCccRule\% [\dgpCccLo, \dgpCccHi], so
+volatility clustering alone produces a positive boost, as the argument of \cite{forbes2002contagion} predicts. The
+boost is therefore an ordinal statistic: it supports comparisons between a generator and real data under the same
+rule, but it is not an estimate of the population increase in correlation.
 
 \begin{figure}[t]
 \centering
@@ -389,68 +505,81 @@ the frozen rule, and the reading on a GARCH panel without regimes.}
 \label{fig:dgp}
 \end{figure}
 
-\subsection{In-sample ranking}
-Table~\ref{tab:main} gives the full fit on India; Fig.~\ref{fig:scatter} plots correlation error against boost. The
-static generators produce boosts of \boostIidGaussian\% and \boostTPpca\%, as their construction implies, while
-matching the correlation matrix closely. The stationary bootstrap, which replays real days, is strong on every family
-in sample. CG-NSDE with and without contagion have the lowest crisis scores (\scoreCCgnsdeThree\ and
-\scoreCCgnsdeTwo; the bootstrap \scoreCStationaryBootstrap) and are the only generators other than the bootstrap with
-a classifier accuracy close to the real-versus-real ceiling. Adding contagion cuts the family-A error from
-\scoreACgnsdeTwo\ to \scoreACgnsdeThree\ by reproducing volatility clustering and heavier tails. Among GPU baselines, Quant GAN reaches a crisis score of \scoreCQuantganFs\ but with exploding tails;
-TimeGAN remains near-Gaussian and fully distinguishable at 50\,000 iterations; the DDPM has a boost of
-\boostDiffusionFs\% inside the real band but a correlation error of \corrDiffusionFs. The official Diffusion-TS
-reproduces the static correlation structure reasonably (family-B score \scoreBDiffusionTs) but generates windows
-about 30\% too calm, so fewer than 1\% of its windows meet the crisis rule against 15\% of real windows: its crisis
-metrics are not produced and its family-C score is \scoreCDiffusionTs. A state-of-the-art generic generator can thus
-look competitive on correlation fidelity while producing almost no crises, which is the failure CrisisBench is built
-to expose.
-
-\textbf{H1 and H4.} Over the registered generators $\tau_{B,C}$ is \tauBCnseFull\ [\tauBCnseFullLo, \tauBCnseFullHi]
-in India, \tauBCusFull\ [\tauBCusFullLo, \tauBCusFullHi] in the United States and \tauBCkrFull\ [\tauBCkrFullLo,
-\tauBCkrFullHi] in Korea (Table~\ref{tab:taus}). All exceed 0.3: H1 and H4 are not supported and the kill rule was
-triggered. The two views agree more than we expected because the same generators that miss crisis dependence (the
-neural CPU baselines) also miss the pooled correlation matrix, which anchors both rankings. In the held-out fit the
-agreement weakens (\tauBCnseHeld, \tauBCusHeld, \tauBCkrHeld).
-
-\begin{table*}[t]
-\caption{Main panel (India), full fit: selected metrics and family scores $S_A$ to $S_D$ (mean normalised error).
-Bold: inside the real 95\% band. Underlined: best family score.}
-\label{tab:main}
-\centering
-\footnotesize
-\resizebox{\textwidth}{!}{\maybetable{tables/t1_nse_full.tex}}
-\end{table*}
-
-\begin{figure}[t]
-\centering
-\maybefig{\columnwidth}{figures/f1_scatter_nse_full.pdf}
-\caption{Correlation error against crisis boost, full fit. Bands: real interval of the boost and real-versus-real
-ceiling of the correlation error.}
-\label{fig:scatter}
-\end{figure}
+\subsection{RQ1: Correlation fidelity versus crisis dependence}
+Over the registered generators, $\tau_{B,C}$ is \tauBCnseFull\ [\tauBCnseFullLo, \tauBCnseFullHi] in India,
+\tauBCusFull\ [\tauBCusFullLo, \tauBCusFullHi] in the United States and \tauBCkrFull\ [\tauBCkrFullLo,
+\tauBCkrFullHi] in Korea (Table~\ref{tab:taus}). All three exceed 0.3, so H1 and H4 are not supported and the kill
+rule is triggered: in sample, crisis dependence does not order generators differently enough to be presented as a
+separate evaluation axis. The agreement arises mainly because the generators that miss crisis dependence (the CPU
+neural baselines) also miss the pooled correlation matrix, which anchors both rankings. In the held-out fit the
+agreement is weaker (\tauBCnseHeld, \tauBCusHeld\ and \tauBCkrHeld).
 
 \begin{table}[t]
-\caption{Kendall $\tau$ between the family-B and family-C rankings (registered generators).}
+\caption{Kendall $\tau$ Between the Family-B and Family-C Rankings (Registered Generators)}
 \label{tab:taus}
 \centering
 \footnotesize
 \resizebox{\columnwidth}{!}{\maybetable{tables/t6_taus.tex}}
 \end{table}
 
-\subsection{Held-out crises}
-Table~\ref{tab:heldout} gives the pre2020 fit scored on 2020 to 2024. CG-NSDE has the best crisis score
-(\heldScoreCCgnsdeThree), followed by CG-NSDE without contagion (\heldScoreCCgnsdeTwo) and DCC (\heldScoreCDccGarch). No generator, ours
-included, lies inside the real interval in the COVID episode (\nInsideCovid\ generators) or in 2022
-(\nInsideShock): CG-NSDE's held-out boost is \heldBoostCgnsdeThree\% against a real \realCovidBoost\% in 2020
-(Fig.~\ref{fig:heldout}). G2 fails for every design of CG-NSDE. Trained on 2010 to 2019, no generator here produces a
-crash of COVID's intensity.
+\subsection{In-sample comparison}
+Table~\ref{tab:main} reports the full fit on India, and Fig.~\ref{fig:scatter} plots correlation error against
+boost.
+\begin{itemize}
+\item \emph{Static generators} match the correlation matrix closely but produce boosts of only \boostIidGaussian\%
+(i.i.d.\ Gaussian) and \boostTPpca\% (t-PPCA), as their construction implies.
+\item \emph{The stationary bootstrap}, which replays real days, scores well on every family in sample.
+\item \emph{CG-NSDE without contagion and CG-NSDE} have the lowest crisis scores (\scoreCCgnsdeTwo\ and
+\scoreCCgnsdeThree, against \scoreCStationaryBootstrap\ for the bootstrap). Apart from the bootstrap, they are the
+only generators whose classifier accuracy is close to the real-versus-real ceiling. Adding contagion reduces the
+family-A error from \scoreACgnsdeTwo\ to \scoreACgnsdeThree\ by reproducing volatility clustering and heavier tails.
+\item \emph{GPU baselines:} Quant GAN reaches a crisis score of \scoreCQuantganFs\ but with exploding tails; TimeGAN
+remains near-Gaussian and fully distinguishable after 50\,000 iterations; the DDPM has a boost of
+\boostDiffusionFs\% inside the real band but a correlation error of \corrDiffusionFs.
+\item \emph{Diffusion-TS} reproduces the static correlation structure reasonably well (family-B score
+\scoreBDiffusionTs), but its return standard deviation is about two thirds of the real value. Fewer than 1\% of its
+windows meet the crisis rule, against 15\% of real windows, so its crisis metrics are not produced and its family-C
+score is \scoreCDiffusionTs.
+\end{itemize}
+The last case shows the failure that CrisisBench is designed to detect: a state-of-the-art general-purpose generator
+can be competitive on correlation fidelity while producing almost no crisis windows.
 
 \begin{table*}[t]
-\caption{Main panel (India), pre2020 fit scored on the held-out 2020 to 2024 sample.}
+\caption{Main Panel (India), Full Fit: Selected Metrics and Family Scores $S_A$--$S_D$ (Mean Normalised Error)}
+\label{tab:main}
+\centering
+\footnotesize
+\resizebox{\textwidth}{!}{\maybetable{tables/t1_nse_full.tex}}\\[2pt]
+\parbox{\textwidth}{\scriptsize Bold: inside the real 95\% band. ``--'': not produced (fewer than 20 generated crisis
+windows). Corr.\ err.: Frobenius distance between pooled correlation matrices; Disc.: real-versus-generated classifier
+accuracy.}
+\end{table*}
+
+\begin{figure*}[t]
+\centering
+\maybefig{0.95\textwidth}{figures/f1_scatter_nse_full.pdf}
+\caption{Correlation error (log scale) against crisis boost, Indian panel, full fit. Horizontal band and line: real
+95\% interval and real value of the boost. Vertical band: real-versus-real ceiling of the correlation error.
+Generators whose crisis metrics are not produced are omitted.}
+\label{fig:scatter}
+\end{figure*}
+
+\subsection{Held-out crises}
+Table~\ref{tab:heldout} reports the pre2020 fit scored on 2020--2024. CG-NSDE has the lowest crisis score
+(\heldScoreCCgnsdeThree), followed by CG-NSDE without contagion (\heldScoreCCgnsdeTwo) and DCC
+(\heldScoreCDccGarch). No generator lies inside the real interval in the COVID episode (\nInsideCovid\ generators) or
+in 2022 (\nInsideShock). The held-out boost of CG-NSDE is \heldBoostCgnsdeThree\%, against a real
+\realCovidBoost\% in 2020 (Fig.~\ref{fig:heldout}). Gate G2, assessed on the two episodes with an interval, fails
+for every design of CG-NSDE. Trained on 2010--2019, all generators fall well below the empirical COVID-2020 band.
+
+\begin{table*}[t]
+\caption{Main Panel (India), Pre2020 Fit Scored on the Held-Out 2020--2024 Sample}
 \label{tab:heldout}
 \centering
 \footnotesize
-\resizebox{\textwidth}{!}{\maybetable{tables/t1_nse_pre2020.tex}}
+\resizebox{\textwidth}{!}{\maybetable{tables/t1_nse_pre2020.tex}}\\[2pt]
+\parbox{\textwidth}{\scriptsize Columns as in Table~\ref{tab:main}; the real band is computed on the 2020--2024
+windows.}
 \end{table*}
 
 \begin{figure*}[t]
@@ -460,22 +589,23 @@ crash of COVID's intensity.
 \label{fig:heldout}
 \end{figure*}
 
-\subsection{Downstream validation and metric validity}
-Table~\ref{tab:risk} reports the backtest at 97.5\% on the equal-weight portfolio. CG-NSDE has the lowest FZ0
-loss of all \riskNGen\ generators (rank \riskGenRankVThree); only GARCH-t FHS fitted directly on the portfolio, which is
-a risk model rather than a generator, is better. At 99\% CG-NSDE has \violVThree\ exceptions against \violExp\ expected
-(historical simulation \violHs), so its VaR is still too low in the tail.
+\subsection{RQ2: Downstream risk validation and metric validity}
+Table~\ref{tab:risk} reports the backtest at the 97.5\% level on the equal-weight portfolio. CG-NSDE has the lowest
+FZ0 loss of the \riskNGen\ generators (rank \riskGenRankVThree). The only method with a lower loss is the GARCH-t FHS
+model fitted directly on the portfolio, which is a dedicated risk model rather than a scenario generator. At the 99\%
+level CG-NSDE has \violVThree\ exceptions against \violExp\ expected (historical simulation: \violHs), so its VaR
+remains too low in the far tail.
 
-Over the ten registered generators, the crisis family's $\tau$ with the backtest ranking is \tauRiskC\ [\tauRiskCLo,
-\tauRiskCHi] and the correlation family's is \tauRiskB\ [\tauRiskBLo, \tauRiskBHi] (Table~\ref{tab:validity}). The
-intervals touch, so H3 and G3 fail by the preregistered criterion. With all \nRiskGenP\ generators the values are
-\tauRiskPC\ [\tauRiskPCLo, \tauRiskPCHi] and \tauRiskPB\ [\tauRiskPBLo, \tauRiskPBHi]. The defensible statement is
-modest: in both analyses the correlation family is the weakest predictor of backtest quality, and the
-distinguishability family (\tauRiskD, \tauRiskPD) is as informative as the crisis family. Reporting correlation error
-alone, as is common, is the least informative choice for a risk use.
+Over the ten registered generators that produce valid forecasts, the crisis family's $\tau$ with the backtest ranking
+is \tauRiskC\ [\tauRiskCLo, \tauRiskCHi] and the correlation family's is \tauRiskB\ [\tauRiskBLo, \tauRiskBHi]
+(Table~\ref{tab:validity}). The intervals touch, so H3 and G3 fail by the preregistered criterion. With all
+\nRiskGenP\ generators the values are \tauRiskPC\ [\tauRiskPCLo, \tauRiskPCHi] and \tauRiskPB\ [\tauRiskPBLo,
+\tauRiskPBHi]. In both analyses the correlation family is the weakest predictor of backtest quality, and the
+distinguishability family (\tauRiskD\ and \tauRiskPD) is as informative as the crisis family. Reporting correlation
+error alone, which is common practice, is thus the least informative choice for risk use.
 
 \begin{table}[t]
-\caption{VaR/ES backtest, equal-weight portfolio, 97.5\%, out of sample from 2020, sorted by FZ0 loss.}
+\caption{VaR/ES Backtest, Equal-Weight Portfolio, 97.5\% Level, Out of Sample From 2020, Sorted by FZ0 Loss}
 \label{tab:risk}
 \centering
 \footnotesize
@@ -483,27 +613,26 @@ alone, as is common, is the least informative choice for a risk use.
 \end{table}
 
 \begin{table}[t]
-\caption{Metric validity: Kendall $\tau$ between the backtest ranking and each score, registered generators and
-with post hoc generators.}
+\caption{Metric Validity: Kendall $\tau$ Between the Backtest Ranking and Each Family Score, Registered Generators
+and With Post Hoc Generators}
 \label{tab:validity}
 \centering
 \footnotesize
 \resizebox{\columnwidth}{!}{\maybetable{tables/t5_validity.tex}}
 \end{table}
 
-\subsection{Replication markets}
-In sample, the stationary bootstrap has the best crisis score on both replication panels; CG-NSDE is second in
-the United States and third in Korea (Table~\ref{tab:markets}). In the held-out fit CG-NSDE (\confirmKrFull) and the
-regime-switching t copula are within seed noise of each other in Korea, and CG-NSDE without contagion is best in the
-United States (\confirmUsVTwo; with contagion \confirmUsFull), with the regime-switching copula second. Whether the
-contagion term helps, and the margin over the strongest classical model, is therefore market dependent. Across all six
-market-and-fit cells (Table~\ref{tab:avgrank}) CG-NSDE has the best mean rank on crisis dependence
-(\avgRankCgnsdeThree\ over \avgRankN\ generators run in every cell) and the best worst case
-(\worstRankCgnsdeThree th); every competitor that wins a cell ranks far lower elsewhere.
-CG-NSDE uses a sector feature defined for the Indian tickers only.
+\subsection{Replication and consistency across markets}
+In sample, the stationary bootstrap has the best crisis score on both replication panels; CG-NSDE is second in the
+United States and third in Korea (Table~\ref{tab:markets}). In the held-out fit, CG-NSDE (\confirmKrFull) and the
+regime-switching t copula are within seed noise of each other in Korea. In the United States, CG-NSDE without
+contagion is best (\confirmUsVTwo, against \confirmUsFull\ with contagion) and the regime-switching copula is second.
+The benefit of the contagion term, and the margin over the strongest classical model, therefore depend on the market.
+Across all six market and fit settings (Table~\ref{tab:avgrank}), CG-NSDE has the best mean rank on crisis
+dependence (\avgRankCgnsdeThree\ over the \avgRankN\ generators run in every setting) and the best worst-case rank
+(\worstRankCgnsdeThree); every competitor that is best in one setting ranks much lower in another.
 
 \begin{table*}[t]
-\caption{Replication panels, full fit. Top: United States. Bottom: Korea.}
+\caption{Replication Panels, Full Fit. Top: United States. Bottom: Korea}
 \label{tab:markets}
 \centering
 \footnotesize
@@ -512,28 +641,30 @@ CG-NSDE uses a sector feature defined for the Indian tickers only.
 \end{table*}
 
 \begin{table}[t]
-\caption{Rank on the crisis family (1 = best) in every market and fit, for the generators run in all six cells.}
+\caption{Rank on the Crisis Family (1 = Best) in Every Market and Fit, for the Generators Run in All Six Settings}
 \label{tab:avgrank}
 \centering
 \footnotesize
 \resizebox{\columnwidth}{!}{\maybetable{tables/t10_avgrank.tex}}
 \end{table}
 
-\subsection{What makes CG-NSDE work: ablations}
+\subsection{Ablations}
 \label{sec:ablate}
-For the components of Change 1 (Table~\ref{tab:ablation}), the held-out crisis score worsens most without factor-specific volatility
-(\ablHeldCScalarVol\ against \ablHeldCFull), without resampled innovations (\ablHeldCParamInnov) and without the SDE
-(\ablHeldCNoSde); the graph attention network, the contrastive loss, the graph loss and the leverage term change
-nothing beyond seed noise. For the final model (Table~\ref{tab:ablationvthree}, Fig.~\ref{fig:contagion}), removing the whole
-cascade raises the held-out crisis score from \vThreeHeldCFull\ to \vThreeHeldCNoCascade\ and the family-A score from
-\vThreeHeldAFull\ to \vThreeHeldANoCascade; removing only the graph term has the same effect
-(\vThreeHeldCNoGraphCascade, \vThreeHeldANoGraphCascade), so the gain is carried by contagion between stocks. A
+\textbf{Components of Change 1} (Table~\ref{tab:ablation}). The held-out crisis score worsens most without
+factor-specific volatility (\ablHeldCScalarVol\ against \ablHeldCFull), without resampled innovations
+(\ablHeldCParamInnov) and without the latent SDE (\ablHeldCNoSde). Removing the graph attention network, the
+contrastive loss, the graph loss or the leverage term changes the score by no more than seed noise.
+
+\textbf{Components of the final model} (Table~\ref{tab:ablationvthree}, Fig.~\ref{fig:contagion}). Removing the whole
+contagion term raises the held-out crisis score from \vThreeHeldCFull\ to \vThreeHeldCNoCascade\ and the family-A
+score from \vThreeHeldAFull\ to \vThreeHeldANoCascade. Removing only the graph term has the same effect
+(\vThreeHeldCNoGraphCascade\ and \vThreeHeldANoGraphCascade), so the gain is carried by contagion between stocks. A
 uniform graph keeps the crisis score (\vThreeHeldCUniformGraph) but loses part of the volatility gain
-(\vThreeHeldAUniformGraph): that stress spreads matters more than exactly where. The per-window graph attention
-encoder is again unnecessary (\vThreeHeldCNoGat).
+(\vThreeHeldAUniformGraph): whether stress spreads matters more than exactly where it spreads. The per-window graph
+attention encoder is again unnecessary (\vThreeHeldCNoGat).
 
 \begin{table}[t]
-\caption{Ablations of Change 1 (CG-NSDE without contagion), India: in-sample and held-out family scores (three seeds).}
+\caption{Ablations of Change 1 (CG-NSDE Without Contagion), India: In-Sample and Held-Out Scores (Three Seeds)}
 \label{tab:ablation}
 \centering
 \footnotesize
@@ -541,8 +672,8 @@ encoder is again unnecessary (\vThreeHeldCNoGat).
 \end{table}
 
 \begin{table}[t]
-\caption{Ablations of the final CG-NSDE, India: in-sample and held-out family scores (three seeds; held-out $S_C$ with seed
-standard deviation).}
+\caption{Ablations of the Final CG-NSDE, India: In-Sample and Held-Out Scores (Three Seeds; Held-Out $S_C$ With Seed
+Standard Deviation)}
 \label{tab:ablationvthree}
 \centering
 \footnotesize
@@ -556,25 +687,30 @@ standard deviation).}
 \label{fig:contagion}
 \end{figure}
 
-\subsection{A confirmatory test that failed}
+\subsection{Confirmatory test of a label-free variant}
 \label{sec:confirm}
-On India the label-free variant of CG-NSDE had the best held-out crisis score of all variants (\vThreeHeldCNoRegime). Because this was
-seen on held-out data, we did not promote it; we wrote down the prediction that it would score at least as well as the
-labelled model on the United States and Korean held-out fits, and ran it. It scored \confirmUsNoRegime\ against
-\confirmUsFull\ in the United States (within seed noise) and \confirmKrNoRegime\ against \confirmKrFull\ in Korea, a
-clear failure. Crisis dependence does not reliably emerge from the contagion mechanism without regime labels.
+On India, the variant of CG-NSDE trained without any regime labels had the best held-out crisis score of all
+variants (\vThreeHeldCNoRegime). Because this was observed on held-out data, we did not adopt it. Instead we recorded
+the prediction that it would score at least as well as the labelled model on the United States and Korean held-out
+fits, and then ran it. It scored \confirmUsNoRegime\ against \confirmUsFull\ in the United States, within seed noise,
+and \confirmKrNoRegime~$\pm$~\confirmKrNoRegimeSd\ against \confirmKrFull~$\pm$~\confirmKrFullSd\ in Korea, outside
+seed noise. The prediction did not hold: crisis dependence does not reliably emerge from the contagion mechanism
+without regime labels.
 
-\subsection{Sensitivity to data errors and verdicts}
-A single bad tick changes generator pair orders on \contamTickMetrics\ of \contamNMetrics\ metrics (at most
-\contamTickMaxFlips\ of \contamTickPairs\ pairs), 1\% spikes on \contamSpikesMetrics\ (up to
-\contamSpikesMaxFlips\ pairs) and an unadjusted split on \contamSplitMetrics: H5 is supported, and data audits are a
-precondition for any generator comparison. Table~\ref{tab:verdicts} lists every verdict. H1, H3 and H4 and gates G1 to
-G4 fail; H2 and H5 are supported; the kill rule was triggered. Evaluated post hoc, CG-NSDE without contagion passes G1 (no simple
-regime model matches it), and no design passes G2.
+\subsection{Sensitivity to data errors}
+A single bad tick changes the order of at least one generator pair on \contamTickMetrics\ of \contamNMetrics\ metrics
+(at most \contamTickMaxFlips\ of \contamTickPairs\ pairs); 1\% spikes do so on \contamSpikesMetrics\ metrics (up to
+\contamSpikesMaxFlips\ pairs) and an unadjusted split on \contamSplitMetrics. H5 is supported: data audits are a
+precondition for any generator comparison.
+
+\subsection{Summary of verdicts}
+Table~\ref{tab:verdicts} lists every verdict. H1, H3 and H4 are not supported, all four gates fail, H2 and H5 are
+supported, and the kill rule is triggered. Evaluated post hoc, CG-NSDE without contagion passes G1 (no simple regime
+model matches it), and no design passes G2.
 
 \begin{table*}[t]
-\caption{Verdicts on the preregistered hypotheses and gates, and post hoc evaluations, as generated by the analysis
-code.}
+\caption{Verdicts on the Preregistered Hypotheses and Gates, and Post Hoc Evaluations, as Generated by the Analysis
+Code}
 \label{tab:verdicts}
 \centering
 \footnotesize
@@ -582,44 +718,98 @@ code.}
 \end{table*}
 
 % ===========================================================================
-\section{Threats to Validity}
+\section{Discussion}
+\label{sec:discussion}
 % ===========================================================================
-\textbf{Few crises.} Three held-out episodes and wide real intervals; many differences on family C lie inside the
-noise. \textbf{The boost statistic} is compressed and responds to volatility clustering. \textbf{Label rule.} One of
-many reasonable rules; supervised models are trained with labels from the rule that scores them.
-\textbf{Post hoc models.} Both design changes were made after the registered design failed, and the contagion term
-after the held-out results of Change 1 were seen; development used only
-2010 to 2019 data, but their design is not independent of the benchmark, and our confirmatory test of the strongest
-post hoc idea failed. CG-NSDE received more development time than any baseline. \textbf{Baselines.} CPU neural
-baselines are under-trained reimplementations; the GPU baselines were run once at a fixed budget without tuning.
-\textbf{Data.} Survivorship bias and a free vendor feed. \textbf{Statistics.} Kendall's $\tau$ over about ten to
-fifteen generators is coarse; seeds do not capture data uncertainty. \textbf{Novelty.} Our related-work comparison is
-based on abstracts.
+\textbf{Implications for evaluating generators.} The preregistered results do not support presenting crisis
+dependence as an evaluation axis that reorders generators in sample. They do support a narrower recommendation:
+correlation error, the most commonly reported fidelity metric, is the weakest predictor of downstream risk quality
+in our data, while the crisis and distinguishability families carry more information. A generator intended for
+stress testing should therefore be reported with crisis-conditioned and distinguishability metrics alongside
+correlation error, each expressed relative to real sampling noise. The Diffusion-TS result shows why: good static
+fidelity is compatible with an almost complete absence of crisis windows.
+
+\textbf{Reading the boost.} The ground-truth study shows that the boost is compressed and that volatility
+clustering alone produces a positive value. Comparisons of boosts between a generator and real data under the same
+rule remain meaningful; statements about the size of a correlation increase do not. A statistic that separates
+correlation change from volatility change, for example after the adjustment of \cite{forbes2002contagion}, would
+make the crisis family easier to interpret.
+
+\textbf{Why contagion helps out of sample.} In sample, removing the contagion term does not worsen the crisis score
+(Table~\ref{tab:ablationvthree}); the gain appears only on the held-out crises. Our interpretation is that in sample
+the regime prior and the latent code can reproduce crises similar to those in the training data, whereas a crisis
+outside the training period requires the model to amplify stress once it starts, which is what the contagion term
+provides. The learned parameters are consistent with this reading: stress is transmitted to neighbouring stocks
+rather than echoed in the stock that was hit.
+
+\textbf{Remaining gaps.} CG-NSDE reproduces about a quarter of the COVID-2020 boost
+(\heldBoostCgnsdeThree\% against \realCovidBoost\%), and its 99\% VaR is breached more often than expected. The
+contagion mechanism amplifies a crash once it has begun but has no model of how a crash begins, which the separate
+study on industry portfolios also found. The method also costs more to train than the classical models, and in Korea and
+the United States a regime-switching copula is competitive with it.
+
+\textbf{Role of preregistration.} Fixing the hypotheses before scoring made it possible to report the negative
+verdicts as results and to separate them clearly from the exploratory model changes. It also produced a direct test
+of the most promising exploratory idea, the label-free variant, which did not replicate.
+
+% ===========================================================================
+\section{Threats to Validity}
+\label{sec:threats}
+% ===========================================================================
+\textbf{Few independent crises.} The held-out sample contains two episodes with enough crisis windows for an
+interval, and the real intervals are wide. Many differences on family C lie within this noise, so rankings between
+close generators should not be over-interpreted, and the held-out advantage of CG-NSDE over the strongest classical
+model (\heldScoreCCgnsdeThree\ against \heldScoreCDccGarch) needs confirmation on further crises.
+
+\textbf{The crisis statistic and label rule.} The boost is compressed and responds to volatility clustering, and our
+rule is one of many reasonable choices; supervised models are trained with labels from the rule that scores them.
+This could favour regime-aware generators on family C. The label-free variant of CG-NSDE scores close to the
+labelled model in India and the United States but not in Korea (Section~\ref{sec:confirm}), so the effect is
+market dependent.
+
+\textbf{Post hoc design.} Both changes to CG-NSDE were made after the registered design failed, and the contagion
+term was added after the held-out results of Change 1 were seen. Development used only 2010--2019 data, but the
+design is not independent of the benchmark, and CG-NSDE received more development time than any baseline. The
+results for CG-NSDE should therefore be read as exploratory evidence that requires confirmation on new data; the
+failed confirmatory test shows that such confirmation is not automatic.
+
+\textbf{Baseline strength.} The CPU neural baselines are budget-limited reimplementations, and the GPU baselines
+were run once at a fixed budget without tuning. Stronger tuning could improve their scores and ranks. This
+would change the $\tau$ values that include them, but not the comparisons among the classical generators and
+CG-NSDE.
+
+\textbf{Data.} The panels have survivorship bias and come from a free vendor feed. Survivorship bias likely
+understates crisis severity for real and generated data alike, so its effect on relative comparisons is expected to
+be small. CG-NSDE also uses a sector feature that is defined for the Indian tickers only.
+
+\textbf{Statistics.} Kendall's $\tau$ over 10 to 20 generators is coarse, and seed intervals do not capture data
+uncertainty. We report intervals for every $\tau$ and base verdicts on them.
 
 % ===========================================================================
 \section{Reproducibility and Intended Use}
+\label{sec:repro}
 % ===========================================================================
-The protocol, panel builder with audit log and hashes, metric module, all generators, job queue, analysis code and
-the build script for every table, figure and number in this paper are in one repository, with the logs of failed runs
-and the development runs of both design changes. Raw vendor prices are not redistributed. Synthetic scenarios from these
-generators are research output, not validated for regulatory capital or investment decisions; the held-out results show
-how far generated crisis dependence can be from what occurred.
+The protocol, the panel builder with its audit log and hashes, the metric module, all generators, the job runner,
+the analysis code and the script that produces every table, figure and number in this paper are available in one
+repository, together with the logs of failed runs and the development runs of both design changes. Raw vendor
+prices are not redistributed. Synthetic scenarios from these generators are research output; they have not been
+validated for regulatory capital or investment decisions, and the held-out results show how far generated crisis
+dependence can be from what occurred.
 
 % ===========================================================================
 \section{Conclusion}
+\label{sec:conclusion}
 % ===========================================================================
-We tested, under a protocol frozen in advance, whether correlation fidelity and crisis dependence order synthetic
-return generators differently and whether either predicts usefulness for a VaR/ES task. They do not order them very
-differently, our metric-validity hypothesis failed narrowly, and our preregistered generator failed. What survives is
-narrower but checkable: correlation error alone is the least informative fidelity metric for a risk use; crisis
-statistics must be read as ordinal because volatility clustering inflates them; and a generator whose volatility
-states let tail stress spread along an asset graph is the strongest generator here on held-out crisis dependence on
-India and in the risk backtest, ahead of strong classical copula and asymmetric-DCC baselines, with the gain traced to
-the contagion term; in Korea a regime-switching copula matches it and in the United States the model without contagion is stronger,
-yet it is the most consistent generator across the three markets. No generator reproduced the
-intensity of the COVID crash. Future work should use point-in-time constituents and longer histories with more crises,
-a crisis statistic that separates correlation change from volatility change, and an onset model for the shocks that the
-contagion mechanism amplifies.
+We tested, under a protocol fixed in advance, whether correlation fidelity and crisis dependence order synthetic
+return generators differently and whether either predicts usefulness for VaR and ES forecasting. The two orderings
+are similar in sample, the metric-validity hypothesis narrowly failed, and the registered generator failed. Three
+findings remain: correlation error alone is the least informative fidelity metric for risk use; crisis statistics
+must be read as ordinal because volatility clustering inflates them; and a generator whose volatility states let
+tail stress spread along an asset graph is the strongest generator here on held-out crisis dependence in India and in
+the risk backtest, and the most consistent across three markets, with its gain traced to the contagion term. No
+generator reproduced the intensity of the COVID-2020 crash. Future work should use point-in-time constituents and
+longer histories with more crises, a crisis statistic that separates correlation change from volatility change, and
+a model of crash onset to complement the amplification that the contagion mechanism provides.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
