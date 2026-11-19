@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -33,6 +34,11 @@ def make_data(seed: int = 0) -> FitData:
     val = np.zeros(D, bool)
     val[450:600] = True
     return FitData("synthetic", r, pd.bdate_range("2015-01-01", periods=D), [f"A{i}" for i in range(N)], val)
+
+
+@pytest.fixture(scope="module")
+def data():
+    return make_data()
 
 
 TINY = {

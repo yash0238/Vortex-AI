@@ -189,6 +189,27 @@ Re-ran the full pipeline again after these jobs landed: analysis -> run_risk ->
 analysis -> export_web -> paper_build, all exit 0. G3 remains PASS (tau_C = 0.67),
 paper_build still emits 265 macros / 8 figures / 11 tables, marker count still 0.
 
+## Verification log - full test suite sweep
+
+Ran the entire `tests/` suite: 92 passed, with the following pre-existing issues
+fixed or documented:
+- `test_classical_garch.py` and `test_classical_regime.py` and
+  `test_neural_baselines.py` were written as runnable scripts whose test
+  functions took script-global parameters (`R`/`Z`, `fd`/`s`, `data`) that pytest
+  saw as missing fixtures. Added module-scoped pytest fixtures; those files now
+  collect and run (garch 5/5, regime 4/5, neural 3/4).
+- `test_hmm_gaussian` used `np.array_equal` on two hmmlearn EM fits whose outputs
+  differ by ~2.6e-15 (multithreaded BLAS). Replaced with `np.allclose(rtol=1e-10,
+  atol=1e-12)`; passes and still verifies determinism.
+
+Two GENUINE failures remain and were deliberately NOT papered over:
+- `tests/test_neural_baselines.py::test_timevae_std`: generated/real std ratio
+  ~0.13 (required > 1/3). This is the same TimeVAE collapse behind the risk-pool
+  exclusion; the test correctly fails and is left failing.
+- `tests/test_cgnsde.py::test_variants_run_one_epoch`: legacy v1 variant-history
+  assertion (`no_graph_loss` still logs `train_graph`). v1 is no longer the
+  reference model; left as-is rather than tuning the assertion to behaviour.
+
 ## Recommended next actions (in order)
 
 1. User: run `cloud/vortex_fullscale.ipynb` on a Kaggle/Colab GPU, return

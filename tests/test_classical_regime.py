@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -85,6 +86,21 @@ def check_recovery(g, tol, true_crisis_share):
     assert G.reshape(-1, N).std(0).mean() > 1.2 * VOL[0], "unconditional path never visits the crisis state"
 
 
+@pytest.fixture(scope="module")
+def _panel():
+    return make_panel()
+
+
+@pytest.fixture(scope="module")
+def fd(_panel):
+    return _panel[0]
+
+
+@pytest.fixture(scope="module")
+def s(_panel):
+    return _panel[1]
+
+
 def test_chain():
     s = simulate_chain(TRANS, 400_000, np.random.default_rng(0))
     C = np.zeros((2, 2))
@@ -131,10 +147,14 @@ def test_hmm_gaussian(fd, s):
     assert np.abs(np.sort(np.diag(g.trans)) - np.sort(np.diag(TRANS))).max() < 0.01
     check_samples(g)
     check_recovery(g, 0.03, s.mean())
-    g2 = HMMGaussian(restarts=2)
+    # Use the SAME restart budget: a different number of restarts can legitimately
+    # select a different best fit, which is not a determinism failure.
+    g2 = HMMGaussian(restarts=g.restarts)
     g2.fit(fd, 0)
-    assert np.array_equal(g.sample(5, np.random.default_rng(0)), g2.sample(5, np.random.default_rng(0))), \
-        "fit is not deterministic given the seed"
+    # hmmlearn's EM runs through multithreaded BLAS: repeated fits differ by ~1e-15.
+    # That is numerical noise, not a determinism failure; compare with a tight tolerance.
+    assert np.allclose(g.sample(5, np.random.default_rng(0)), g2.sample(5, np.random.default_rng(0)),
+                       rtol=1e-10, atol=1e-12), "fit is not deterministic given the seed"
 
 
 def test_hmm_degenerate_guard(fd):
