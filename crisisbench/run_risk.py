@@ -31,7 +31,7 @@ from .data import load_panel
 
 OUT = RESULTS / "06_risk"
 RANK_LEVEL, RANK_PF = 0.975, "equal_weight"
-COLORS = {"hist_sim": "var(--s-static)", "garch_fhs_bench": "var(--s-dyn)", "cgnsde2": "var(--s-ours)",
+COLORS = {"hist_sim": "var(--s-static)", "garch_fhs_bench": "var(--s-dyn)", "cgnsde3": "var(--s-ours)",
           "regime_gaussian": "var(--s-regime)", "timegan": "var(--s-neural)", "iid_gaussian": "var(--s-resample)"}
 
 
@@ -97,7 +97,7 @@ def main() -> None:
                     daily[name] = R.fz0_loss(r, V[:, k], E[:, k], a)
         if pf == "equal_weight":
             k99 = int(np.argmax(levels))
-            show = [m for m in ("hist_sim", "garch_fhs_bench", "cgnsde2", "regime_gaussian", "timegan", "iid_gaussian") if m in fc]
+            show = [m for m in ("hist_sim", "garch_fhs_bench", "cgnsde3", "rs_tcopula", "regime_gaussian", "iid_gaussian") if m in fc]
             series = dict(dates=[str(d.date()) for d in panel.dates[idx]], ret=np.round(100 * r, 3).tolist(),
                           methods={m: dict(name=fc[m][3], color=COLORS.get(m), var99=np.round(-100 * fc[m][0][:, k99], 3).tolist())
                                    for m in show})

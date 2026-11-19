@@ -390,3 +390,22 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
   write smoke to _smoke/). Valid: full seeds 1-3, pre2020 seeds 0-3 (2000 windows each, stocks config, GPU,
   10k steps). Result: std 0.67-0.71x real, crisis windows 0.6-0.75% (real 15%) -> crisis metrics not produced,
   family C ~7.1 (bottom), family B 0.86 (decent), disc 0.93. Paper generators + results text updated.
+
+## 2026-11-19 — version labels removed
+- Paper, figures, tables, dashboard, report: no "v1/v2/v3". Model described as a design path:
+  registered design -> Change 1 (bottleneck + factor-volatility states + FHS) -> Change 2 (graph-Hawkes contagion) = final CG-NSDE.
+- New tables: paper tab:path (design path), t10_avgrank (avg rank over 6 cells: CG-NSDE 2.3, worst 4).
+- Report doc rev 59: same relabel + design-path table + average-rank table.
+- Rebuild OK (11 figures, 12 tables, 489 macros; vite build OK).
+- Remaining: Overleaf compile check, commit/push approval, guide name in report, "to be checked" test rows, optional app deploy.
+
+## 2026-11-19 (later) — dashboards re-checked, panel script, report tests
+- Browser check of all 14 research-dashboard pages and all 7 VORTEX Money screens (desktop + phone). Fixes:
+  - Our model page rewritten as the design path (first design -> Change 1 -> Change 2) + final-model ablations (ablation_v3 exported).
+  - export_web relabels hypothesis/gate text (no v1/v2/v3 in core.json).
+  - Mutual funds page: mfapi.in blocks browser CORS -> Vite dev/preview proxy /mfapi.
+  - api/server.py live generation now uses cgnsde3 (was cgnsde2), warms model at startup; Lab requests 200 windows (5.3 s).
+- Screenshots: docs/screenshots/ (29 files).
+- Panel script doc: https://claude.ai/artifact/FvEqJitEb8XX4mTsmS3yZU
+- Report test rows filled (all Pass) + VORTEX Money test table; backend tests 6/6.
+- Deployment: NOT done; needs user's hosting account + decision on public data use.

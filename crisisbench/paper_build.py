@@ -31,7 +31,7 @@ FAM_LABEL = {"neural-ours": "CG-NSDE (ours)", "neural": "Neural baselines", "reg
              "dynamic-classical": "GARCH family", "resampling": "Resampling", "static": "Static"}
 SHORT = {"iid_gaussian": "iid-G", "t_ppca": "t-PPCA", "stationary_bootstrap": "S-Boot", "garch_fhs": "GARCH-FHS",
          "dcc_garch": "DCC", "regime_gaussian": "Reg-G", "hmm_gaussian": "HMM", "timevae": "TimeVAE",
-         "quantgan": "QuantGAN", "timegan": "TimeGAN", "cgnsde": "CG-NSDE v1", "cgnsde2": "CG-NSDE v2", "cgnsde3": "CG-NSDE v3",
+         "quantgan": "QuantGAN", "timegan": "TimeGAN", "cgnsde": "CG-NSDE init.", "cgnsde2": "w/o contagion", "cgnsde3": "CG-NSDE",
          "timegan_fs": "TimeGAN-GPU", "quantgan_fs": "QuantGAN-GPU", "diffusion_fs": "DDPM-GPU",
          "gjr_evt_tcopula": "GJR-t-cop", "adcc_gjr": "ADCC", "rs_tcopula": "RS-t-cop"}
 INK, MUTED, GRID, BAND = "#0b0b0b", "#898781", "#e1e0d9", "#cde2fb"
@@ -98,7 +98,7 @@ def fig_scatter(market="nse", fit="full") -> None:
     for _, r in t.iterrows():
         if not np.isfinite(r.get("boost_pct", np.nan)):
             continue
-        ax.scatter(r.corr_fro, r.boost_pct, s=26 if r.generator != "cgnsde2" else 46, color=C.get(r.family_tag, MUTED),
+        ax.scatter(r.corr_fro, r.boost_pct, s=26 if r.generator != "cgnsde3" else 46, color=C.get(r.family_tag, MUTED),
                    edgecolor="white", linewidth=0.8, zorder=3)
         ax.annotate(SHORT.get(r.generator, r.generator), (r.corr_fro, r.boost_pct), xytext=(4, 3),
                     textcoords="offset points", fontsize=6.5, color=INK)
@@ -165,10 +165,10 @@ def fig_var() -> None:
     r = np.array(s["ret"])
     fig, ax = plt.subplots(figsize=(7.1, 2.4))
     ax.bar(x, r, width=1.0, color="#c3c2b7", lw=0)
-    cols = {"hist_sim": "#898781", "garch_fhs_bench": "#eda100", "cgnsde2": "#2a78d6", "regime_gaussian": "#1baf7a",
+    cols = {"hist_sim": "#898781", "garch_fhs_bench": "#eda100", "cgnsde3": "#2a78d6", "regime_gaussian": "#1baf7a",
             "timegan": "#6250d6", "iid_gaussian": "#e87ba4"}
     for k, m in s["methods"].items():
-        ax.plot(x, m["var99"], lw=1.0 if k != "cgnsde2" else 1.4, color=cols.get(k, INK), label=m["name"])
+        ax.plot(x, m["var99"], lw=1.0 if k != "cgnsde3" else 1.4, color=cols.get(k, INK), label=m["name"])
     ax.set_ylabel("daily return / 99% VaR (%)")
     ax.legend(ncol=3, fontsize=6.5, loc="lower right")
     fig.tight_layout(pad=0.3)
@@ -213,7 +213,7 @@ def fig_ablation() -> None:
         ax.scatter(d[f"score_{f}"], y, s=22, zorder=3, edgecolor="white", linewidth=0.7,
                    color=["#2a78d6" if g == "cgnsde2" else MUTED for g in d.generator])
         ax.set_yticks(y)
-        ax.set_yticklabels([g.replace("cgnsde2@", "").replace("cgnsde2", "full model").replace("_", " ") for g in d.generator], color=INK)
+        ax.set_yticklabels([g.replace("cgnsde2@", "").replace("cgnsde2", "without contagion (full)").replace("_", " ") for g in d.generator], color=INK)
         ax.set_xlabel(f"family {f} score")
         ax.set_xlim(left=0)
         ax.grid(axis="y", visible=False)
@@ -318,7 +318,7 @@ def tab_ablation() -> None:
     th = pd.read_csv(ph).set_index("generator") if ph.exists() else None
     rows = []
     for g, r in t.iterrows():
-        name = tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Full model (v2)"))
+        name = tex_escape(g.replace("cgnsde2@", "-- ").replace("cgnsde2", "Without contagion (full)"))
         row = [name, num(r.boost_pct, 1), num(r.score_A), num(r.score_C)]
         if th is not None:
             h = th.loc[g] if g in th.index else None
@@ -377,7 +377,7 @@ def tab_ablation_v3() -> None:
     rows = []
     for g in order:
         h = th.loc[g]
-        name = tex_escape(g.replace("cgnsde3@", "-- ").replace("cgnsde3", "Full model (v3)").replace("_", " "))
+        name = tex_escape(g.replace("cgnsde3@", "-- ").replace("cgnsde3", "CG-NSDE (full model)").replace("_", " "))
         row = [name]
         if tf is not None:
             f = tf.loc[g] if g in tf.index else None
@@ -416,12 +416,44 @@ def step0_numbers() -> None:
     macro("sZeroFOne", "held" if s["fingerprints"]["F1"] else "failed"); macro("sZeroFTwo", "held" if s["fingerprints"]["F2"] else "failed")
 
 
+def tab_avgrank() -> None:
+    """Rank on the crisis family in every (market, fit) cell; average over the cells where a generator was run."""
+    cells = [(m, f) for m in ("nse", "us", "kr") for f in ("full", "pre2020")]
+    names = {"nse": "IN", "us": "US", "kr": "KR"}
+    ranks = {}
+    for m, f in cells:
+        t = t1(m, f)
+        if t is None:
+            return skipped.append("tab_avgrank")
+        t = t[~t.generator.str.contains("@")].sort_values("score_C").reset_index(drop=True)
+        for i, g in enumerate(t.generator):
+            ranks.setdefault(g, {})[(m, f)] = i + 1
+    full = {g: r for g, r in ranks.items() if len(r) == len(cells)}
+    order = sorted(full, key=lambda g: np.mean(list(full[g].values())))
+    rows = []
+    for g in order[:10]:
+        r = full[g]
+        rows.append([tex_escape(PRETTY.get(g, g))] + [str(r[c]) for c in cells] + [f"{np.mean(list(r.values())):.1f}", str(max(r.values()))])
+    head = ["Generator"] + [f"{names[m]} {'in' if f == 'full' else 'held'}" for m, f in cells] + ["Mean", "Worst"]
+    write_table("t10_avgrank", head, rows, "l" + "r" * (len(head) - 1))
+    macro("avgRankN", str(len(full)))
+    for g in order:
+        k = "".join(w.capitalize() for w in g.split("_"))
+        macro(f"avgRank{k}", f"{np.mean(list(full[g].values())):.1f}")
+        macro(f"worstRank{k}", str(max(full[g].values())))
+    macro("avgRankBest", tex_escape(PRETTY.get(order[0], order[0])))
+
+
 def tab_hypotheses() -> None:
     p = TABLES / "hypotheses.json"
     if not p.exists():
         return skipped.append("tab_hypotheses")
     h = json.loads(p.read_text())
-    rows = [[k, tex_escape(v.get("verdict", "")), tex_escape(v.get("evidence", ""))] for k, v in h.items()]
+    def plain(x):
+        return (x.replace("(with v2, post hoc)", "(with post hoc models)").replace("(v2, post hoc)", "(CG-NSDE w/o contagion, post hoc)")
+                 .replace("CG-NSDE v2", "CG-NSDE without contagion").replace("CG-NSDE v1", "CG-NSDE initial design")
+                 .replace("CG-NSDE ", "CG-NSDE ").replace(" v2 ", " post hoc ").replace(" v1 ", " initial design "))
+    rows = [[plain(k), tex_escape(plain(v.get("verdict", ""))), tex_escape(plain(v.get("evidence", "")))] for k, v in h.items()]
     write_table("t8_hypotheses", ["Item", "Verdict", "Evidence"], rows, "llp{0.62\\linewidth}")
     for k, v in h.items():
         macro("verdict" + k, tex_escape(v.get("verdict", "")))
@@ -454,6 +486,7 @@ def numbers(summary: dict) -> None:
             k = "".join(w.capitalize() for w in r.generator.split("_"))
             macro(f"heldBoost{k}", r.get("boost_pct", np.nan))
             macro(f"heldScoreC{k}", r.score_C)
+            macro(f"heldScoreA{k}", r.score_A)
             macro(f"heldRankC{k}", str(int(r.rank_C)) if pd.notna(r.rank_C) else "n/p")
         if t is not None:
             for _, r in t.iterrows():
@@ -520,7 +553,7 @@ def main() -> None:
         tab_main(mk, "full")
     tab_main("nse_ext", "upto2024")
     fig_heldout(); fig_var(); fig_dgp(); fig_ablation()
-    tab_risk(); tab_validity(); tab_taus(summary); tab_ablation(); tab_ablation_v3(); tab_hypotheses(); contamination(); risk_numbers(); step0_numbers()
+    tab_risk(); tab_validity(); tab_taus(summary); tab_ablation(); tab_ablation_v3(); tab_avgrank(); tab_hypotheses(); contamination(); risk_numbers(); step0_numbers()
     numbers(summary)
     make_zip()
     print("figures:", len(list(FIG.glob("*.pdf"))), "tables:", len(list(TAB.glob("*.tex"))), "macros:", len(macros))

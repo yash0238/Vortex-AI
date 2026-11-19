@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from crisisbench.bench import ARTIFACTS, make_fit_data          # noqa: E402
 from crisisbench.export_web import summarise_windows            # noqa: E402
-from crisisbench.generators.cgnsde2 import CGNSDE2 as CGNSDE               # noqa: E402
+from crisisbench.generators.cgnsde3 import CGNSDE3 as CGNSDE               # noqa: E402  (final model)
 
 app = FastAPI(title="VORTEX-AI scenario API", docs_url="/api/docs")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -39,7 +39,7 @@ class GenerateRequest(BaseModel):
 
 @lru_cache(maxsize=2)
 def _model(fit: str):
-    path = ARTIFACTS / "models" / "nse" / "cgnsde2" / fit / "seed0"
+    path = ARTIFACTS / "models" / "nse" / "cgnsde3" / fit / "seed0"
     try:
         gen = CGNSDE.load(path)
     except FileNotFoundError as e:
@@ -48,9 +48,18 @@ def _model(fit: str):
     return gen, fd.rule
 
 
+@app.on_event("startup")
+def _warm() -> None:
+    """Load the in-sample model at start-up so the first click on "generate live" does not wait for it."""
+    try:
+        _model("full")
+    except HTTPException:
+        pass
+
+
 @app.get("/api/health")
 def health() -> dict:
-    have = {f: any((ARTIFACTS / "models" / "nse" / "cgnsde2" / f).glob("seed0*")) for f in ("full", "pre2020")}
+    have = {f: any((ARTIFACTS / "models" / "nse" / "cgnsde3" / f).glob("seed0*")) for f in ("full", "pre2020")}
     return dict(status="ok", checkpoints=have)
 
 

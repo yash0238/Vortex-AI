@@ -186,7 +186,7 @@ export function Risk() {
         </div>
         <Card title="Backtest results" sub={<>Sorted by <Term k="fz0" /> (best first). <Term k="kupiec" />, <Term k="christoffersen" />: p-values below 0.05 mean the model fails that test. <Term k="traffic" /> applies to the 99% level.</>}>
           <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Method</th><th>Breaches</th><th>Expected</th><th>Kupiec p</th><th>Independence p</th><th>Cond. coverage p</th><th>Traffic light</th><th>ES test Z2</th><th>FZ0 loss</th></tr></thead>
-            <tbody>{rows.map((x) => (<tr key={x.method} className={x.method === "cgnsde2" ? "ours" : x.kind === "benchmark" ? "real" : ""}>
+            <tbody>{rows.map((x) => (<tr key={x.method} className={x.method === "cgnsde3" ? "ours" : x.kind === "benchmark" ? "real" : ""}>
               <td><span className="dot" style={{ background: x.kind === "benchmark" ? "var(--real)" : famColor(x.family_tag) }} />{x.name}</td>
               <td>{x.violations}</td><td>{fmt(x.expected, 1)}</td>
               {["kupiec_p", "ind_p", "cc_p"].map((k) => (<td key={k} className={x[k] >= 0.05 ? "in" : "out"}>{fmt(x[k], 3)}</td>))}
@@ -209,42 +209,55 @@ export function Risk() {
 export function Model() {
   const core = useData<Core>("core");
   const [fit, setFit] = useState("full");
+  const [which, setWhich] = useState("final");
   if (!core.data) return <Loading error={core.error} />;
-  const cg = core.data.cgnsde, b = core.data.bench[`nse/${fit}`], abl = b?.ablation;
+  const cg = core.data.cgnsde, b = core.data.bench[`nse/${fit}`];
+  const abl = which === "final" ? b?.ablation_v3 : b?.ablation;
   const hist: Any[] = cg?.info?.history ?? [];
-  const VAR: Record<string, string> = { "cgnsde2": "Full model (v2)", "cgnsde2@no_gat": "without graph attention", "cgnsde2@no_supcon": "without contrastive loss",
-    "cgnsde2@no_graph_loss": "without graph loss", "cgnsde2@no_sde": "without the SDE (frozen hidden state)", "cgnsde2@scalar_vol": "one volatility state for everything (as in v1)",
+  const VAR: Record<string, string> = { "cgnsde2": "Without contagion (all parts)", "cgnsde2@no_gat": "without graph attention", "cgnsde2@no_supcon": "without contrastive loss",
+    "cgnsde2@no_graph_loss": "without graph loss", "cgnsde2@no_sde": "without the SDE (frozen hidden state)", "cgnsde2@scalar_vol": "one volatility state for everything (as in the first design)",
     "cgnsde2@no_voldyn": "without volatility memory", "cgnsde2@no_leverage": "without the leverage effect", "cgnsde2@gauss": "Gaussian likelihood instead of fat tails",
-    "cgnsde2@param_innov": "drawn shocks instead of replayed residuals", "cgnsde2@beta01": "weaker bottleneck (KL weight 0.1)", "cgnsde2@K1": "1 factor", "cgnsde2@K4": "4 factors", "cgnsde2@K16": "16 factors" };
-  const v1 = cg?.v1_info;
+    "cgnsde2@param_innov": "drawn shocks instead of replayed residuals", "cgnsde2@beta01": "weaker bottleneck (KL weight 0.1)", "cgnsde2@K1": "1 factor", "cgnsde2@K4": "4 factors", "cgnsde2@K16": "16 factors",
+    "cgnsde3": "Final model (all parts)", "cgnsde3@no_cascade": "no contagion at all", "cgnsde3@no_graph_cascade": "no spread to connected stocks",
+    "cgnsde3@no_mkt_cascade": "no spread to the whole market", "cgnsde3@uniform_graph": "equal links instead of learned links", "cgnsde3@no_regime": "no crisis labels at all",
+    "cgnsde3@no_gat": "without graph attention", "cgnsde3@no_supcon": "without contrastive loss", "cgnsde3@no_sde": "without the SDE", "cgnsde3@scalar_vol": "one volatility state for everything" };
+  const full: Any[] = core.data.bench["nse/full"]?.rows ?? [], held: Any[] = core.data.bench["nse/pre2020"]?.rows ?? [];
+  const sc = (rows: Any[], g: string) => rows.find((r) => r.generator === g)?.score_C;
+  const steps = [
+    { g: "cgnsde", t: "First design (registered before any result)", d: `The decoder could see each window's codes directly, and one volatility number scaled every stock. It memorised its training windows (best validation score after epoch ${cg?.v1_info?.best_epoch ?? 2}) and could not make stocks move together more in a crash.` },
+    { g: "cgnsde2", t: "Change 1: bottleneck and factor volatility", d: "Removed the shortcut: everything the generator knows passes through a small 16-number code. Added a separate, changing volatility for each of 8 market factors and for each stock, and replayed the model's own past shocks. When factors turn turbulent, correlations rise by themselves." },
+    { g: "cgnsde3", t: "Change 2: crash contagion (final model)", d: "Added one idea: a crash day in one stock raises the volatility of its 10 most connected stocks and of the whole market, and the effect fades over the following days. The model learned that stress spreads to neighbours far more than it echoes in the stock that was hit." },
+  ];
+  const ours = which === "final" ? "cgnsde3" : "cgnsde2";
+  const WHICH = [{ v: "final", label: "Final model" }, { v: "change1", label: "Parts added in Change 1" }];
   return (
     <>
-      <Head eyebrow="Evidence · our model" title="CG-NSDE under the microscope">Two versions, one honest story: the first design failed the benchmark, we found out why, and the second design fixes exactly that.</Head>
-      <div className="grid g2">
-        <Card flat title="Version 1: what went wrong">
-          <p>The first model memorised its training windows. Its validation score was best after epoch {v1?.best_epoch ?? "2"} of {v1?.epochs_run ?? "10"}, so training stopped almost before it began. Its volatility memory also scaled every stock by the same number, and that cannot make stocks move together more in a crash.</p>
-          <p className="muted">Result: rank 10 of 12 on crisis behaviour. It stays in every table.</p>
-        </Card>
-        <Card flat title="Version 2: what changed">
-          <p>Each market-wide factor and each stock now has its own volatility memory. When a common factor becomes turbulent, every stock that depends on it moves with it, so correlations rise in crashes by construction of the dynamics, not by memory. The stock graph now only helps the model read a window; it can no longer leak it to the generator.</p>
-          <p className="muted">Designed after seeing version 1 fail, using 2010–2019 data only. That makes it a post hoc model, and we say so.</p>
-        </Card>
+      <Head eyebrow="Evidence · our model" title="CG-NSDE: one design, two changes">The registered design failed the benchmark. We found out why, made two changes, and measured what each change did. Both changes were made after the failure, so they are post hoc, and we say so.</Head>
+      <div className="grid g3">
+        {steps.map((s, k) => (<Card flat key={s.g} title={s.t}>
+          <p>{s.d}</p>
+          <div className="grid g2" style={{ marginTop: 8 }}>
+            <Stat k="Crisis score, all history" v={fmt(sc(full, s.g), 2)} s={k === 0 ? "lower is better" : `was ${fmt(sc(full, steps[k - 1].g), 2)}`} />
+            <Stat k="Crisis score, unseen 2020–24" v={fmt(sc(held, s.g), 2)} s={k === 0 ? "under 1 = within real noise" : `was ${fmt(sc(held, steps[k - 1].g), 2)}`} />
+          </div>
+        </Card>))}
       </div>
       {!cg ? <Empty what="CG-NSDE training" /> : (
         <div className="grid g4">
           <Card flat><Stat k="Training time (CPU)" v={`${fmt(cg.train_minutes, 1)} min`} s={`${cg.info?.epochs_run ?? "?"} epochs, best at ${cg.info?.best_epoch ?? "?"}`} /></Card>
           <Card flat><Stat k="Tail thickness learned (ν)" v={fmt(cg.info?.nu, 1)} s="lower = fatter tails; a bell curve is ∞" /></Card>
           <Card flat><Stat k="Common factors" v={cg.hparams?.rank_K ?? "8"} s="market-wide drivers, each with its own volatility memory" /></Card>
-          <Card flat><Stat k="Requested-regime boost" v={cg.conditional ? `+${fmt(cg.conditional.boost_pct, 0)}%` : "n/a"} s="when asked for crisis vs calm directly (not used for ranking)" /></Card>
+          <Card flat><Stat k="Contagion neighbours" v={cg.hparams?.contagion_k ?? "10"} s="most connected stocks a crash spreads to" /></Card>
         </div>)}
-      {hist.length > 0 && <Card title="Training curves" sub="Negative log-likelihood per epoch (lower is better). Training stops when the validation curve stops improving.">
+      {hist.length > 0 && <Card title="Training curves (final model)" sub="Negative log-likelihood per epoch (lower is better). Training stops when the validation curve stops improving.">
         <LineChart height={240} labels={hist.map((_, i) => `epoch ${i + 1}`)} series={[{ name: "train", color: "var(--s-ours)", y: hist.map((h) => h.train_nll ?? h.train) }, { name: "validation (2018–19)", color: "var(--crisis)", y: hist.map((h) => h.val_nll ?? h.val) }]} />
       </Card>}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations</h2><Seg value={fit} set={setFit} options={FITS} /></div>
-      {!abl ? <Empty what="The ablation study" /> : (<>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations: remove one part, re-score</h2>
+        <Seg value={which} set={setWhich} options={WHICH} /><Seg value={fit} set={setFit} options={FITS} /></div>
+      {!abl ? <Empty what="This ablation" /> : (<>
         <div className="grid g2">
           {["score_C", "score_B", "score_A", "score_D"].map((k) => (<Card flat key={k} title={FAM_NAME[k.slice(-1)] + " score"} sub="Lower is better; under 1 is within real noise.">
-            <IntervalPlot zero ceiling={1} rows={abl.map((r) => ({ label: VAR[r.generator] ?? r.name, color: r.generator === "cgnsde2" ? "var(--s-ours)" : "var(--s-static)", value: r[k], sd: r[k + "_sd"], bold: r.generator === "cgnsde2" }))} />
+            <IntervalPlot zero ceiling={1} rows={abl.map((r) => ({ label: VAR[r.generator] ?? r.name, color: r.generator === ours ? "var(--s-ours)" : "var(--s-static)", value: r[k], sd: r[k + "_sd"], bold: r.generator === ours }))} />
           </Card>))}
         </div>
         <Card title="Ablation table"><BenchTable rows={abl.map((r) => ({ ...r, name: VAR[r.generator] ?? r.name }))} refm={b.reference.metrics} metrics={["boost_pct", "cvar_ratio", "tail_coexc", "corr_fro", "kurt_med", "acf1_sq", "disc_feat"]} /></Card>

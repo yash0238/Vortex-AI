@@ -39,7 +39,7 @@ export function Lab() {
   const runLive = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch(`${API}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 400, seed: Math.floor(Math.random() * 1e9), fit }) });
+      const r = await fetch(`${API}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 200, seed: Math.floor(Math.random() * 1e9), fit }) });
       if (!r.ok) throw new Error(`server answered ${r.status}`);
       setLive(await r.json());
     } catch (e) { setErr(`Live generation needs the API server (python -m uvicorn api.server:app). ${String(e)}`); }

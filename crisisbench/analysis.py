@@ -31,11 +31,11 @@ PRETTY = {
     "iid_gaussian": "i.i.d. Gaussian", "t_ppca": "Static t-PPCA", "stationary_bootstrap": "Stationary bootstrap",
     "garch_fhs": "GARCH-t FHS", "dcc_garch": "DCC-GARCH-t", "regime_gaussian": "Regime Gaussian",
     "hmm_gaussian": "Gaussian HMM", "timevae": "TimeVAE", "quantgan": "QuantGAN", "timegan": "TimeGAN",
-    "cgnsde": "CG-NSDE v1 (preregistered)", "cgnsde2": "CG-NSDE v2 (ours, post hoc)",
+    "cgnsde": "CG-NSDE initial design (prereg.)", "cgnsde2": "CG-NSDE without contagion (post hoc)",
     # full-scale GPU runs (crisisbench/fullscale.py), added after the protocol was frozen
     "timegan_fs": "TimeGAN (full scale, GPU)", "quantgan_fs": "QuantGAN (full scale, GPU)",
     "diffusion_fs": "DDPM diffusion (GPU)",
-    "cgnsde3": "CG-NSDE v3 (ours, post hoc)",
+    "cgnsde3": "CG-NSDE (ours, post hoc)",
     # strong classical baselines added after the freeze (crisisbench/generators/classical_strong.py)
     "gjr_evt_tcopula": "GJR-EVT t-copula", "adcc_gjr": "ADCC-GJR (FHS)", "rs_tcopula": "Regime-switching t-copula",
     "diffusion_ts": "Diffusion-TS (official code, GPU)",
@@ -50,11 +50,11 @@ def pretty(g: str) -> str:
     if g in PRETTY:
         return PRETTY[g]
     if g.startswith("cgnsde2@"):
-        return "CG-NSDE v2 / " + g.split("@")[1]
+        return "CG-NSDE w/o contagion / " + g.split("@")[1]
     if g.startswith("cgnsde3@"):
-        return "CG-NSDE v3 / " + g.split("@")[1]
+        return "CG-NSDE / " + g.split("@")[1]
     if g.startswith("cgnsde@"):
-        return "CG-NSDE v1 / " + g.split("@")[1]
+        return "CG-NSDE initial / " + g.split("@")[1]
     return g
 
 

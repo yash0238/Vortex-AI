@@ -171,11 +171,28 @@ def bench_block(market: str, fit: str) -> dict | None:
         m = pd.read_csv(p, index_col=0)
         tau = dict(metrics=list(m.index), matrix=_r(m.to_numpy(), 3))
     return dict(rows=t, reference=ref, metric_tau=tau, alt_rule=_csv(f"T1alt_{market}_{fit}"),
-                ablation=_csv(f"T2_ablation_{market}_{fit}"))
+                ablation=_csv(f"T2_ablation_{market}_{fit}"), ablation_v3=_csv(f"T2_ablation_v3_{market}_{fit}"))
+
+
+def _plain(x: str) -> str:
+    """Display text without internal version labels (initial design / without contagion / final model)."""
+    for a, b in (("(with v2, post hoc)", "(with post hoc models)"), ("(v2, post hoc)", "(without contagion, post hoc)"),
+                 ("CG-NSDE v1", "CG-NSDE initial design"), ("CG-NSDE v2", "CG-NSDE without contagion"),
+                 ("CG-NSDE v3", "CG-NSDE (final model)")):
+        x = x.replace(a, b)
+    return x
+
+
+def _plain_obj(o):
+    if isinstance(o, dict):
+        return {_plain(k): _plain_obj(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_plain_obj(v) for v in o]
+    return _plain(o) if isinstance(o, str) else o
 
 
 def cgnsde_block() -> dict | None:
-    p = RESULTS / "runs" / "nse" / "cgnsde2" / "full" / "seed0" / "metrics.json"
+    p = RESULTS / "runs" / "nse" / "cgnsde3" / "full" / "seed0" / "metrics.json"
     if not p.exists():
         return None
     d = json.loads(p.read_text())
@@ -226,8 +243,9 @@ def main() -> None:
         heldout=_csv("T3_heldout"), risk=_csv("T4_risk"), risk_series=_json(RESULTS / "06_risk" / "series.json"),
         metric_validity=_csv("T5_metric_validity"), contamination=_csv("T7_contamination"),
         dgp=_csv_any(RESULTS / "01_dgp" / "metric_validation.csv"), cgnsde=cgnsde_block(),
-        hypotheses=_json(TABLES / "hypotheses.json"),
+        hypotheses=_plain_obj(_json(TABLES / "hypotheses.json")),
     )
+    core["gates"] = {k: _plain(v) for k, v in core["gates"].items()}
     (OUT / "core.json").write_text(_dump(core), encoding="utf-8")
     (OUT / "markets.json").write_text(_dump(markets), encoding="utf-8")
     (OUT / "samples.json").write_text(_dump(samples), encoding="utf-8")

@@ -136,7 +136,7 @@ export default function MutualFunds() {
     setError(null);
 
     Promise.all(schemes.map(async (scheme): Promise<FundHistory> => {
-      const response = await axios.get<MfApiResponse>(`https://api.mfapi.in/mf/${scheme.code}`);
+      const response = await axios.get<MfApiResponse>(`/mfapi/mf/${scheme.code}`);
       const entries = response.data.data
         .map((point) => ({ date: point.date, time: parseDate(point.date), nav: Number(point.nav) }))
         .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.nav) && point.nav > 0)
@@ -177,7 +177,7 @@ export default function MutualFunds() {
 
     setSearchingFunds(true);
     const timer = window.setTimeout(() => {
-      axios.get<MfSearchMatch[]>("https://api.mfapi.in/mf/search", { params: { q: term } })
+      axios.get<MfSearchMatch[]>("/mfapi/mf/search", { params: { q: term } })
         .then((response) => {
           if (!active) return;
           const normalizedQuery = term.toLocaleLowerCase();

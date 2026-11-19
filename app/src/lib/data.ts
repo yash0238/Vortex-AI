@@ -6,7 +6,7 @@ export type Any = any;
 export type RefMetric = { kind: "stat" | "dist" | "disc"; real: number; lo?: number; hi?: number; half?: number; ceiling?: number };
 export type BenchRow = Record<string, Any> & { generator: string; name: string; family_tag: string; seeds: number };
 export type Bench = { rows: BenchRow[]; reference: { n_windows: number; n_crisis: number; metrics: Record<string, RefMetric>; mac_crisis: number; mac_normal: number };
-  metric_tau: { metrics: string[]; matrix: number[][] } | null; alt_rule: BenchRow[] | null; ablation: BenchRow[] | null };
+  metric_tau: { metrics: string[]; matrix: number[][] } | null; alt_rule: BenchRow[] | null; ablation: BenchRow[] | null; ablation_v3?: BenchRow[] | null };
 export type Core = { built: string; protocol: Any; pretty: Record<string, string>; summary: Record<string, Any>; bench: Record<string, Bench>;
   gates: Record<string, string>; heldout: Any[] | null; risk: Any[] | null; risk_series: Any | null; metric_validity: Any[] | null;
   contamination: Any[] | null; dgp: Any[] | null; cgnsde: Any | null; hypotheses: Record<string, Any> | null };

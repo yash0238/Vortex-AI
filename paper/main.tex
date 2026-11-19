@@ -43,9 +43,9 @@ crisis dependence rank generators in a similar order (Kendall $\tau=\tauBCnseFul
 own rule for abandoning the headline claim. The crisis family tracked backtest quality ($\tau=\tauRiskC$) while the
 correlation family did not ($\tau=\tauRiskB$), but the bootstrap intervals touch, so the preregistered test of metric
 validity failed as well. The boost statistic itself is ordinal and partly driven by volatility clustering, which we
-show on data with known ground truth. We then describe CG-NSDE, a latent neural SDE with factor-volatility states,
-and a post hoc third version that adds a graph-Hawkes cascade, motivated by evidence that tail events in equity
-markets self-excite near criticality. Against \nGenerators\ generators, including strong classical models (a
+show on data with known ground truth. We then describe CG-NSDE, a latent neural SDE whose final, post hoc design adds factor-volatility
+states and a graph-Hawkes cascade to the registered design, motivated by evidence that tail events in equity markets
+self-excite near criticality. Against \nGenerators\ generators, including strong classical models (a
 GARCH-EVT copula, an asymmetric DCC and a regime-switching copula), it is the best on held-out crisis dependence in
 India, ties a regime-switching copula in Korea, and gives the best risk forecasts among generators; removing the graph
 contagion removes its gain.
@@ -85,13 +85,13 @@ H4 fail); our abandonment rule was triggered.
 (H3 and G3 fail); with all post hoc generators included the gap shrinks further.
 \item The crisis correlation boost is compressed and responds to volatility clustering without any regime, so it is
 an ordinal statistic.
-\item The preregistered generator (CG-NSDE v1) failed for diagnosable reasons.
+\item The registered design of our own generator failed for diagnosable reasons.
 \end{itemize}
-The positive findings are post hoc and labelled so. A revised generator with factor-volatility states (v2) and a
-third version with a graph-Hawkes cascade in those states (v3) are the strongest generators on held-out crisis
-dependence in India and in the risk backtest, even against strong classical copula and asymmetric-DCC models, and an
-ablation attributes v3's gain to contagion along
-the asset graph. A confirmatory test that we pre-specified for a label-free variant failed on one market.
+The positive findings are post hoc and labelled so. Adding factor-volatility states and then a graph-Hawkes cascade to the registered
+design gives the strongest generator on held-out crisis dependence in India and in the risk backtest, even against
+strong classical copula and asymmetric-DCC models, and the most consistent across three markets (mean rank
+\avgRankCgnsdeThree, never worse than \worstRankCgnsdeThree th); an ablation attributes the last change's gain to
+contagion along the asset graph. A confirmatory test that we pre-specified for a label-free variant failed on one market.
 
 Our contributions are therefore (i) a preregistered benchmark with noise ceilings, a held-out crisis split, a
 ground-truth check, a contamination check and a downstream risk validation, released as code; (ii) a set of negative
@@ -238,7 +238,7 @@ G3, G4 & H3, H4 hold. \quad Kill: H1 fails on every market $\Rightarrow$ drop th
 with FHS of residual cross-sections; DCC(1,1) with Student-t innovations. Regime: a supervised two-regime Gaussian
 whose day labels come from the frozen rule; an unsupervised Gaussian HMM \cite{rabiner1989hmm} with states chosen by
 BIC. Neural: TimeGAN, Quant GAN with Lambert-W preprocessing \cite{goerg2015lambert}, TimeVAE, all own CPU-budget
-PyTorch reimplementations; and CG-NSDE v1. A weak score of a CPU-budget neural baseline is evidence about that
+PyTorch reimplementations; and the registered design of CG-NSDE. A weak score of a CPU-budget neural baseline is evidence about that
 budget, not about the published method.
 
 \textbf{Added after the protocol was frozen (post hoc, never in a preregistered verdict).} TimeGAN (50\,000
@@ -253,30 +253,53 @@ rise after joint negative shocks, with filtered-historical-simulation innovation
 and a two-state regime-switching t copula whose turbulent state has its own correlation, tail dependence and shock
 size. Diffusion-TS \cite{yuan2024diffusionts}, run with the authors' \emph{official} code and their published
 configuration for stock data (10\,000 training steps), changing only the window length and the number of assets;
-limited GPU time allowed three in-sample and four held-out runs and no risk-pool refits. CG-NSDE v2 and v3
-(Section~\ref{sec:method}).
+limited GPU time allowed three in-sample and four held-out runs and no risk-pool refits. The two post hoc
+designs of CG-NSDE (Section~\ref{sec:method}).
 
 % ===========================================================================
 \section{CG-NSDE}
 \label{sec:method}
 % ===========================================================================
-All versions work on per-asset z-scored returns, train on windows with labels from the frozen rule (in the prior,
-a supervised contrastive loss \cite{khosla2020supcon} and the batch sampler), and sample unconditionally: a regime is
+CG-NSDE works on per-asset z-scored returns, trains on windows with labels from the frozen rule (in the prior, a
+supervised contrastive loss \cite{khosla2020supcon} and the batch sampler), and samples unconditionally: a regime is
 drawn with the training crisis frequency, a latent code from a per-regime Gaussian mixture fitted to posterior codes
 \cite{ghosh2020rae}, a latent SDE is solved by the Euler scheme, and days are emitted sequentially. A generated window
 is labelled crisis only if the frozen rule says so. A two-layer graph attention network \cite{velickovic2018gat} on a
 $k$-nearest-neighbour correlation graph of each window feeds the posterior.
 
-\subsection{Version 1 (preregistered) and why it failed}
-In v1 the graph vector and a 64-dimensional latent state both feed the decoder, which emits a multivariate
-Student-t day whose whole covariance is scaled by one volatility state. The validation likelihood was best after
-\vOneBestEpoch\ of \vOneEpochs\ epochs: with windows overlapping in 59 of 60 days, the almost unregularised codes
+We describe the model as a design path: the design we registered, and the two changes that produced the final model,
+each with the scores it moved (Table~\ref{tab:path}). Both changes were made after the registered design failed and
+are post hoc; each was developed on 2010 to 2019 data only.
+
+\begin{table}[t]
+\caption{Design path of CG-NSDE on the Indian panel: family scores before and after each change (lower is better;
+in-sample = full fit, held-out = trained to 2019, scored on 2020 to 2024).}
+\label{tab:path}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.48\columnwidth}rrr@{}}
+\toprule
+Design & $S_C$ in & $S_C$ held & $S_A$ held \\
+\midrule
+Registered design: decoder sees window codes; one scalar volatility state & \scoreCCgnsde & \heldScoreCCgnsde & \heldScoreACgnsde \\
++ Change 1: information bottleneck and factor-volatility states, resampled residuals & \scoreCCgnsdeTwo & \heldScoreCCgnsdeTwo & \heldScoreACgnsdeTwo \\
++ Change 2: graph-Hawkes contagion in the volatility states (final model) & \scoreCCgnsdeThree & \heldScoreCCgnsdeThree & \heldScoreACgnsdeThree \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The registered design and why it failed}
+In the registered design the graph vector and a 64-dimensional latent state both feed the decoder, which emits a
+multivariate Student-t day whose whole covariance is scaled by one volatility state. The validation likelihood was best
+after \vOneBestEpoch\ of \vOneEpochs\ epochs: with windows overlapping in 59 of 60 days, the almost unregularised codes
 memorise the window, so early stopping selects a model whose dynamics barely moved. And a scalar volatility state
 cannot change correlations. Its generated windows are close to i.i.d.\ Student-t days.
 
-\subsection{Version 2 (post hoc): factor-volatility states}
-The graph vector enters only the posterior; everything the decoder knows passes through a 16-dimensional $z_0$
-whose KL divergence to the regime prior is summed with weight one. The covariance of day $t$ is
+\subsection{Change 1: an information bottleneck and factor-volatility states}
+\textbf{Removed:} the decoder's direct access to the graph vector and the large latent code, the scalar volatility
+state, and a pooled-correlation matching loss. \textbf{Added:} the graph vector enters only the posterior, and
+everything the decoder knows passes through a 16-dimensional $z_0$ whose KL divergence to the regime prior is summed
+with weight one. The covariance of day $t$ becomes
 \begin{equation}
 \Sigma_t = B\,\operatorname{diag}\!\big(e^{v^{f}_t + a^{f}(z_t)}\big)B^{\top}
          + \operatorname{diag}\!\big(d\odot e^{v^{i}_t + a^{i}(z_t)}\big),
@@ -286,49 +309,56 @@ with static loadings $B$ ($K=8$, PCA start), factor log-variance states $v^f$, i
 $a(z_t)$ read from the latent path. The states follow an EGARCH-type recursion \cite{nelson1991egarch} on shocks
 standardised by the current model variance, with leverage terms, teacher-forced in training and self-fed in
 sampling. When factor variances rise relative to idiosyncratic ones, correlations rise. Samples use filtered
-historical simulation of the model's own standardised residuals \cite{baroneadesi1999fhs}. Design choices were made
-on the 2010 to 2019 period only.
+historical simulation of the model's own standardised residuals \cite{baroneadesi1999fhs}. This change cut the crisis
+score from \scoreCCgnsde\ to \scoreCCgnsdeTwo\ in sample and from \heldScoreCCgnsde\ to \heldScoreCCgnsdeTwo\ on the
+held-out crises (Table~\ref{tab:path}). Its ablation (Section~\ref{sec:ablate}) shows which parts did the work:
+factor-specific volatility, resampled residuals and the latent SDE; the graph attention network and the contrastive and
+graph losses did not.
 
-\subsection{Version 3 (post hoc): a graph-Hawkes cascade}
-\textbf{Motivation.} v2 under-produces volatility clustering and, trained to 2019, produces a held-out boost far below
-COVID-2020's. In a separate preregistered study on the Kenneth French 49 industry portfolios (1926 to 2026) we modelled
-daily counts of 1\% tail exceedances as a self-exciting negative-binomial process. Over \sZeroBlocks\ out-of-sample
-20-day blocks it scored a mean log predictive score of \sZeroLsCascade\ against \sZeroLsEvt\ for an extreme-value
-baseline and \sZeroLsNoCascade\ without self-excitation, and it beat the extreme-value baseline on
-\sZeroRecWins\ of \sZeroRecTotal\ record-breaking crashes. Its early-warning fingerprint \sZeroFOne: the record crashes
-had already begun at the forecast points, so the evidence is for \emph{amplification given an onset}, not prediction.
+\subsection{Change 2: tail stress that spreads along an asset graph}
+\textbf{Motivation.} After Change 1 the model still under-produced volatility clustering and, trained to 2019,
+produced a held-out boost far below COVID-2020's. In a separate preregistered study on the Kenneth French 49 industry
+portfolios (1926 to 2026) we modelled daily counts of 1\% tail exceedances as a self-exciting negative-binomial
+process. Over \sZeroBlocks\ out-of-sample 20-day blocks it scored a mean log predictive score of \sZeroLsCascade\
+against \sZeroLsEvt\ for an extreme-value baseline and \sZeroLsNoCascade\ without self-excitation, and it beat the
+extreme-value baseline on \sZeroRecWins\ of \sZeroRecTotal\ record-breaking crashes. Its early-warning fingerprint
+\sZeroFOne: the record crashes had already begun at the forecast points, so the evidence is for \emph{amplification
+given an onset}, not prediction.
 
-\textbf{Mechanism.} v3 adds that amplification to the volatility states of v2. With
-$e_{t,i}=\mathbf{1}[x_{t,i}<q_i]$ ($q_i$ the 1\% quantile of asset $i$'s z-scored training returns) and a
-row-stochastic contagion graph $A$ (softmax of learnable logits over the $k=10$ most correlated training-period
-neighbours),
+\textbf{Added.} With $e_{t,i}=\mathbf{1}[x_{t,i}<q_i]$ ($q_i$ the 1\% quantile of asset $i$'s z-scored training
+returns) and a row-stochastic contagion graph $A$ (softmax of learnable logits over the $k=10$ most correlated
+training-period neighbours),
 \begin{align}
 v^{i}_{t+1,i} &\mathrel{+}= \kappa_s\, e_{t,i} + \kappa_g \textstyle\sum_j A_{ij}\, e_{t,j}, \label{eq:cascade}\\
 v^{f}_{t+1,k} &\mathrel{+}= \kappa_{m,k}\, \tfrac{1}{N}\textstyle\sum_j e_{t,j},
 \end{align}
-with $\kappa\ge0$. With the persistence of the v2 recursion each excitation decays geometrically: an exponential
+with $\kappa\ge0$. With the persistence of the Change-1 recursion each excitation decays geometrically: an exponential
 Hawkes kernel \cite{hawkes1971spectra} in log-variance, mutually exciting along the graph
-\cite{aitsahalia2015modeling}. The threshold is unconditional, so in sampling a cluster of tail days raises
-volatility, which produces more tail days. In every development fit the likelihood kept $\kappa_s$ near zero while $\kappa_g$ grew by more than an order of
-magnitude: stress was transmitted to neighbours rather than back to the stock that was hit. The neighbour count was fixed at $k=10$ by validation likelihood on 2010 to 2019 data before any held-out
-evaluation.
+\cite{aitsahalia2015modeling}. The threshold is unconditional, so in sampling a cluster of tail days raises volatility,
+which produces more tail days. In every development fit the likelihood kept $\kappa_s$ near zero while $\kappa_g$ grew
+by more than an order of magnitude: stress was transmitted to neighbours rather than back to the stock that was hit.
+The neighbour count was fixed at $k=10$ by validation likelihood on 2010 to 2019 data before any held-out evaluation.
+This change lowered the held-out crisis score from \heldScoreCCgnsdeTwo\ to \heldScoreCCgnsdeThree\ and the held-out
+family-A score from \heldScoreACgnsdeTwo\ to \heldScoreACgnsdeThree, at a similar in-sample crisis score
+(Table~\ref{tab:path}). This is the final model, called CG-NSDE in the rest of the paper; the model after Change 1 alone
+is reported as ``CG-NSDE without contagion''.
 
-\textbf{Ablations.} v2: graph attention, contrastive loss, graph loss, SDE, leverage, factor structure, volatility
-dynamics, Student-t likelihood, resampled innovations, KL weight, $K\in\{1,4,16\}$. v3: no cascade, no graph term,
-no market term, uniform graph, no graph attention, no contrastive loss, no SDE, scalar volatility, and no regime labels
-at all (one shared prior, no contrastive loss, unstratified batches).
+\textbf{Ablations.} Of Change 1: graph attention, contrastive loss, graph loss, SDE, leverage, factor structure,
+volatility dynamics, Student-t likelihood, resampled innovations, KL weight, $K\in\{1,4,16\}$. Of the final model: no
+cascade, no graph term, no market term, uniform graph, no graph attention, no contrastive loss, no SDE, scalar
+volatility, and no regime labels at all (one shared prior, no contrastive loss, unstratified batches).
 
 % ===========================================================================
 \section{Experimental Protocol and Deviations}
 % ===========================================================================
 The protocol was frozen on 12 November 2026 (version 1.0.0). A resumable job queue ran every (market, generator,
 fit, seed) job on one laptop CPU; GPU baselines ran on a cloud GPU with the unchanged runner. Tables, figures and
-quoted numbers are produced by one build script. Deviations we are aware of: CG-NSDE v2 and v3 and the GPU baselines
-were added after the freeze and are excluded from every preregistered verdict; the CPU TimeGAN and Quant GAN were not
+quoted numbers are produced by one build script. Deviations we are aware of: both post hoc designs of CG-NSDE, the strong classical
+baselines and the GPU baselines were added after the freeze and are excluded from every preregistered verdict; the CPU TimeGAN and Quant GAN were not
 run on the United States and Korean held-out fits or on the 2025 to 2026 extension; ablations use three seeds; the
 risk backtest uses one seed per refit; TimeVAE is excluded from the FZ0 ranking because its ES forecasts are
 non-positive; the ground-truth check uses 200 bootstrap resamples. The confirmatory test of Section~\ref{sec:confirm}
-was written down before the United States and Korean v3 results were inspected.
+was written down before the United States and Korean results of the final model were inspected.
 
 % ===========================================================================
 \section{Results}
@@ -363,10 +393,10 @@ the frozen rule, and the reading on a GARCH panel without regimes.}
 Table~\ref{tab:main} gives the full fit on India; Fig.~\ref{fig:scatter} plots correlation error against boost. The
 static generators produce boosts of \boostIidGaussian\% and \boostTPpca\%, as their construction implies, while
 matching the correlation matrix closely. The stationary bootstrap, which replays real days, is strong on every family
-in sample. CG-NSDE v2 and v3 have the lowest crisis scores (\scoreCCgnsdeTwo\ and \scoreCCgnsdeThree; the bootstrap
-\scoreCStationaryBootstrap) and are the only generators other than the bootstrap with a classifier accuracy close to
-the real-versus-real ceiling. v3 cuts v2's family-A error from \scoreACgnsdeTwo\ to \scoreACgnsdeThree\ by reproducing volatility clustering
-and heavier tails. Among GPU baselines, Quant GAN reaches a crisis score of \scoreCQuantganFs\ but with exploding tails;
+in sample. CG-NSDE with and without contagion have the lowest crisis scores (\scoreCCgnsdeThree\ and
+\scoreCCgnsdeTwo; the bootstrap \scoreCStationaryBootstrap) and are the only generators other than the bootstrap with
+a classifier accuracy close to the real-versus-real ceiling. Adding contagion cuts the family-A error from
+\scoreACgnsdeTwo\ to \scoreACgnsdeThree\ by reproducing volatility clustering and heavier tails. Among GPU baselines, Quant GAN reaches a crisis score of \scoreCQuantganFs\ but with exploding tails;
 TimeGAN remains near-Gaussian and fully distinguishable at 50\,000 iterations; the DDPM has a boost of
 \boostDiffusionFs\% inside the real band but a correlation error of \corrDiffusionFs. The official Diffusion-TS
 reproduces the static correlation structure reasonably (family-B score \scoreBDiffusionTs) but generates windows
@@ -408,11 +438,11 @@ ceiling of the correlation error.}
 \end{table}
 
 \subsection{Held-out crises}
-Table~\ref{tab:heldout} gives the pre2020 fit scored on 2020 to 2024. CG-NSDE v3 has the best crisis score
-(\heldScoreCCgnsdeThree), followed by v2 (\heldScoreCCgnsdeTwo) and DCC (\heldScoreCDccGarch). No generator, ours
+Table~\ref{tab:heldout} gives the pre2020 fit scored on 2020 to 2024. CG-NSDE has the best crisis score
+(\heldScoreCCgnsdeThree), followed by CG-NSDE without contagion (\heldScoreCCgnsdeTwo) and DCC (\heldScoreCDccGarch). No generator, ours
 included, lies inside the real interval in the COVID episode (\nInsideCovid\ generators) or in 2022
-(\nInsideShock): v3's held-out boost is \heldBoostCgnsdeThree\% against a real \realCovidBoost\% in 2020
-(Fig.~\ref{fig:heldout}). G2 fails for every version of CG-NSDE. Trained on 2010 to 2019, no generator here produces a
+(\nInsideShock): CG-NSDE's held-out boost is \heldBoostCgnsdeThree\% against a real \realCovidBoost\% in 2020
+(Fig.~\ref{fig:heldout}). G2 fails for every design of CG-NSDE. Trained on 2010 to 2019, no generator here produces a
 crash of COVID's intensity.
 
 \begin{table*}[t]
@@ -431,9 +461,9 @@ crash of COVID's intensity.
 \end{figure*}
 
 \subsection{Downstream validation and metric validity}
-Table~\ref{tab:risk} reports the backtest at 97.5\% on the equal-weight portfolio. CG-NSDE v3 has the lowest FZ0
+Table~\ref{tab:risk} reports the backtest at 97.5\% on the equal-weight portfolio. CG-NSDE has the lowest FZ0
 loss of all \riskNGen\ generators (rank \riskGenRankVThree); only GARCH-t FHS fitted directly on the portfolio, which is
-a risk model rather than a generator, is better. At 99\% v3 has \violVThree\ exceptions against \violExp\ expected
+a risk model rather than a generator, is better. At 99\% CG-NSDE has \violVThree\ exceptions against \violExp\ expected
 (historical simulation \violHs), so its VaR is still too low in the tail.
 
 Over the ten registered generators, the crisis family's $\tau$ with the backtest ranking is \tauRiskC\ [\tauRiskCLo,
@@ -462,10 +492,14 @@ with post hoc generators.}
 \end{table}
 
 \subsection{Replication markets}
-In sample, the stationary bootstrap has the best crisis score on both replication panels; v3 is second in the United
-States and third in Korea (Table~\ref{tab:markets}). In the held-out fit v3 (\confirmKrFull) and the regime-switching t copula are within seed noise of each other in
-Korea, and v2 is best in the United States (\confirmUsVTwo, v3 \confirmUsFull), with the regime-switching copula second.
-The ordering of our versions, and their margin over the strongest classical model, is therefore market dependent.
+In sample, the stationary bootstrap has the best crisis score on both replication panels; CG-NSDE is second in
+the United States and third in Korea (Table~\ref{tab:markets}). In the held-out fit CG-NSDE (\confirmKrFull) and the
+regime-switching t copula are within seed noise of each other in Korea, and CG-NSDE without contagion is best in the
+United States (\confirmUsVTwo; with contagion \confirmUsFull), with the regime-switching copula second. Whether the
+contagion term helps, and the margin over the strongest classical model, is therefore market dependent. Across all six
+market-and-fit cells (Table~\ref{tab:avgrank}) CG-NSDE has the best mean rank on crisis dependence
+(\avgRankCgnsdeThree\ over \avgRankN\ generators run in every cell) and the best worst case
+(\worstRankCgnsdeThree th); every competitor that wins a cell ranks far lower elsewhere.
 CG-NSDE uses a sector feature defined for the Indian tickers only.
 
 \begin{table*}[t]
@@ -477,11 +511,20 @@ CG-NSDE uses a sector feature defined for the Indian tickers only.
 \resizebox{\textwidth}{!}{\maybetable{tables/t1_kr_full.tex}}
 \end{table*}
 
+\begin{table}[t]
+\caption{Rank on the crisis family (1 = best) in every market and fit, for the generators run in all six cells.}
+\label{tab:avgrank}
+\centering
+\footnotesize
+\resizebox{\columnwidth}{!}{\maybetable{tables/t10_avgrank.tex}}
+\end{table}
+
 \subsection{What makes CG-NSDE work: ablations}
-For v2 (Table~\ref{tab:ablation}), the held-out crisis score worsens most without factor-specific volatility
+\label{sec:ablate}
+For the components of Change 1 (Table~\ref{tab:ablation}), the held-out crisis score worsens most without factor-specific volatility
 (\ablHeldCScalarVol\ against \ablHeldCFull), without resampled innovations (\ablHeldCParamInnov) and without the SDE
 (\ablHeldCNoSde); the graph attention network, the contrastive loss, the graph loss and the leverage term change
-nothing beyond seed noise. For v3 (Table~\ref{tab:ablationvthree}, Fig.~\ref{fig:contagion}), removing the whole
+nothing beyond seed noise. For the final model (Table~\ref{tab:ablationvthree}, Fig.~\ref{fig:contagion}), removing the whole
 cascade raises the held-out crisis score from \vThreeHeldCFull\ to \vThreeHeldCNoCascade\ and the family-A score from
 \vThreeHeldAFull\ to \vThreeHeldANoCascade; removing only the graph term has the same effect
 (\vThreeHeldCNoGraphCascade, \vThreeHeldANoGraphCascade), so the gain is carried by contagion between stocks. A
@@ -490,7 +533,7 @@ uniform graph keeps the crisis score (\vThreeHeldCUniformGraph) but loses part o
 encoder is again unnecessary (\vThreeHeldCNoGat).
 
 \begin{table}[t]
-\caption{CG-NSDE v2 ablations, India: in-sample and held-out family scores (three seeds).}
+\caption{Ablations of Change 1 (CG-NSDE without contagion), India: in-sample and held-out family scores (three seeds).}
 \label{tab:ablation}
 \centering
 \footnotesize
@@ -498,7 +541,7 @@ encoder is again unnecessary (\vThreeHeldCNoGat).
 \end{table}
 
 \begin{table}[t]
-\caption{CG-NSDE v3 ablations, India: in-sample and held-out family scores (three seeds; held-out $S_C$ with seed
+\caption{Ablations of the final CG-NSDE, India: in-sample and held-out family scores (three seeds; held-out $S_C$ with seed
 standard deviation).}
 \label{tab:ablationvthree}
 \centering
@@ -509,15 +552,15 @@ standard deviation).}
 \begin{figure}[t]
 \centering
 \maybefig{\columnwidth}{figures/f8_contagion.pdf}
-\caption{Real absolute correlation and the learned contagion graph $A$ of CG-NSDE v3 (assets ordered by sector).}
+\caption{Real absolute correlation and the learned contagion graph $A$ of CG-NSDE (assets ordered by sector).}
 \label{fig:contagion}
 \end{figure}
 
 \subsection{A confirmatory test that failed}
 \label{sec:confirm}
-On India the label-free v3 had the best held-out crisis score of all variants (\vThreeHeldCNoRegime). Because this was
+On India the label-free variant of CG-NSDE had the best held-out crisis score of all variants (\vThreeHeldCNoRegime). Because this was
 seen on held-out data, we did not promote it; we wrote down the prediction that it would score at least as well as the
-labelled v3 on the United States and Korean held-out fits, and ran it. It scored \confirmUsNoRegime\ against
+labelled model on the United States and Korean held-out fits, and ran it. It scored \confirmUsNoRegime\ against
 \confirmUsFull\ in the United States (within seed noise) and \confirmKrNoRegime\ against \confirmKrFull\ in Korea, a
 clear failure. Crisis dependence does not reliably emerge from the contagion mechanism without regime labels.
 
@@ -526,8 +569,8 @@ A single bad tick changes generator pair orders on \contamTickMetrics\ of \conta
 \contamTickMaxFlips\ of \contamTickPairs\ pairs), 1\% spikes on \contamSpikesMetrics\ (up to
 \contamSpikesMaxFlips\ pairs) and an unadjusted split on \contamSplitMetrics: H5 is supported, and data audits are a
 precondition for any generator comparison. Table~\ref{tab:verdicts} lists every verdict. H1, H3 and H4 and gates G1 to
-G4 fail; H2 and H5 are supported; the kill rule was triggered. The post hoc v2 passes G1 (no simple regime model
-matches it), and no version passes G2.
+G4 fail; H2 and H5 are supported; the kill rule was triggered. Evaluated post hoc, CG-NSDE without contagion passes G1 (no simple
+regime model matches it), and no design passes G2.
 
 \begin{table*}[t]
 \caption{Verdicts on the preregistered hypotheses and gates, and post hoc evaluations, as generated by the analysis
@@ -544,7 +587,8 @@ code.}
 \textbf{Few crises.} Three held-out episodes and wide real intervals; many differences on family C lie inside the
 noise. \textbf{The boost statistic} is compressed and responds to volatility clustering. \textbf{Label rule.} One of
 many reasonable rules; supervised models are trained with labels from the rule that scores them.
-\textbf{Post hoc models.} v2 and v3 were designed after seeing v1 fail and v2's held-out results; development used only
+\textbf{Post hoc models.} Both design changes were made after the registered design failed, and the contagion term
+after the held-out results of Change 1 were seen; development used only
 2010 to 2019 data, but their design is not independent of the benchmark, and our confirmatory test of the strongest
 post hoc idea failed. CG-NSDE received more development time than any baseline. \textbf{Baselines.} CPU neural
 baselines are under-trained reimplementations; the GPU baselines were run once at a fixed budget without tuning.
@@ -557,7 +601,7 @@ based on abstracts.
 % ===========================================================================
 The protocol, panel builder with audit log and hashes, metric module, all generators, job queue, analysis code and
 the build script for every table, figure and number in this paper are in one repository, with the logs of failed runs
-and the development runs of v2 and v3. Raw vendor prices are not redistributed. Synthetic scenarios from these
+and the development runs of both design changes. Raw vendor prices are not redistributed. Synthetic scenarios from these
 generators are research output, not validated for regulatory capital or investment decisions; the held-out results show
 how far generated crisis dependence can be from what occurred.
 
@@ -571,7 +615,8 @@ narrower but checkable: correlation error alone is the least informative fidelit
 statistics must be read as ordinal because volatility clustering inflates them; and a generator whose volatility
 states let tail stress spread along an asset graph is the strongest generator here on held-out crisis dependence on
 India and in the risk backtest, ahead of strong classical copula and asymmetric-DCC baselines, with the gain traced to
-the contagion term; in Korea a regime-switching copula matches it and in the United States v2 is stronger. No generator reproduced the
+the contagion term; in Korea a regime-switching copula matches it and in the United States the model without contagion is stronger,
+yet it is the most consistent generator across the three markets. No generator reproduced the
 intensity of the COVID crash. Future work should use point-in-time constituents and longer histories with more crises,
 a crisis statistic that separates correlation change from volatility change, and an onset model for the shocks that the
 contagion mechanism amplifies.

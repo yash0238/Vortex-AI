@@ -15,7 +15,7 @@ export function Overview() {
   const ref = b?.reference.metrics;
   const rows = b?.rows ?? [];
   const statics = rows.filter((r) => r.family_tag === "static");
-  const ours = rows.find((r) => r.generator === "cgnsde2");
+  const ours = rows.find((r) => r.generator === "cgnsde3");
   const tau = core.data.summary["nse/full"]?.tau_B_vs_C;
   const real = sm.data?.["nse/full"]?.real;
   return (
@@ -56,7 +56,7 @@ export function Overview() {
           <>
             <Scatter height={380} xLabel="Correlation error (lower = closer to real)" yLabel="Crisis correlation boost, %"
               xBand={[0, ref.corr_fro.ceiling as number]} yBand={[ref.boost_pct.lo as number, ref.boost_pct.hi as number]} yFmt={(v) => v.toFixed(0) + "%"}
-              points={rows.map((r) => ({ x: r.corr_fro, y: r.boost_pct, label: r.name, color: famColor(r.family_tag), bold: r.generator === "cgnsde2",
+              points={rows.map((r) => ({ x: r.corr_fro, y: r.boost_pct, label: r.name, color: famColor(r.family_tag), bold: r.generator === "cgnsde3",
                 note: `crisis windows produced: ${fmt((r.crisis_freq ?? 0) * 100, 1)}%` }))} />
             <div className="legend">{Object.entries(FAMILY).filter(([k]) => rows.some((r) => r.family_tag === k)).map(([k, f]) => (<span key={k}><i style={{ background: f.color }} />{f.label}</span>))}
               <span><i style={{ background: "var(--band)" }} />real-data band</span></div>
@@ -79,9 +79,9 @@ export function Overview() {
         right={tau ? <span className="pill info">tau = {fmt(tau.tau)} [{fmt(tau.lo)}, {fmt(tau.hi)}] over {tau.n_generators} models</span> : undefined}>
         {b ? (<div className="grid g2">
           <div><h4 style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Correlation fidelity score (lower is better)</h4>
-            <IntervalPlot zero rows={[...rows].sort((x, y) => x.score_B - y.score_B).map((r) => ({ label: r.name, color: famColor(r.family_tag), value: r.score_B, sd: r.score_B_sd, bold: r.generator === "cgnsde2" }))} ceiling={1} /></div>
+            <IntervalPlot zero rows={[...rows].sort((x, y) => x.score_B - y.score_B).map((r) => ({ label: r.name, color: famColor(r.family_tag), value: r.score_B, sd: r.score_B_sd, bold: r.generator === "cgnsde3" }))} ceiling={1} /></div>
           <div><h4 style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Crisis behaviour score (lower is better)</h4>
-            <IntervalPlot zero rows={[...rows].sort((x, y) => x.score_C - y.score_C).map((r) => ({ label: r.name, color: famColor(r.family_tag), value: r.score_C, sd: r.score_C_sd, bold: r.generator === "cgnsde2" }))} ceiling={1} /></div>
+            <IntervalPlot zero rows={[...rows].sort((x, y) => x.score_C - y.score_C).map((r) => ({ label: r.name, color: famColor(r.family_tag), value: r.score_C, sd: r.score_C_sd, bold: r.generator === "cgnsde3" }))} ceiling={1} /></div>
         </div>) : <Loading />}
         <p style={{ fontSize: 13 }}>Scores are average errors in units of real sampling noise: below 1 means the model is as close to real data as a second sample of real data would be. See <a href="#/honest">what we can and cannot claim</a>.</p>
       </Card>
