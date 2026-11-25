@@ -421,3 +421,15 @@ Working title: "Correlation Is Not Crisis: Evaluating Synthetic Multi-Asset Retu
   Not compiled locally (no TeX) -> user compiles the zip on Overleaf. User also asked to "humanize" for the
   10% AI-content limit: told them we will not tune text to evade detectors; recommend own-words revision by the
   team + an AI-use disclosure (IEEE policy).
+- 2026-11-25: DEPLOYED (user approved; engine.json publication approved by user).
+  Static: GitHub Pages from branch gh-pages -> https://yash0238.github.io/Vortex-AI/ (research dashboard) and
+  .../money.html (VORTEX Money). Build: in app/, MSYS_NO_PATHCONV=1 VITE_BASE=/Vortex-AI/
+  VITE_API_BASE_URL=https://vortex-api-w555.onrender.com VITE_FUNDS_BASE=https://vortex-money.onrender.com/api/funds
+  VITE_MONEY_API=https://vortex-money.onrender.com npx vite build (MSYS_NO_PATHCONV needed in Git Bash!).
+  Servers: Render free plan, team "CRCE", Singapore, from branch `deploy` (folders api/, money/ with Dockerfiles):
+  vortex-api (srv-dc3dib67bikc73csu8tg, https://vortex-api-w555.onrender.com; live generation ~23 s for n=200,
+  Market Explorer routes) and vortex-money (srv-dc3dic7lot8c739s6qgg, https://vortex-money.onrender.com; app +
+  accounts + fund proxy; CORS for github.io). Free tier: sleeps after 15 min, accounts reset on restart.
+  Render key at %USERPROFILE%\.render_key (user also pasted it in chat -> asked to rotate).
+  Hugging Face refused Docker Spaces without PRO. Source changes on main NOT committed yet: api/server.py (rule
+  thresholds in api/rules/), vite base env, MutualFunds funds base, money api base, relative manifest, paper rewrite.

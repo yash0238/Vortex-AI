@@ -11,6 +11,7 @@ The legacy market-data endpoints used by the Market Explorer page are mounted fr
 """
 from __future__ import annotations
 
+import json
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -44,8 +45,19 @@ def _model(fit: str):
         gen = CGNSDE.load(path)
     except FileNotFoundError as e:
         raise HTTPException(503, f"No trained CG-NSDE checkpoint at {path}. Run the benchmark queue first.") from e
+    return gen, _rule(fit)
+
+
+def _rule(fit: str) -> dict:
+    """Frozen crisis-rule thresholds (two numbers). Saved once to api/rules/ so a deployed server needs only the
+    checkpoint and these thresholds, never the raw price panel."""
+    f = ROOT / "api" / "rules" / f"nse_{fit}.json"
+    if f.exists():
+        return json.loads(f.read_text())
     fd, _, _ = make_fit_data("nse", fit)
-    return gen, fd.rule
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(fd.rule, indent=1))
+    return fd.rule
 
 
 @app.on_event("startup")

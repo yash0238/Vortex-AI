@@ -1,7 +1,8 @@
 // Backend client. The app works fully offline (browser storage + direct public fund API); when the VORTEX Money
 // backend is reachable (same origin /api), it adds accounts, cross-device sync and a cached fund-data proxy.
 
-const BASE = "/api";
+// Same origin when the backend serves the app; on GitHub Pages VITE_MONEY_API points at the hosted backend.
+const BASE = `${(import.meta.env.VITE_MONEY_API as string | undefined) ?? ""}/api`;
 let backend: boolean | null = null;
 
 export async function hasBackend(): Promise<boolean> {

@@ -6,6 +6,12 @@ import Chart from "../components/Chart";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
 
+// mfapi.in sends no CORS header. Locally the Vite proxy serves /mfapi; online (GitHub Pages) VITE_FUNDS_BASE points
+// at the VORTEX Money backend's cached fund proxy, which returns the same JSON.
+const FUNDS = import.meta.env.VITE_FUNDS_BASE as string | undefined;
+const fundUrl = (code: number | string) => (FUNDS ? `${FUNDS}/${code}` : `/mfapi/mf/${code}`);
+const searchUrl = FUNDS ? `${FUNDS}/search` : "/mfapi/mf/search";
+
 interface FundDefinition {
   id: string;
   name: string;
@@ -136,7 +142,7 @@ export default function MutualFunds() {
     setError(null);
 
     Promise.all(schemes.map(async (scheme): Promise<FundHistory> => {
-      const response = await axios.get<MfApiResponse>(`/mfapi/mf/${scheme.code}`);
+      const response = await axios.get<MfApiResponse>(fundUrl(scheme.code));
       const entries = response.data.data
         .map((point) => ({ date: point.date, time: parseDate(point.date), nav: Number(point.nav) }))
         .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.nav) && point.nav > 0)
@@ -168,7 +174,7 @@ export default function MutualFunds() {
   useEffect(() => {
     let active = true;
     const term = fundQuery.trim();
-    if (term.length < 2) {
+    if (term.length < 3) {
       setFundSearchResults([]);
       setFundSearchError(null);
       setSearchingFunds(false);
@@ -177,7 +183,7 @@ export default function MutualFunds() {
 
     setSearchingFunds(true);
     const timer = window.setTimeout(() => {
-      axios.get<MfSearchMatch[]>("/mfapi/mf/search", { params: { q: term } })
+      axios.get<MfSearchMatch[]>(searchUrl, { params: { q: term } })
         .then((response) => {
           if (!active) return;
           const normalizedQuery = term.toLocaleLowerCase();
