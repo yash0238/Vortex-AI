@@ -1,0 +1,319 @@
+import { useMemo, useState } from "react";
+import { G, nameOf } from "../glossary";
+import type { Any, Bench, Core, Market } from "../lib/data";
+import { FAMILY, famColor, useData } from "../lib/data";
+import { Heatmap, IntervalPlot, LineChart, Scatter, fmt } from "../ui/charts";
+import { BenchTable, Card, Empty, Head, Loading, Records, Seg, Stat, Term, Verdict } from "../ui/kit";
+
+const FAM_METRICS: Record<string, string[]> = {
+  C: ["crisis_freq", "boost_pct", "tail_coexc", "cvar_ratio", "pc1_share_gap", "connect_gap"],
+  B: ["corr_fro", "corr_mae", "eig_dist", "pc1_share"],
+  A: ["std_ratio", "kurt_med", "acf1_ret", "acf1_sq", "acf5_sq_mean", "skew_ew"],
+  D: ["disc_feat", "disc_raw"],
+};
+const FAM_NAME: Record<string, string> = { C: "Crisis behaviour", B: "Correlation fidelity", A: "Single-stock behaviour", D: "Detectability" };
+const FITS = [{ v: "full", label: "Whole history (in-sample)" }, { v: "pre2020", label: "Trained to 2019, judged on 2020–24" }];
+
+function Legend({ rows }: { rows: Any[] }) {
+  return (<div className="legend">{Object.entries(FAMILY).filter(([k]) => rows.some((r) => r.family_tag === k)).map(([k, f]) => (<span key={k} title={f.blurb}><i style={{ background: f.color }} />{f.label}</span>))}</div>);
+}
+
+function MetricStrip({ b, m }: { b: Bench; m: string }) {
+  const r = b.reference.metrics[m];
+  if (!r) return null;
+  const rows = b.rows.map((x) => ({ label: x.name, color: famColor(x.family_tag), value: x[m] as number | null, sd: x[m + "_sd"] as number | null, bold: x.generator === "cgnsde2" }));
+  return (
+    <Card flat title={<Term k={m} />} sub={G[m]?.short}>
+      {r.kind === "dist" ? <IntervalPlot rows={rows} ceiling={r.ceiling} zero />
+        : r.kind === "disc" ? <IntervalPlot rows={rows} band={{ lo: 0.5, hi: r.hi as number, label: "real vs real" }} domain={[0.3, 1.02]} />
+          : <IntervalPlot rows={rows} band={{ lo: r.lo as number, hi: r.hi as number, mid: r.real }} />}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------ Benchmark */
+export function Benchmark({ market = "nse" }: { market?: string }) {
+  const core = useData<Core>("core");
+  const [fit, setFit] = useState("full");
+  const [fam, setFam] = useState("C");
+  if (!core.data) return <Loading error={core.error} />;
+  const b = core.data.bench[`${market}/${fit}`];
+  const sum = core.data.summary[`${market}/${fit}`];
+  return (
+    <>
+      {market === "nse" && <Head eyebrow="Evidence · CrisisBench" title="The benchmark: every model, same rules">
+        Each model was trained on the same NSE data and asked for 2,000 new 60-day windows, five times with different random seeds. Green cells lie inside the real-data band.
+      </Head>}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <Seg value={fit} set={setFit} options={FITS} />
+        {b && <span className="pill">{b.reference.n_windows} real windows, {b.reference.n_crisis} crisis</span>}
+      </div>
+      {!b ? <Empty what={`The ${market} benchmark for this setting`} /> : (
+        <>
+          <Card title="Scoreboard" sub={<><Term k="score">Family scores</Term>: average error in units of real sampling noise. Under 1.0 is as close as real data can tell. Rank in brackets.</>}>
+            <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Model</th>{["C", "B", "A", "D"].map((f) => (<th key={f}>{FAM_NAME[f]}</th>))}<th>Metrics inside real band</th><th>Train time</th><th>Seeds</th><th style={{ textAlign: "left" }}>Implementation</th></tr></thead>
+              <tbody>{[...b.rows].sort((x, y) => x.score_C - y.score_C).map((r) => (<tr key={r.generator} className={r.generator === "cgnsde2" ? "ours" : ""}>
+                <td><span className="dot" style={{ background: famColor(r.family_tag) }} />{r.name}</td>
+                {["C", "B", "A", "D"].map((f) => (<td key={f} className={r[`score_${f}`] <= 1 ? "in" : "out"}>{fmt(r[`score_${f}`])} <small>({r[`rank_${f}`]})</small></td>))}
+                <td>{r.n_inside} / 18</td><td>{r.train_minutes < 0.05 ? "< 3 s" : fmt(r.train_minutes, 1) + " min"}</td><td>{r.seeds}</td><td style={{ textAlign: "left" }}>{r.impl_source}</td></tr>))}</tbody></table></div>
+            <Legend rows={b.rows} />
+          </Card>
+          <Card title="Do the metric families agree on who is best?" sub={<>Agreement between rankings (<Term k="kendall" />). Low or negative agreement between correlation fidelity (B) and crisis behaviour (C) means the usual score cannot be used to pick a crisis-realistic model.</>}
+            right={sum?.tau_B_vs_C?.tau !== undefined ? <span className="pill info">B vs C: tau = {fmt(sum.tau_B_vs_C.tau)} [{fmt(sum.tau_B_vs_C.lo)}, {fmt(sum.tau_B_vs_C.hi)}]</span> : undefined}>
+            <div className="grid g2">
+              <Scatter height={320} xLabel="Correlation fidelity score (B)" yLabel="Crisis behaviour score (C)" xBand={[0, 1]} yBand={[0, 1]}
+                points={b.rows.map((r) => ({ x: r.score_B, y: r.score_C, label: r.name, color: famColor(r.family_tag), bold: r.generator === "cgnsde2" }))} />
+              <div>
+                {sum?.family_taus && <Records rows={Object.entries(sum.family_taus as Record<string, number>).map(([k, v]) => ({ "Families compared": k.replace("_vs_", " vs "), "Kendall tau": v }))} />}
+                {sum?.tau_B_vs_C?.loo_min !== undefined && <p style={{ fontSize: 13 }}>Dropping any single model, tau(B, C) stays between {fmt(sum.tau_B_vs_C.loo_min)} and {fmt(sum.tau_B_vs_C.loo_max)}. With the alternative crisis rule: {fmt(sum.tau_B_vs_C_alt_rule)}.</p>}
+              </div>
+            </div>
+          </Card>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <h2>Metric by metric</h2>
+            <Seg value={fam} set={setFam} options={["C", "B", "A", "D"].map((f) => ({ v: f, label: FAM_NAME[f] }))} />
+          </div>
+          <div className="grid g2">{FAM_METRICS[fam].map((m) => (<MetricStrip key={m} b={b} m={m} />))}</div>
+          <Card title="Full table" sub="Mean ± standard deviation over seeds. n/p = the model produced too few crisis windows for the metric to exist.">
+            <BenchTable rows={b.rows} refm={b.reference.metrics} metrics={FAM_METRICS[fam]} />
+          </Card>
+          {b.metric_tau && <Card title="Which individual metrics rank models alike?" sub="Kendall tau between the model rankings produced by each pair of metrics. Red = agree, blue = disagree.">
+            <Heatmap matrix={b.metric_tau.matrix} rowLabels={b.metric_tau.metrics.map(nameOf)} colLabels={b.metric_tau.metrics.map(nameOf)} lo={-1} hi={1} mode="div" showValues size={760} />
+          </Card>}
+        </>)}
+    </>
+  );
+}
+
+/* ----------------------------------------------------------------- Data */
+export function DataPage() {
+  const mk = useData<Record<string, Market>>("markets");
+  const [m, setM] = useState("nse");
+  const [view, setView] = useState("diff");
+  const d = mk.data?.[m];
+  const regions = useMemo(() => {
+    if (!d) return [];
+    const idx = new Map<string, number>(d.series.date.map((x: string, i: number) => [x, i]));
+    const find = (s: string) => { let best = 0; for (const [k, i] of idx) { if (k <= s) best = i; else break; } return best; };
+    return d.episodes.map((e: Any) => ({ from: find(e.start), to: find(e.end) + 1 }));
+  }, [d]);
+  if (!mk.data) return <Loading error={mk.error} />;
+  const opts = Object.entries(mk.data).filter(([, v]) => v).map(([k, v]) => ({ v: k, label: (v as Any).label }));
+  if (!d) return <Empty what="This market panel" />;
+  const diff = d.corr_crisis.map((r: number[], i: number) => r.map((v, j) => v - d.corr_normal[i][j]));
+  const mat = view === "diff" ? diff : view === "crisis" ? d.corr_crisis : d.corr_normal;
+  return (
+    <>
+      <Head eyebrow="Evidence · data" title="The real data behind everything">Daily prices from Yahoo Finance, cleaned by fixed, logged rules. Red bands mark the crisis episodes found by the frozen rule.</Head>
+      <Seg value={m} set={setM} options={opts} />
+      <div className="grid g4">
+        <Card flat><Stat k="Stocks" v={d.n_assets} s={d.label} /></Card>
+        <Card flat><Stat k="Trading days" v={d.n_days.toLocaleString()} s={`${d.first} to ${d.last}`} /></Card>
+        <Card flat><Stat k="Crisis episodes" v={d.episodes.length} s={`${fmt((100 * d.windows.n_crisis) / d.windows.n, 1)}% of windows`} /></Card>
+        <Card flat><Stat k={<Term k="boost_pct">Average pair correlation</Term>} v={`${fmt(d.mac.normal)} → ${fmt(d.mac.crisis)}`} s="calm windows → crisis windows" /></Card>
+      </div>
+      <Card title="Market level with crisis episodes" sub="Equal-weight index of all stocks (start = 100).">
+        <LineChart height={280} labels={d.series.date} regions={regions} series={[{ name: "Equal-weight index", color: "var(--accent)", y: d.series.index }]} yFmt={(v) => v.toFixed(0)} />
+      </Card>
+      <div className="grid g2">
+        <Card title="Volatility" sub="20-day annualised volatility of the index, %.">
+          <LineChart height={220} labels={d.series.date} regions={regions} series={[{ name: "Volatility", color: "var(--s-dyn)", y: d.series.vol }]} yFmt={(v) => v.toFixed(0) + "%"} />
+        </Card>
+        <Card title="How correlated the stocks are, window by window" sub="Average absolute pairwise correlation inside each 60-day window. It jumps in crises: this jump is what models must reproduce.">
+          <LineChart height={220} labels={d.windows.end} series={[{ name: "Average pair correlation", color: "var(--crisis)", y: d.windows.mac }]}
+            regions={d.windows.label.reduce((acc: Any[], v: number, i: number) => { if (v) { const l = acc[acc.length - 1]; if (l && l.to === i) l.to = i + 1; else acc.push({ from: i, to: i + 1 }); } return acc; }, [])} />
+        </Card>
+      </div>
+      <Card title="Correlation between every pair of stocks" sub={m.startsWith("nse") ? "Stocks are grouped by sector (white lines)." : undefined}
+        right={<Seg value={view} set={setView} options={[{ v: "normal", label: "Calm" }, { v: "crisis", label: "Crisis" }, { v: "diff", label: "Crisis minus calm" }]} />}>
+        <Heatmap matrix={mat} rowLabels={d.tickers} colLabels={d.tickers} lo={view === "diff" ? -0.4 : 0} hi={view === "diff" ? 0.4 : 0.9} mode={view === "diff" ? "div" : "seq"} groups={d.sectors} size={620} />
+        <p style={{ fontSize: 13 }}>{view === "diff" ? "Red = the pair is more correlated in crises than in calm periods. Nearly the whole map turns red: in a crisis, diversification across stocks and sectors weakens." : "Darker = more correlated. Hover for the pair and value."}</p>
+      </Card>
+      <div className="grid g2">
+        <Card title="Crisis episodes"><Records rows={d.episodes} cols={[{ k: "start", label: "First window ends" }, { k: "end", label: "Last window ends" }, { k: "windows", label: "Windows" }]} /></Card>
+        <Card title="Cleaning log" sub={<>Checksum of the cleaned return matrix: <code>{String(d.sha256).slice(0, 16)}…</code></>}>
+          <Records rows={d.cleaning_log.filter((x: Any) => x.action !== "NOT_USED")} cols={[{ k: "ticker", label: "Ticker" }, { k: "action", label: "Action" }, { k: "date", label: "Date" }, { k: "detail", label: "Detail" }]} />
+        </Card>
+      </div>
+    </>
+  );
+}
+
+/* ---------------------------------------------------------- Crisis test */
+export function CrisisTest() {
+  const core = useData<Core>("core");
+  if (!core.data) return <Loading error={core.error} />;
+  const h = core.data.heldout, b = core.data.bench["nse/pre2020"], ext = core.data.bench["nse_ext/upto2024"];
+  const eps = h ? [...new Set(h.map((r) => r.episode as string))] : [];
+  return (
+    <>
+      <Head eyebrow="Evidence · held-out crashes" title="Crashes the models never saw">
+        Every model here was trained only on data up to December 2019. COVID-2020, the 2022 shock and mid-2024 were never shown to them. Does their idea of a crisis match what then happened?
+      </Head>
+      {b && <div className="grid g2"><MetricStrip b={b} m="boost_pct" /><MetricStrip b={b} m="cvar_ratio" /><MetricStrip b={b} m="tail_coexc" /><MetricStrip b={b} m="crisis_freq" /></div>}
+      {!h ? <Empty what="The per-episode held-out table" /> : eps.map((e) => {
+        const rows = h.filter((r) => r.episode === e);
+        const r0 = rows[0];
+        return (<Card key={e} title={`Episode: ${r0.episode_label ?? e}`} sub={`${r0.n_real_crisis} real crisis windows. Band = real 95% interval for this episode.`}>
+          <IntervalPlot band={{ lo: r0.lo, hi: r0.hi, mid: r0.real }} xFmt={(v) => v.toFixed(0) + "%"}
+            rows={rows.map((r) => ({ label: r.name, color: famColor(r.family_tag), value: r.gen, sd: r.gen_sd, bold: r.generator === "cgnsde2", note: r.inside ? "inside the real band" : "outside the real band" }))} />
+        </Card>);
+      })}
+      <Card title="An untouched out-of-time check: 2025 to October 2026" sub="Models trained on data up to December 2024, judged on the following 22 months, which were downloaded only after the protocol was frozen.">
+        {ext ? <BenchTable rows={ext.rows} refm={ext.reference.metrics} metrics={["boost_pct", "cvar_ratio", "tail_coexc", "corr_fro", "kurt_med", "acf1_sq"]} /> : <Empty what="The 2025–2026 out-of-time run" />}
+      </Card>
+    </>
+  );
+}
+
+/* ----------------------------------------------------------------- Risk */
+export function Risk() {
+  const core = useData<Core>("core");
+  const [level, setLevel] = useState("0.99");
+  const [pf, setPf] = useState("equal_weight");
+  if (!core.data) return <Loading error={core.error} />;
+  const r = core.data.risk, s = core.data.risk_series, mv = core.data.metric_validity;
+  const rows = (r ?? []).filter((x) => String(x.level) === level && x.portfolio === pf).sort((a, b) => a.fz0 - b.fz0);
+  return (
+    <>
+      <Head eyebrow="Evidence · downstream use" title="Would a risk desk trust these scenarios?">
+        Each model's synthetic windows are used to forecast tomorrow's <Term k="var" /> and <Term k="es" /> for a portfolio of the 47 stocks, every trading day from 2020 to 2024, using only data available at the time. Then we count how often real losses broke the forecast.
+      </Head>
+      {!r ? <Empty what="The VaR / Expected Shortfall backtest" /> : (<>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Seg value={level} set={setLevel} options={[{ v: "0.95", label: "95% VaR" }, { v: "0.975", label: "97.5%" }, { v: "0.99", label: "99% VaR" }]} />
+          <Seg value={pf} set={setPf} options={[{ v: "equal_weight", label: "Equal-weight portfolio" }, { v: "dirichlet_seed7", label: "Random-weight portfolio" }]} />
+        </div>
+        <Card title="Backtest results" sub={<>Sorted by <Term k="fz0" /> (best first). <Term k="kupiec" />, <Term k="christoffersen" />: p-values below 0.05 mean the model fails that test. <Term k="traffic" /> applies to the 99% level.</>}>
+          <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Method</th><th>Breaches</th><th>Expected</th><th>Kupiec p</th><th>Independence p</th><th>Cond. coverage p</th><th>Traffic light</th><th>ES test Z2</th><th>FZ0 loss</th></tr></thead>
+            <tbody>{rows.map((x) => (<tr key={x.method} className={x.method === "cgnsde3" ? "ours" : x.kind === "benchmark" ? "real" : ""}>
+              <td><span className="dot" style={{ background: x.kind === "benchmark" ? "var(--real)" : famColor(x.family_tag) }} />{x.name}</td>
+              <td>{x.violations}</td><td>{fmt(x.expected, 1)}</td>
+              {["kupiec_p", "ind_p", "cc_p"].map((k) => (<td key={k} className={x[k] >= 0.05 ? "in" : "out"}>{fmt(x[k], 3)}</td>))}
+              <td>{level === "0.99" ? <span className={"pill " + (x.traffic === "green" ? "pass" : x.traffic === "red" ? "fail" : "warn")}>{x.traffic}</span> : "–"}</td>
+              <td>{fmt(x.z2, 2)}</td><td>{fmt(x.fz0, 3)}</td></tr>))}</tbody></table></div>
+        </Card>
+        {s && <Card title="99% VaR forecasts against what happened" sub="Equal-weight portfolio. Grey bars are real daily returns; each line is a model's loss limit. A return below the line is a breach.">
+          <LineChart height={340} labels={s.dates} yFmt={(v) => v.toFixed(0) + "%"}
+            series={[{ name: "Daily return", color: "var(--muted)", y: s.ret, faint: true }, ...Object.entries(s.methods as Record<string, Any>).map(([k, v]) => ({ name: v.name, color: v.color ?? "var(--accent)", y: v.var99, width: k === "cgnsde2" ? 2.4 : 1.6 }))]} />
+        </Card>}
+        <Card title="Which metric family predicts risk quality?" sub={<>For each family: <Term k="kendall" /> between the benchmark ranking of the models and their backtest ranking. This is the test of whether crisis metrics matter in practice.</>}>
+          {mv ? <IntervalPlot zero domain={[-1, 1]} xFmt={(v) => v.toFixed(1)} rows={mv.map((x) => ({ label: x.label, color: x.kind === "family" ? "var(--accent)" : "var(--s-static)", value: x.tau, sd: null, note: `95% interval ${fmt(x.lo)} to ${fmt(x.hi)}`, bold: x.kind === "family" }))} /> : <Empty what="The metric-validity analysis" />}
+        </Card>
+      </>)}
+    </>
+  );
+}
+
+/* ---------------------------------------------------------------- Model */
+export function Model() {
+  const core = useData<Core>("core");
+  const [fit, setFit] = useState("full");
+  const [which, setWhich] = useState("final");
+  if (!core.data) return <Loading error={core.error} />;
+  const cg = core.data.cgnsde, b = core.data.bench[`nse/${fit}`];
+  const abl = which === "final" ? b?.ablation_v3 : b?.ablation;
+  const hist: Any[] = cg?.info?.history ?? [];
+  const VAR: Record<string, string> = { "cgnsde2": "Without contagion (all parts)", "cgnsde2@no_gat": "without graph attention", "cgnsde2@no_supcon": "without contrastive loss",
+    "cgnsde2@no_graph_loss": "without graph loss", "cgnsde2@no_sde": "without the SDE (frozen hidden state)", "cgnsde2@scalar_vol": "one volatility state for everything (as in the first design)",
+    "cgnsde2@no_voldyn": "without volatility memory", "cgnsde2@no_leverage": "without the leverage effect", "cgnsde2@gauss": "Gaussian likelihood instead of fat tails",
+    "cgnsde2@param_innov": "drawn shocks instead of replayed residuals", "cgnsde2@beta01": "weaker bottleneck (KL weight 0.1)", "cgnsde2@K1": "1 factor", "cgnsde2@K4": "4 factors", "cgnsde2@K16": "16 factors",
+    "cgnsde3": "Final model (all parts)", "cgnsde3@no_cascade": "no contagion at all", "cgnsde3@no_graph_cascade": "no spread to connected stocks",
+    "cgnsde3@no_mkt_cascade": "no spread to the whole market", "cgnsde3@uniform_graph": "equal links instead of learned links", "cgnsde3@no_regime": "no crisis labels at all",
+    "cgnsde3@no_gat": "without graph attention", "cgnsde3@no_supcon": "without contrastive loss", "cgnsde3@no_sde": "without the SDE", "cgnsde3@scalar_vol": "one volatility state for everything" };
+  const full: Any[] = core.data.bench["nse/full"]?.rows ?? [], held: Any[] = core.data.bench["nse/pre2020"]?.rows ?? [];
+  const sc = (rows: Any[], g: string) => rows.find((r) => r.generator === g)?.score_C;
+  const steps = [
+    { g: "cgnsde", t: "First design (registered before any result)", d: `The decoder could see each window's codes directly, and one volatility number scaled every stock. It memorised its training windows (best validation score after epoch ${cg?.v1_info?.best_epoch ?? 2}) and could not make stocks move together more in a crash.` },
+    { g: "cgnsde2", t: "Change 1: bottleneck and factor volatility", d: "Removed the shortcut: everything the generator knows passes through a small 16-number code. Added a separate, changing volatility for each of 8 market factors and for each stock, and replayed the model's own past shocks. When factors turn turbulent, correlations rise by themselves." },
+    { g: "cgnsde3", t: "Change 2: crash contagion (final model)", d: "Added one idea: a crash day in one stock raises the volatility of its 10 most connected stocks and of the whole market, and the effect fades over the following days. The model learned that stress spreads to neighbours far more than it echoes in the stock that was hit." },
+  ];
+  const ours = which === "final" ? "cgnsde3" : "cgnsde2";
+  const WHICH = [{ v: "final", label: "Final model" }, { v: "change1", label: "Parts added in Change 1" }];
+  return (
+    <>
+      <Head eyebrow="Evidence · our model" title="CG-NSDE: one design, two changes">The registered design failed the benchmark. We found out why, made two changes, and measured what each change did. Both changes were made after the failure, so they are post hoc, and we say so.</Head>
+      <div className="grid g3">
+        {steps.map((s, k) => (<Card flat key={s.g} title={s.t}>
+          <p>{s.d}</p>
+          <div className="grid g2" style={{ marginTop: 8 }}>
+            <Stat k="Crisis score, all history" v={fmt(sc(full, s.g), 2)} s={k === 0 ? "lower is better" : `was ${fmt(sc(full, steps[k - 1].g), 2)}`} />
+            <Stat k="Crisis score, unseen 2020–24" v={fmt(sc(held, s.g), 2)} s={k === 0 ? "under 1 = within real noise" : `was ${fmt(sc(held, steps[k - 1].g), 2)}`} />
+          </div>
+        </Card>))}
+      </div>
+      {!cg ? <Empty what="CG-NSDE training" /> : (
+        <div className="grid g4">
+          <Card flat><Stat k="Training time (CPU)" v={`${fmt(cg.train_minutes, 1)} min`} s={`${cg.info?.epochs_run ?? "?"} epochs, best at ${cg.info?.best_epoch ?? "?"}`} /></Card>
+          <Card flat><Stat k="Tail thickness learned (ν)" v={fmt(cg.info?.nu, 1)} s="lower = fatter tails; a bell curve is ∞" /></Card>
+          <Card flat><Stat k="Common factors" v={cg.hparams?.rank_K ?? "8"} s="market-wide drivers, each with its own volatility memory" /></Card>
+          <Card flat><Stat k="Contagion neighbours" v={cg.hparams?.contagion_k ?? "10"} s="most connected stocks a crash spreads to" /></Card>
+        </div>)}
+      {hist.length > 0 && <Card title="Training curves (final model)" sub="Negative log-likelihood per epoch (lower is better). Training stops when the validation curve stops improving.">
+        <LineChart height={240} labels={hist.map((_, i) => `epoch ${i + 1}`)} series={[{ name: "train", color: "var(--s-ours)", y: hist.map((h) => h.train_nll ?? h.train) }, { name: "validation (2018–19)", color: "var(--crisis)", y: hist.map((h) => h.val_nll ?? h.val) }]} />
+      </Card>}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><h2>Ablations: remove one part, re-score</h2>
+        <Seg value={which} set={setWhich} options={WHICH} /><Seg value={fit} set={setFit} options={FITS} /></div>
+      {!abl ? <Empty what="This ablation" /> : (<>
+        <div className="grid g2">
+          {["score_C", "score_B", "score_A", "score_D"].map((k) => (<Card flat key={k} title={FAM_NAME[k.slice(-1)] + " score"} sub="Lower is better; under 1 is within real noise.">
+            <IntervalPlot zero ceiling={1} rows={abl.map((r) => ({ label: VAR[r.generator] ?? r.name, color: r.generator === ours ? "var(--s-ours)" : "var(--s-static)", value: r[k], sd: r[k + "_sd"], bold: r.generator === ours }))} />
+          </Card>))}
+        </div>
+        <Card title="Ablation table"><BenchTable rows={abl.map((r) => ({ ...r, name: VAR[r.generator] ?? r.name }))} refm={b.reference.metrics} metrics={["boost_pct", "cvar_ratio", "tail_coexc", "corr_fro", "kurt_med", "acf1_sq", "disc_feat"]} /></Card>
+      </>)}
+      {cg?.explain?.latent && <Card title="Does the hidden space separate crisis from calm?" sub="Each dot is one real training window, placed by the first two principal components of its hidden starting state. Red = crisis windows.">
+        <Scatter height={360} xLabel="hidden component 1" yLabel="hidden component 2"
+          points={cg.explain.latent.map((p: Any, i: number) => ({ x: p[0], y: p[1], label: "", color: p[2] ? "var(--crisis)" : "var(--s-static)", note: String(i) }))} />
+      </Card>}
+    </>
+  );
+}
+
+/* -------------------------------------------------------------- Markets */
+export function Markets() {
+  const core = useData<Core>("core");
+  const [m, setM] = useState("us");
+  if (!core.data) return <Loading error={core.error} />;
+  const S = core.data.summary;
+  const rows = ["nse", "us", "kr"].flatMap((k) => ["full", "pre2020"].map((f) => ({ k, f, t: S[`${k}/${f}`]?.tau_B_vs_C }))).filter((x) => x.t?.tau !== undefined);
+  const NAME: Record<string, string> = { nse: "India (NSE)", us: "United States", kr: "South Korea (KOSPI)" };
+  return (
+    <>
+      <Head eyebrow="Evidence · replication" title="Is this only an India effect?">The same models with the same settings, frozen after the NSE runs, on 47 large US stocks and 47 large Korean stocks.</Head>
+      <Card title="Agreement between correlation fidelity and crisis behaviour, by market" sub="Kendall tau between the two rankings with a 95% seed-bootstrap interval. Near or below zero everywhere would mean the finding is general.">
+        {rows.length ? <IntervalPlot zero domain={[-1, 1]} xFmt={(v) => v.toFixed(1)} rows={rows.map((x) => ({ label: `${NAME[x.k]} · ${x.f === "full" ? "in-sample" : "held-out"}`, color: x.k === "nse" ? "var(--s-ours)" : "var(--s-regime)", value: x.t.tau, sd: null, note: `95% interval ${fmt(x.t.lo)} to ${fmt(x.t.hi)}, ${x.t.n_generators} models` }))} /> : <Empty what="Multi-market replication" />}
+      </Card>
+      <Seg value={m} set={setM} options={[{ v: "us", label: NAME.us }, { v: "kr", label: NAME.kr }]} />
+      <Benchmark market={m} key={m} />
+    </>
+  );
+}
+
+/* --------------------------------------------------------------- Checks */
+export function Checks() {
+  const core = useData<Core>("core");
+  if (!core.data) return <Loading error={core.error} />;
+  const d = core.data.dgp, c = core.data.contamination, b = core.data.bench["nse/full"];
+  return (
+    <>
+      <Head eyebrow="Evidence · sanity checks" title="Can the measuring stick itself be trusted?">Before trusting a metric on models, we test it where the right answer is known, and we test how fragile it is to dirty data.</Head>
+      <Card title="Check 1 · Simulated markets with a known answer" sub="We simulate artificial markets where we set the true crisis correlation boost ourselves (0%, 20%, 40%, 80%) and one with no regimes at all, then ask the benchmark to measure it.">
+        {d ? (<>
+          <Scatter height={300} xLabel="True boost built into the simulation, %" yLabel="Boost measured by the benchmark, %"
+            points={d.map((r) => ({ x: r.true_boost_pct ?? r.population_boost ?? r.true_boost, y: r.rule_boost_pct ?? r.benchmark_boost ?? r.rule_boost, label: String(r.panel ?? r.name), color: "var(--accent)" }))} />
+          <Records rows={d} />
+        </>) : <Empty what="The controlled-simulation check" />}
+      </Card>
+      <Card title="Check 2 · What one bad price does" sub="We deliberately inject data errors into the clean NSE panel (a single 76% bad tick, 1% bad ticks, one unadjusted stock split) and re-run the models.">
+        {c ? <Records rows={c} /> : <Empty what="The contamination study" />}
+      </Card>
+      <Card title="Check 3 · A different definition of crisis" sub="Rankings recomputed with the alternative rule (crisis = high 20-day volatility of the equal-weight portfolio).">
+        {b?.alt_rule ? <BenchTable rows={b.alt_rule} refm={{}} metrics={["crisis_freq", "boost_pct", "cvar_ratio", "pc1_share_gap", "connect_gap"]} /> : <Empty what="The label-rule robustness table" />}
+      </Card>
+      <Card title="Gate files" sub="Generated by the analysis code; never edited by hand.">
+        {Object.keys(core.data.gates).length ? Object.entries(core.data.gates).map(([k, v]) => (<details key={k} style={{ marginBottom: 8 }}><summary style={{ cursor: "pointer", fontWeight: 600 }}>{k} <Verdict v={v.split("\n")[0].split(": ")[1]} /></summary><pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "var(--ink-2)" }}>{v}</pre></details>)) : <Empty what="Gate evaluation" />}
+      </Card>
+    </>
+  );
+}
